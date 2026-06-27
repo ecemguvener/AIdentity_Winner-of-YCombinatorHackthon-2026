@@ -1,10 +1,11 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { Collections, SiteDocument } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { buildTrustedDashboardCorsHeaders } from "./cors.js";
 import { buildOpenAIEndpointUrl } from "./openai.js";
+import { createPurchaseFromPrompt, formatPurchaseAmount, PaymentError, provisionPaymentIdentity } from "./payments.js";
 
 const DASHBOARD_CHAT_MODEL = "gpt-5.4-mini-2026-03-17";
 const dashboardChatMessageSchema = z.object({
@@ -58,6 +59,15 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
       .sort({ createdAt: -1 })
       .limit(50)
       .toArray();
+
+    // If the latest message is a shopping instruction, drive the payment tool
+    // directly and stream a confirmation instead of a normal chat reply.
+    const latestUserMessage = [...payload.messages].reverse().find((message) => message.role === "user");
+    if (latestUserMessage && isPurchaseIntent(latestUserMessage.content)) {
+      const message = await runChatPurchase(latestUserMessage.content, sites, config);
+      streamChatMessage(request, reply, config, message);
+      return;
+    }
 
     const upstreamResponse = await fetch(buildOpenAIEndpointUrl(), {
       method: "POST",
@@ -173,6 +183,69 @@ ${JSON.stringify({
 
 conversation:
 ${messages.map((message) => `${message.role}: ${message.content}`).join("\n")}`;
+}
+
+function isPurchaseIntent(text: string): boolean {
+  return /\b(buy|purchase|order|pay for|top up|grab me|get me|buy me)\b/i.test(text);
+}
+
+function resolvePurchaseSite(text: string, sites: SiteDocument[]): SiteDocument | null {
+  const lowered = text.toLowerCase();
+  return sites.find((site) => site.name && lowered.includes(site.name.toLowerCase())) ?? sites[0] ?? null;
+}
+
+async function runChatPurchase(
+  text: string,
+  sites: SiteDocument[],
+  config: AppConfig
+): Promise<string> {
+  const site = resolvePurchaseSite(text, sites);
+  if (!site) {
+    return "You don't have an agent identity yet. Create one first, then I can shop on its behalf.";
+  }
+
+  const accountId = site._id.toHexString();
+  provisionPaymentIdentity(accountId);
+
+  try {
+    const { purchase, parsed } = await createPurchaseFromPrompt(accountId, text, config);
+    const merchant = parsed.merchantUrl ? `[${parsed.merchantName}](${parsed.merchantUrl})` : parsed.merchantName;
+    const amount = formatPurchaseAmount(parsed.amount, parsed.currency);
+    const estimated = parsed.priceEstimated ? " _(estimated)_" : "";
+    const header = `🛒 **${merchant}** — ${amount}${estimated} for **${site.name}**`;
+
+    if (purchase.status === "approved") {
+      return `${header}\n\n✅ **Approved** automatically (${purchase.decisionReason}). Open the **Payments** tab on **${site.name}** and hit **Execute** to pay.`;
+    }
+    if (purchase.status === "requires_approval") {
+      return `${header}\n\n⏳ **Needs your approval** — ${purchase.decisionReason}. Review it in the **Payments** tab on **${site.name}**.`;
+    }
+    if (purchase.status === "rejected") {
+      return `${header}\n\n⛔ **Rejected** — ${purchase.decisionReason}.`;
+    }
+    return `${header}\n\nStatus: **${purchase.status}** — ${purchase.decisionReason}.`;
+  } catch (error) {
+    if (error instanceof PaymentError) {
+      return `I couldn't complete that purchase: ${error.message}`;
+    }
+    throw error;
+  }
+}
+
+function streamChatMessage(request: FastifyRequest, reply: FastifyReply, config: AppConfig, text: string) {
+  const corsHeaders = buildTrustedDashboardCorsHeaders(request.headers.origin, config);
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    "x-accel-buffering": "no",
+    ...corsHeaders
+  });
+  writeDashboardChatEvent(reply, { type: "ready", model: "barkan-payments" });
+  writeDashboardChatEvent(reply, { type: "delta", text });
+  writeDashboardChatEvent(reply, { type: "done" });
+  reply.raw.end();
 }
 
 function writeDashboardChatEvent(reply: FastifyReply, payload: Record<string, unknown>) {

@@ -32,6 +32,7 @@ import {
   type ToastNotification,
   type ToastNotificationInput
 } from "./components/ToastNotifications";
+import { PaymentsPanel } from "./components/PaymentsPanel";
 import {
   api,
   type AtlasBackendInventoryDocument,
@@ -83,7 +84,7 @@ type DashboardChatMessage = {
     entries: Array<{ question: string; answer: string }>;
   };
 };
-type SiteDetailTab = "credentials" | "installation" | "documentation" | "theme";
+type SiteDetailTab = "credentials" | "installation" | "documentation" | "theme" | "payments";
 type UserSettingsSection = "profile" | "security" | "notifications" | "billing";
 type DocumentationView = "frontend" | "backend";
 type PanelState = "active" | "hidden" | "incoming" | "outgoing";
@@ -156,8 +157,8 @@ const agentIdentityCapabilities = [
   },
   {
     label: "Card",
-    value: "Visa ending 4242",
-    description: "Programmatic spend controls",
+    value: "Visa •••• 4242",
+    description: "Auto-approves under £25, human approval above",
     Icon: CreditCard
   },
   {
@@ -293,7 +294,7 @@ function getSiteDetailRoute(path: string, search = ""): { siteId: string; tab: S
 
   const rawTab = new URLSearchParams(search).get("tab");
   const tab =
-    rawTab === "documentation" || rawTab === "installation" || rawTab === "theme"
+    rawTab === "documentation" || rawTab === "installation" || rawTab === "theme" || rawTab === "payments"
       ? rawTab
       : "credentials";
 
@@ -3774,16 +3775,17 @@ function SiteDetailOverlay({
               <span>Policy</span>
             </button>
             <button
-              className="site-detail-page__tab site-detail-page__tab--disabled"
+              className="site-detail-page__tab"
+              id="site-detail-payments-tab"
               type="button"
               role="tab"
-              aria-selected="false"
-              aria-disabled="true"
-              tabIndex={-1}
-              disabled
+              aria-label="Payments"
+              aria-selected={activeTab === "payments"}
+              aria-controls="site-detail-payments-panel"
+              onClick={() => onTabChange("payments")}
             >
               <SiteSettingsCategoryIcon icon="act-on-behalf" />
-              <span>Spend limits</span>
+              <span>Payments</span>
             </button>
             <button
               className="site-detail-page__tab site-detail-page__tab--disabled"
@@ -3807,7 +3809,9 @@ function SiteDetailOverlay({
           role="tabpanel"
           aria-labelledby={`site-detail-${activeTab}-tab`}
         >
-          {activeTab === "credentials" ? (
+          {activeTab === "payments" ? (
+            <PaymentsPanel siteId={site.id} siteName={site.name} />
+          ) : activeTab === "credentials" ? (
             <>
               <header className="site-detail-page__header">
                 <div>

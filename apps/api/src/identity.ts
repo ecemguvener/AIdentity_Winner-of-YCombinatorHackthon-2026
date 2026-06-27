@@ -3,10 +3,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
 
-type ToolName = "email" | "phone" | "calendar";
-type PermissionName = "email.send" | "phone.call" | "calendar.create";
+type ToolName = "email" | "phone" | "calendar" | "payment";
+type PermissionName = "email.send" | "phone.call" | "calendar.create" | "payment.purchase";
 
-interface AgentIdentity {
+export interface AgentIdentity {
   id: string;
   name: string;
   runtime: string;
@@ -40,12 +40,16 @@ const initIdentitySchema = z.object({
   agent_name: z.string().min(1).max(80),
   agent_runtime: z.string().min(1).max(80).default("openclaw"),
   use_case: z.string().min(1).max(120).default("automation"),
-  tools: z.array(z.enum(["email", "phone", "calendar"])).min(1).default(["email", "phone", "calendar"]),
+  tools: z
+    .array(z.enum(["email", "phone", "calendar", "payment"]))
+    .min(1)
+    .default(["email", "phone", "calendar", "payment"]),
   permissions: z
     .object({
       "email.send": z.boolean().optional(),
       "phone.call": z.boolean().optional(),
       "calendar.create": z.boolean().optional(),
+      "payment.purchase": z.boolean().optional(),
       requires_human_approval: z.boolean().optional()
     })
     .optional()
@@ -81,6 +85,7 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
       "email.send": payload.permissions?.["email.send"] ?? tools.includes("email"),
       "phone.call": payload.permissions?.["phone.call"] ?? tools.includes("phone"),
       "calendar.create": payload.permissions?.["calendar.create"] ?? tools.includes("calendar"),
+      "payment.purchase": payload.permissions?.["payment.purchase"] ?? tools.includes("payment"),
       requiresHumanApproval: payload.permissions?.requires_human_approval ?? true
     };
     const slug = slugify(payload.agent_name);
@@ -103,6 +108,23 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
     identitiesById.set(id, identity);
     pushAudit(identity, "identity.init", "allowed", `${identity.name} initialized for ${identity.runtime}.`);
 
+    let payment: {
+      payment_identity_id: string;
+      provider: string;
+      card_last4: string;
+      status: string;
+    } | null = null;
+    if (tools.includes("payment")) {
+      const { provisionPaymentIdentity } = await import("./payments.js");
+      const card = provisionPaymentIdentity(identity.id);
+      payment = {
+        payment_identity_id: card.id,
+        provider: card.provider,
+        card_last4: card.cardLast4,
+        status: card.status
+      };
+    }
+
     return reply.code(201).send({
       agent_id: identity.id,
       identity_token: identity.token,
@@ -112,6 +134,7 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
       email: identity.email,
       phone: identity.phone,
       calendar_url: identity.calendarUrl,
+      payment,
       tools: identity.tools,
       permissions: serializePermissions(identity),
       openclaw_env: {
@@ -122,6 +145,9 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
         email_send: `${config.PUBLIC_API_URL}/api/tools/email/send`,
         phone_call: `${config.PUBLIC_API_URL}/api/tools/phone/call`,
         calendar_book: `${config.PUBLIC_API_URL}/api/tools/calendar/book`,
+        payment_request_purchase: `${config.PUBLIC_API_URL}/api/tools/payments/request-purchase`,
+        payment_request_purchase_from_text: `${config.PUBLIC_API_URL}/api/tools/payments/request-purchase-from-text`,
+        payment_activity: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/payment-activity`,
         audit_log: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/audit-log`
       }
     });
@@ -298,8 +324,33 @@ function serializePermissions(identity: AgentIdentity) {
     "email.send": identity.permissions["email.send"],
     "phone.call": identity.permissions["phone.call"],
     "calendar.create": identity.permissions["calendar.create"],
+    "payment.purchase": identity.permissions["payment.purchase"],
     requires_human_approval: identity.permissions.requiresHumanApproval
   };
+}
+
+// Accessors shared with other tool modules (e.g. payments.ts) so they can
+// authenticate against the same in-memory identity store and write to the
+// same audit log.
+export function getAgentIdentityByToken(token: string): AgentIdentity | null {
+  return identitiesByToken.get(token) ?? null;
+}
+
+export function getAgentIdentityById(agentId: string): AgentIdentity | null {
+  return identitiesById.get(agentId) ?? null;
+}
+
+export function recordIdentityAudit(
+  agentId: string,
+  action: string,
+  status: AuditLogEntry["status"],
+  detail: string
+): void {
+  const identity = identitiesById.get(agentId);
+  if (!identity) {
+    return;
+  }
+  pushAudit(identity, action, status, detail);
 }
 
 function randomId(byteLength: number): string {

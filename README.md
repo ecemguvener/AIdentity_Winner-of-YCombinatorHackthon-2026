@@ -95,6 +95,32 @@ Widget production updates build the API and widget, restart `prod-barkan-api`, a
 npm run deploy:barkan-widget
 ```
 
+## Payment tool
+
+The payment tool gives an agent identity a real-world spending capability, alongside
+email/phone/calendar. It follows the same pattern as the other tools: in-memory store,
+bearer identity-token auth, and every decision written to the identity audit log. The agent
+never sees card details — it can only request a purchase, and the policy engine decides
+**approve / reject / requires_approval**.
+
+When an identity is initialized with the `payment` tool, Barkan provisions a mock virtual
+card and a default spending policy (auto-approve ≤ £25, human approval above, `CryptoExchange`
+blocked). Agent-facing endpoints (all `Authorization: Bearer <identity_token>`):
+
+| Method & path | Purpose |
+|---|---|
+| `POST /api/tools/payments/request-purchase` | Request a purchase (`merchant_name`, `amount`, `currency`, `purpose`) |
+| `POST /api/tools/payments/request-purchase-from-text` | Natural language — *"buy me still water from amazon"* → parsed → policy decision |
+| `POST /api/tools/payments/:requestId/approve` · `/reject` | Human decision on a `requires_approval` request |
+| `POST /api/tools/payments/:requestId/execute` | Execute an approved purchase (idempotent via `Idempotency-Key`) |
+| `PATCH /api/tools/payments/policy` | Update the spending policy |
+| `GET /api/identity/:agentId/payment-activity` | Policy + purchase requests + transactions |
+
+Natural-language parsing uses OpenAI's Responses API (`OPENAI_PAYMENTS_MODEL`, default
+`gpt-4o-mini`) when `OPENAI_API_KEY` is set, estimating a price and attaching a real merchant
+link (e.g. an Amazon search URL) when the instruction names a product without a price. With no
+key it falls back to a built-in heuristic parser. Policy-engine tests: `apps/api/src/payments.test.ts`.
+
 ## Project structure
 
 ```text
