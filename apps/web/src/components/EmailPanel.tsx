@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Mail, Sparkles } from "lucide-react";
 import { api, type EmailActivity, type ParsedEmail } from "../api";
 
@@ -9,6 +9,7 @@ export function EmailPanel({ siteId, siteName }: { siteId: string; siteName: str
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [openMessageId, setOpenMessageId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -173,38 +174,73 @@ export function EmailPanel({ siteId, siteName }: { siteId: string; siteName: str
         {messages.length === 0 ? (
           <p className="payments-empty">No emails yet. Try the Compose box above, or ask in Chat.</p>
         ) : (
-          <table className="payments-table">
-            <thead>
-              <tr>
-                <th>Direction</th>
-                <th>From → To</th>
-                <th>Subject</th>
-                <th>Status</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {messages.map((message) => (
-                <tr key={message.id}>
-                  <td>
-                    <span className={`payments-badge payments-badge--${message.direction === "inbound" ? "approved" : "executed"}`}>
-                      {message.direction}
-                    </span>
-                  </td>
-                  <td className="payments-muted">
-                    {message.from_email} → {message.to_email}
-                  </td>
-                  <td>{message.subject}</td>
-                  <td>
-                    <span className={`payments-badge payments-badge--${message.status === "failed" ? "rejected" : "executed"}`}>
-                      {message.status}
-                    </span>
-                  </td>
-                  <td className="payments-muted">{new Date(message.created_at).toLocaleString()}</td>
+          <>
+            <p className="payments-muted" style={{ marginTop: 0 }}>
+              Click a row to read the full email.
+            </p>
+            <table className="payments-table">
+              <thead>
+                <tr>
+                  <th aria-label="Expand" />
+                  <th>Direction</th>
+                  <th>From → To</th>
+                  <th>Subject</th>
+                  <th>Status</th>
+                  <th>Time</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {messages.map((message) => {
+                  const open = openMessageId === message.id;
+                  return (
+                    <Fragment key={message.id}>
+                      <tr
+                        onClick={() => setOpenMessageId(open ? null : message.id)}
+                        style={{ cursor: "pointer" }}
+                        aria-expanded={open}
+                      >
+                        <td className="payments-muted" aria-hidden="true">
+                          {open ? "▾" : "▸"}
+                        </td>
+                        <td>
+                          <span className={`payments-badge payments-badge--${message.direction === "inbound" ? "approved" : "executed"}`}>
+                            {message.direction}
+                          </span>
+                        </td>
+                        <td className="payments-muted">
+                          {message.from_email} → {message.to_email}
+                        </td>
+                        <td>{message.subject}</td>
+                        <td>
+                          <span className={`payments-badge payments-badge--${message.status === "failed" ? "rejected" : "executed"}`}>
+                            {message.status}
+                          </span>
+                        </td>
+                        <td className="payments-muted">{new Date(message.created_at).toLocaleString()}</td>
+                      </tr>
+                      {open ? (
+                        <tr>
+                          <td colSpan={6}>
+                            <div className="email-message-detail">
+                              <div className="email-message-detail__meta">
+                                <span><strong>From:</strong> {message.from_email}</span>
+                                <span><strong>To:</strong> {message.to_email}</span>
+                                <span><strong>Subject:</strong> {message.subject}</span>
+                                {message.provider_message_id ? (
+                                  <span><strong>Provider id:</strong> {message.provider_message_id}</span>
+                                ) : null}
+                              </div>
+                              <pre className="email-message-detail__body">{message.body}</pre>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
     </div>
