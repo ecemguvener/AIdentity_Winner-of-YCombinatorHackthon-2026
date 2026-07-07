@@ -5,7 +5,8 @@ import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
-import { getAgentIdentityByToken, recordIdentityAudit, type AgentIdentity } from "./identity.js";
+import { AUDIT_ACTIONS, recordAuditForAgentHexId } from "./audit.js";
+import { loadAgentIdentityFromRequest, type AgentIdentity } from "./identity.js";
 
 // ---------------------------------------------------------------------------
 // Payment tool module
@@ -88,6 +89,7 @@ const requestById = new Map<string, PurchaseRequest>();
 const transactionsByAccount = new Map<string, Transaction[]>();
 const transactionByRequestId = new Map<string, Transaction>();
 const idempotencyKeys = new Map<string, string>();
+let auditCollections: Collections | null = null;
 
 const DEFAULT_POLICY = {
   maxTransactionAmount: 100,
@@ -160,7 +162,7 @@ export function provisionPaymentIdentity(accountId: string): PaymentIdentity {
   const now = new Date();
   policyByAccount.set(accountId, { accountId, ...DEFAULT_POLICY, createdAt: now, updatedAt: now });
 
-  recordIdentityAudit(accountId, "payment.provision", "allowed", `Virtual card •••• ${identity.cardLast4} provisioned.`);
+  recordAccountAudit(accountId, AUDIT_ACTIONS.billing.provision, "allowed", `Virtual card •••• ${identity.cardLast4} provisioned.`);
   return identity;
 }
 
@@ -215,9 +217,9 @@ export function createPurchaseRequest(accountId: string, input: CreatePurchaseIn
   requestsByAccount.set(accountId, list.slice(0, 200));
   requestById.set(purchase.id, purchase);
 
-  recordIdentityAudit(
+  recordAccountAudit(
     accountId,
-    "payment.request",
+    AUDIT_ACTIONS.billing.request,
     decision.status === "rejected" ? "blocked" : "allowed",
     `${decision.status} • ${input.merchantName} • ${formatAmount(input.amount, purchase.currency)} • ${decision.reason}`
   );
@@ -264,7 +266,12 @@ export function decidePurchase(
   }
   purchase.status = decision === "approved" ? "approved" : "rejected";
   purchase.decisionReason = `${decision === "approved" ? "Approved" : "Rejected"} by owner${note ? `: ${note}` : ""}`;
-  recordIdentityAudit(accountId, `payment.${decision}`, decision === "approved" ? "allowed" : "blocked", purchase.decisionReason);
+  recordAccountAudit(
+    accountId,
+    decision === "approved" ? AUDIT_ACTIONS.billing.approved : AUDIT_ACTIONS.billing.rejected,
+    decision === "approved" ? "allowed" : "blocked",
+    purchase.decisionReason
+  );
   return purchase;
 }
 
@@ -279,13 +286,13 @@ export function executeApprovedPurchase(accountId: string, requestId: string, id
   if (existingTxnId) {
     const existingTxn = transactionsByAccount.get(accountId)?.find((txn) => txn.id === existingTxnId);
     if (existingTxn) {
-      recordIdentityAudit(accountId, "payment.execute", "allowed", `Idempotent replay for ${requestId}.`);
+      recordAccountAudit(accountId, AUDIT_ACTIONS.billing.execute, "allowed", `Idempotent replay for ${requestId}.`);
       return existingTxn;
     }
   }
 
   if (purchase.status !== "approved") {
-    recordIdentityAudit(accountId, "payment.execute", "blocked", `Request ${requestId} is ${purchase.status}, not approved.`);
+    recordAccountAudit(accountId, AUDIT_ACTIONS.billing.execute, "blocked", `Request ${requestId} is ${purchase.status}, not approved.`);
     throw new PaymentError(409, "purchase request is not approved");
   }
 
@@ -316,9 +323,9 @@ export function executeApprovedPurchase(accountId: string, requestId: string, id
 
   purchase.status = result.status === "successful" ? "executed" : "failed";
   purchase.decisionReason = result.reason;
-  recordIdentityAudit(
+  recordAccountAudit(
     accountId,
-    "payment.execute",
+    AUDIT_ACTIONS.billing.execute,
     result.status === "successful" ? "allowed" : "blocked",
     `${result.status} • ${purchase.merchantName} • ${formatAmount(purchase.amount, purchase.currency)}`
   );
@@ -342,6 +349,7 @@ export function updatePaymentPolicy(accountId: string, patch: z.infer<typeof pol
     updatedAt: now
   };
   policyByAccount.set(accountId, policy);
+  recordAccountAudit(accountId, AUDIT_ACTIONS.policy.updated, "allowed", "Payment policy updated.");
   return policy;
 }
 
@@ -666,9 +674,10 @@ function readOpenAIOutputText(responseText: string): string {
 // Routes — agent-facing (Bearer identity token)
 // ---------------------------------------------------------------------------
 
-export function registerPaymentRoutes(app: FastifyInstance, config: AppConfig) {
+export function registerPaymentRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
+  auditCollections = collections;
   app.post("/api/tools/payments/request-purchase", async (request, reply) => {
-    const identity = readBearerIdentity(request);
+    const identity = await loadAgentIdentityFromRequest(request, collections);
     if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
     const payload = requestPurchaseSchema.parse(request.body ?? {});
     const purchase = createPurchaseRequest(identity.id, fromPayload(payload));
@@ -676,7 +685,7 @@ export function registerPaymentRoutes(app: FastifyInstance, config: AppConfig) {
   });
 
   app.post("/api/tools/payments/request-purchase-from-text", async (request, reply) => {
-    const identity = readBearerIdentity(request);
+    const identity = await loadAgentIdentityFromRequest(request, collections);
     if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
     const { prompt } = requestPurchaseFromTextSchema.parse(request.body ?? {});
     return runPayment(reply, async () => {
@@ -686,12 +695,14 @@ export function registerPaymentRoutes(app: FastifyInstance, config: AppConfig) {
   });
 
   app.post("/api/tools/payments/:requestId/approve", (request, reply) =>
-    bearerDecide(request, reply, "approved")
+    bearerDecide(request, reply, collections, "approved")
   );
-  app.post("/api/tools/payments/:requestId/reject", (request, reply) => bearerDecide(request, reply, "rejected"));
+  app.post("/api/tools/payments/:requestId/reject", (request, reply) =>
+    bearerDecide(request, reply, collections, "rejected")
+  );
 
   app.post("/api/tools/payments/:requestId/execute", async (request, reply) => {
-    const identity = readBearerIdentity(request);
+    const identity = await loadAgentIdentityFromRequest(request, collections);
     if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
     const { requestId } = request.params as { requestId: string };
     return runPayment(reply, () => {
@@ -701,14 +712,14 @@ export function registerPaymentRoutes(app: FastifyInstance, config: AppConfig) {
   });
 
   app.patch("/api/tools/payments/policy", async (request, reply) => {
-    const identity = readBearerIdentity(request);
+    const identity = await loadAgentIdentityFromRequest(request, collections);
     if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
     const patch = policySchema.parse(request.body ?? {});
     return serializePolicy(updatePaymentPolicy(identity.id, patch));
   });
 
   app.get("/api/identity/:agentId/payment-activity", async (request, reply) => {
-    const identity = readBearerIdentity(request);
+    const identity = await loadAgentIdentityFromRequest(request, collections);
     if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
     const { agentId } = request.params as { agentId: string };
     if (identity.id !== agentId) return reply.code(403).send({ error: "identity token does not match requested agent" });
@@ -716,8 +727,13 @@ export function registerPaymentRoutes(app: FastifyInstance, config: AppConfig) {
   });
 }
 
-function bearerDecide(request: FastifyRequest, reply: FastifyReply, decision: "approved" | "rejected") {
-  const identity = readBearerIdentity(request);
+async function bearerDecide(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  collections: Collections,
+  decision: "approved" | "rejected"
+) {
+  const identity = await loadAgentIdentityFromRequest(request, collections);
   if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
   const { requestId } = request.params as { requestId: string };
   const { note } = decisionSchema.parse(request.body ?? {});
@@ -729,6 +745,7 @@ function bearerDecide(request: FastifyRequest, reply: FastifyReply, decision: "a
 // ---------------------------------------------------------------------------
 
 export function registerSitePaymentRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
+  auditCollections = collections;
   const resolveSiteAccount = async (request: FastifyRequest, reply: FastifyReply): Promise<string | null> => {
     const authContext = await requireAuth(request, reply, collections, config);
     if (!authContext) return null;
@@ -890,16 +907,6 @@ function serializePolicy(policy: PaymentPolicy) {
   };
 }
 
-function readBearerIdentity(request: FastifyRequest): AgentIdentity | null {
-  const authorization = request.headers.authorization;
-  if (!authorization) return null;
-  const [scheme, token] = authorization.split(/\s+/, 2);
-  if (scheme?.toLowerCase() !== "bearer" || !token) return null;
-  const identity = getAgentIdentityByToken(token.trim());
-  if (!identity || identity.status !== "active") return null;
-  return identity;
-}
-
 function readIdempotencyKey(request: FastifyRequest): string | undefined {
   const header = request.headers["idempotency-key"];
   return typeof header === "string" && header.trim() ? header.trim() : undefined;
@@ -936,6 +943,24 @@ function escapeRegExp(value: string): string {
 
 function parseObjectId(value: string): ObjectId | null {
   return ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+
+function recordAccountAudit(
+  accountId: string,
+  action: string,
+  status: "allowed" | "blocked" | "pending" | "error",
+  detail: string
+): void {
+  const collections = auditCollections;
+  if (!collections) {
+    return;
+  }
+  void recordAuditForAgentHexId(collections, accountId, {
+    actor: "agent",
+    action,
+    status,
+    detail
+  });
 }
 
 function randomId(byteLength: number): string {

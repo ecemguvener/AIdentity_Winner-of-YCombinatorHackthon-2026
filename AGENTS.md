@@ -46,6 +46,7 @@ The Node API exposes:
 - `POST /api/dashboard/chat`
 - `POST /api/identity/init`
 - `POST /api/identity/revoke`
+- `POST /api/identity/tokens/rotate`
 - `GET /api/identity/:agentId/audit-log`
 - `POST /api/tools/phone/call`
 - `POST /api/tools/calendar/book`

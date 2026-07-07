@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AppConfig } from "./config.js";
+import { connectDatabase, type Database } from "./db.js";
 import { registerEmailRoutes, extractEmail, normalizeInbound, verifyResendSignature } from "./email.js";
 import { registerIdentityRoutes } from "./identity.js";
 
@@ -10,13 +12,27 @@ import { registerIdentityRoutes } from "./identity.js";
 const config = {
   PUBLIC_API_URL: "http://localhost:4001",
   PROVIDER_MODE_EMAIL: "mock",
+  PROVIDER_MODE_PHONE: "mock",
   EMAIL_AGENT_DOMAIN: "agents.barkan.dev"
 } as unknown as AppConfig;
 
+let mongoServer: MongoMemoryServer;
+let database: Database;
+
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  database = await connectDatabase({ MONGODB_URI: mongoServer.getUri() } as AppConfig);
+}, 60_000);
+
+afterAll(async () => {
+  await database?.client.close();
+  await mongoServer?.stop();
+});
+
 async function buildTestApp() {
   const app = Fastify({ logger: false });
-  registerEmailRoutes(app, config);
-  registerIdentityRoutes(app, config);
+  registerEmailRoutes(app, database.collections, config);
+  registerIdentityRoutes(app, database.collections, config);
   return app;
 }
 
@@ -32,7 +48,17 @@ async function initEmailAgent(app: Awaited<ReturnType<typeof buildTestApp>>, req
   });
   expect(response.statusCode).toBe(201);
   const body = response.json();
-  return { token: body.identity_token as string, agentId: body.agent_id as string, email: body.email as string };
+  // Init no longer pre-provisions an address (email is null until the real
+  // provisioning task lands); the email routes mint one lazily on first use.
+  expect(body.email).toBeNull();
+  const activity = await app.inject({
+    method: "GET",
+    url: `/api/identity/${body.agent_id}/email-activity`,
+    headers: { authorization: `Bearer ${body.identity_token}` }
+  });
+  expect(activity.statusCode).toBe(200);
+  const email = activity.json().email_identity.email_address as string;
+  return { token: body.identity_token as string, agentId: body.agent_id as string, email };
 }
 
 describe("extractEmail", () => {

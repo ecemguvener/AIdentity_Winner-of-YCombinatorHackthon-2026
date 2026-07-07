@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "seed:demo": "tsx src/seed-demo.ts",
+    "migrate": "tsx src/migrations/run.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.7.4",
+    "mongodb-memory-server": "^11.2.0",
     "tsx": "^4.19.1",
     "vitest": "^4.1.5"
   }

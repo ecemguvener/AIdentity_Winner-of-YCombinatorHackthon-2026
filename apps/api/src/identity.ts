@@ -1,45 +1,62 @@
 import crypto from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
+import type { AgentDocument, Collections, PolicyDocument } from "./db.js";
+import {
+  authenticateAgentRequest,
+  issueIdentityToken,
+  type IdentityTokenMode
+} from "./agent-auth.js";
+import { AUDIT_ACTIONS, listAuditEntries, recordAudit, serializeAuditEntry } from "./audit.js";
+import { slugify } from "./lib/slug.js";
+import { normalizeEmail } from "./security.js";
 
 type ToolName = "email" | "phone" | "calendar" | "payment";
 type PermissionName = "email.send" | "phone.call" | "calendar.create" | "payment.purchase";
 
+// Compatibility view over a persisted agent, consumed by the email/payment
+// tool modules (whose own stores are still in-memory and keyed by the agent's
+// hex id). Calendar/payment capability flags land in later tasks; until then
+// those demo tools gate only on agent status + approval mode.
 export interface AgentIdentity {
   id: string;
   name: string;
-  runtime: string;
-  useCase: string;
-  token: string;
   status: "active" | "revoked";
-  tools: ToolName[];
   permissions: Record<PermissionName, boolean> & {
     requiresHumanApproval: boolean;
   };
-  email: string | null;
-  phone: string | null;
-  calendarUrl: string | null;
-  createdAt: Date;
 }
 
-interface AuditLogEntry {
-  id: string;
-  agentId: string;
-  action: string;
-  status: "allowed" | "blocked" | "revoked";
-  detail: string;
-  createdAt: Date;
+export function agentIdentityView(agent: AgentDocument): AgentIdentity {
+  return {
+    id: agent._id.toHexString(),
+    name: agent.name,
+    status: agent.status === "active" ? "active" : "revoked",
+    permissions: {
+      "email.send": agent.capabilities.email,
+      "phone.call": agent.capabilities.phone,
+      "calendar.create": true,
+      "payment.purchase": true,
+      requiresHumanApproval: agent.approvalMode !== "autonomous"
+    }
+  };
 }
 
-const identitiesByToken = new Map<string, AgentIdentity>();
-const identitiesById = new Map<string, AgentIdentity>();
-const auditLogsByAgentId = new Map<string, AuditLogEntry[]>();
+export async function loadAgentIdentityFromRequest(
+  request: FastifyRequest,
+  collections: Collections
+): Promise<AgentIdentity | null> {
+  const agentContext = await authenticateAgentRequest(request, collections);
+  return agentContext ? agentIdentityView(agentContext.agent) : null;
+}
 
 const initIdentitySchema = z.object({
   agent_name: z.string().min(1).max(80),
   agent_runtime: z.string().min(1).max(80).default("openclaw"),
   use_case: z.string().min(1).max(120).default("automation"),
+  owner_email: z.string().email().optional(),
   tools: z
     .array(z.enum(["email", "phone", "calendar", "payment"]))
     .min(1)
@@ -68,76 +85,76 @@ const calendarBookSchema = z.object({
   approved: z.boolean().optional()
 });
 
-export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) {
+export function registerIdentityRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
   app.post("/api/identity/init", async (request, reply) => {
     const payload = initIdentitySchema.parse(request.body ?? {});
-    const id = `agent_${slugify(payload.agent_name)}_${randomId(8)}`;
-    const token = `identity_live_${randomId(32)}`;
     const tools = [...new Set(payload.tools)] as ToolName[];
-    const permissions = {
-      "email.send": payload.permissions?.["email.send"] ?? tools.includes("email"),
-      "phone.call": payload.permissions?.["phone.call"] ?? tools.includes("phone"),
-      "calendar.create": payload.permissions?.["calendar.create"] ?? tools.includes("calendar"),
-      "payment.purchase": payload.permissions?.["payment.purchase"] ?? tools.includes("payment"),
-      requiresHumanApproval: payload.permissions?.requires_human_approval ?? true
-    };
-    const slug = slugify(payload.agent_name);
-    const identity: AgentIdentity = {
-      id,
+
+    let ownerUserId: ObjectId | null = null;
+    if (payload.owner_email) {
+      const owner = await collections.users.findOne({ email: normalizeEmail(payload.owner_email) });
+      if (!owner) {
+        return reply.code(404).send({ error: "owner_email does not match an existing user" });
+      }
+      ownerUserId = owner._id;
+    }
+
+    const now = new Date();
+    const agent: AgentDocument = {
+      _id: new ObjectId(),
+      ownerUserId,
       name: payload.agent_name.trim(),
-      runtime: payload.agent_runtime.trim(),
-      useCase: payload.use_case.trim(),
-      token,
+      slug: await reserveAgentSlug(collections, ownerUserId, payload.agent_name),
       status: "active",
-      tools,
-      permissions,
-      email: tools.includes("email") ? `${slug}-${randomId(4)}@${config.EMAIL_AGENT_DOMAIN}` : null,
-      phone: tools.includes("phone") ? `+1 415 555 ${randomDigits(4)}` : null,
-      calendarUrl: tools.includes("calendar") ? `${config.PUBLIC_API_URL}/calendar/${id}` : null,
-      createdAt: new Date()
+      description: payload.use_case.trim(),
+      runtime: normalizeRuntime(payload.agent_runtime),
+      capabilities: { email: tools.includes("email"), phone: tools.includes("phone") },
+      approvalMode: (payload.permissions?.requires_human_approval ?? true) ? "always" : "autonomous",
+      createdAt: now,
+      updatedAt: now
     };
+    await collections.agents.insertOne(agent);
 
-    identitiesByToken.set(token, identity);
-    identitiesById.set(id, identity);
-    pushAudit(identity, "identity.init", "allowed", `${identity.name} initialized for ${identity.runtime}.`);
+    // Default policies row; the email/phone policy shapes land in tasks 019/028.
+    const policy: PolicyDocument = {
+      _id: new ObjectId(),
+      agentId: agent._id,
+      email: {},
+      phone: {},
+      createdAt: now,
+      updatedAt: now
+    };
+    await collections.policies.insertOne(policy);
 
-    if (tools.includes("email") && identity.email) {
-      const { provisionEmailIdentity } = await import("./email.js");
-      provisionEmailIdentity(identity.id, identity.email, identity.name, config);
-    }
+    const { plaintext } = await issueIdentityToken(collections, agent._id, "default", {
+      mode: identityTokenMode(config)
+    });
 
-    let payment: {
-      payment_identity_id: string;
-      provider: string;
-      card_last4: string;
-      status: string;
-    } | null = null;
-    if (tools.includes("payment")) {
-      const { provisionPaymentIdentity } = await import("./payments.js");
-      const card = provisionPaymentIdentity(identity.id);
-      payment = {
-        payment_identity_id: card.id,
-        provider: card.provider,
-        card_last4: card.cardLast4,
-        status: card.status
-      };
-    }
+    await recordAudit(collections, {
+      agentId: agent._id,
+      ownerUserId,
+      actor: "system",
+      action: AUDIT_ACTIONS.identity.init,
+      status: "allowed",
+      detail: `${agent.name} initialized for ${agent.runtime}.`
+    });
 
+    const identity = agentIdentityView(agent);
     return reply.code(201).send({
       agent_id: identity.id,
-      identity_token: identity.token,
-      status: identity.status,
-      runtime: identity.runtime,
-      use_case: identity.useCase,
-      email: identity.email,
-      phone: identity.phone,
-      calendar_url: identity.calendarUrl,
-      payment,
-      tools: identity.tools,
+      identity_token: plaintext,
+      status: agent.status,
+      runtime: agent.runtime,
+      use_case: agent.description,
+      // Real email/phone provisioning lands in later tasks; card is deferred.
+      email: null,
+      phone: null,
+      payment: null,
+      tools,
       permissions: serializePermissions(identity),
       openclaw_env: {
         IDENTITY_LAYER_API_URL: config.PUBLIC_API_URL,
-        AGENT_IDENTITY_TOKEN: identity.token
+        AGENT_IDENTITY_TOKEN: plaintext
       },
       tool_endpoints: {
         email_request: `${config.PUBLIC_API_URL}/api/tools/email/request`,
@@ -150,21 +167,30 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
         payment_request_purchase: `${config.PUBLIC_API_URL}/api/tools/payments/request-purchase`,
         payment_request_purchase_from_text: `${config.PUBLIC_API_URL}/api/tools/payments/request-purchase-from-text`,
         payment_activity: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/payment-activity`,
-        audit_log: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/audit-log`
+        audit_log: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/audit-log`,
+        token_rotate: `${config.PUBLIC_API_URL}/api/identity/tokens/rotate`
       }
     });
   });
 
   app.post("/api/tools/phone/call", async (request, reply) => {
-    const identity = readBearerIdentity(request.headers.authorization);
-    if (!identity) {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
       return reply.code(401).send({ error: "missing or invalid identity token" });
     }
+    const identity = agentIdentityView(agentContext.agent);
 
     const payload = phoneCallSchema.parse(request.body ?? {});
     const block = checkAction(identity, "phone.call", payload.approved);
     if (block) {
-      pushAudit(identity, "phone.call", "blocked", block);
+      await recordAudit(collections, {
+        agentId: agentContext.agent._id,
+        ownerUserId: agentContext.agent.ownerUserId,
+        actor: "agent",
+        action: AUDIT_ACTIONS.phone.outbound,
+        status: "blocked",
+        detail: block
+      });
       return reply.code(403).send({ error: block });
     }
 
@@ -174,36 +200,58 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
       `${identity.name}: What is painful about the current workflow?`,
       "Prospect: The manual follow-up is the part we never keep up with."
     ];
-    pushAudit(identity, "phone.call", "allowed", `Simulated call placed to ${payload.to}.`);
+    await recordAudit(collections, {
+      agentId: agentContext.agent._id,
+      ownerUserId: agentContext.agent.ownerUserId,
+      actor: "agent",
+      action: AUDIT_ACTIONS.phone.outbound,
+      status: "allowed",
+      detail: `Simulated call placed to ${payload.to}.`
+    });
     return {
       ok: true,
       provider: "demo-twilio",
       call_id: `call_${randomId(12)}`,
-      from: identity.phone,
+      // Real phone number provisioning lands in a later task.
+      from: null,
       to: payload.to,
       transcript
     };
   });
 
   app.post("/api/tools/calendar/book", async (request, reply) => {
-    const identity = readBearerIdentity(request.headers.authorization);
-    if (!identity) {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
       return reply.code(401).send({ error: "missing or invalid identity token" });
     }
+    const identity = agentIdentityView(agentContext.agent);
 
     const payload = calendarBookSchema.parse(request.body ?? {});
     const block = checkAction(identity, "calendar.create", payload.approved);
     if (block) {
-      pushAudit(identity, "calendar.create", "blocked", block);
+      await recordAudit(collections, {
+        agentId: agentContext.agent._id,
+        ownerUserId: agentContext.agent.ownerUserId,
+        actor: "agent",
+        action: "calendar.create",
+        status: "blocked",
+        detail: block
+      });
       return reply.code(403).send({ error: block });
     }
 
-    pushAudit(identity, "calendar.create", "allowed", `Meeting booked with ${payload.attendee_email}: ${payload.title}`);
+    await recordAudit(collections, {
+      agentId: agentContext.agent._id,
+      ownerUserId: agentContext.agent.ownerUserId,
+      actor: "agent",
+      action: "calendar.create",
+      status: "allowed",
+      detail: `Meeting booked with ${payload.attendee_email}: ${payload.title}`
+    });
     return {
       ok: true,
       provider: "demo-calendar",
       event_id: `evt_${randomId(12)}`,
-      calendar_url: identity.calendarUrl,
       title: payload.title,
       attendee_email: payload.attendee_email,
       start_time: payload.start_time
@@ -211,35 +259,94 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
   });
 
   app.get("/api/identity/:agentId/audit-log", async (request, reply) => {
-    const identity = readBearerIdentity(request.headers.authorization);
-    if (!identity) {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
       return reply.code(401).send({ error: "missing or invalid identity token" });
     }
 
     const { agentId } = request.params as { agentId: string };
-    if (identity.id !== agentId) {
+    if (agentContext.agent._id.toHexString() !== agentId) {
       return reply.code(403).send({ error: "identity token does not match requested agent" });
     }
 
+    const { entries } = await listAuditEntries(collections, {
+      agentId: agentContext.agent._id,
+      limit: 100
+    });
+
     return {
-      agent_id: identity.id,
-      status: identity.status,
-      audit_log: serializeAuditLog(identity.id)
+      agent_id: agentId,
+      status: agentContext.agent.status,
+      audit_log: entries.map((entry) => {
+        const serialized = serializeAuditEntry(entry);
+        return {
+          id: serialized.id,
+          agent_id: serialized.agent_id,
+          action: serialized.action,
+          status: serialized.status,
+          detail: serialized.detail,
+          created_at: serialized.created_at
+        };
+      })
     };
   });
 
   app.post("/api/identity/revoke", async (request, reply) => {
-    const identity = readBearerIdentity(request.headers.authorization);
-    if (!identity) {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
       return reply.code(401).send({ error: "missing or invalid identity token" });
     }
 
-    identity.status = "revoked";
-    pushAudit(identity, "identity.revoke", "revoked", `${identity.name} identity token revoked.`);
+    await collections.identityTokens.updateOne(
+      { _id: agentContext.token._id },
+      { $set: { status: "revoked", updatedAt: new Date() } }
+    );
+    await recordAudit(collections, {
+      agentId: agentContext.agent._id,
+      ownerUserId: agentContext.agent.ownerUserId,
+      actor: "agent",
+      action: AUDIT_ACTIONS.identity.revoke,
+      status: "allowed",
+      detail: `Identity token ${agentContext.token.prefix}… revoked.`
+    });
     return {
       ok: true,
-      agent_id: identity.id,
-      status: identity.status
+      agent_id: agentContext.agent._id.toHexString(),
+      status: "revoked"
+    };
+  });
+
+  app.post("/api/identity/tokens/rotate", async (request, reply) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      return reply.code(401).send({ error: "missing or invalid identity token" });
+    }
+
+    // Issue the replacement before revoking the old token so the agent is
+    // never left without a working credential.
+    const { plaintext, tokenDoc } = await issueIdentityToken(
+      collections,
+      agentContext.agent._id,
+      agentContext.token.name,
+      { mode: identityTokenMode(config) }
+    );
+    await collections.identityTokens.updateOne(
+      { _id: agentContext.token._id },
+      { $set: { status: "revoked", updatedAt: new Date() } }
+    );
+    await recordAudit(collections, {
+      agentId: agentContext.agent._id,
+      ownerUserId: agentContext.agent.ownerUserId,
+      actor: "agent",
+      action: AUDIT_ACTIONS.identity.tokenRotate,
+      status: "allowed",
+      detail: `Identity token ${agentContext.token.prefix}… rotated to ${tokenDoc.prefix}….`
+    });
+    return {
+      ok: true,
+      agent_id: agentContext.agent._id.toHexString(),
+      identity_token: plaintext,
+      token_prefix: tokenDoc.prefix
     };
   });
 }
@@ -260,41 +367,31 @@ function checkAction(identity: AgentIdentity, permission: PermissionName, approv
   return null;
 }
 
-function readBearerIdentity(authorization: string | undefined): AgentIdentity | null {
-  if (!authorization) {
-    return null;
+async function reserveAgentSlug(
+  collections: Collections,
+  ownerUserId: ObjectId | null,
+  agentName: string
+): Promise<string> {
+  const baseSlug = slugify(agentName);
+  let candidate = baseSlug;
+  let suffix = 2;
+  while (await collections.agents.findOne({ ownerUserId, slug: candidate })) {
+    candidate = `${baseSlug}-${suffix}`;
+    suffix += 1;
   }
-
-  const [scheme, token] = authorization.split(/\s+/, 2);
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
-    return null;
-  }
-
-  return identitiesByToken.get(token.trim()) ?? null;
+  return candidate;
 }
 
-function pushAudit(identity: AgentIdentity, action: string, status: AuditLogEntry["status"], detail: string) {
-  const entries = auditLogsByAgentId.get(identity.id) ?? [];
-  entries.unshift({
-    id: `log_${randomId(12)}`,
-    agentId: identity.id,
-    action,
-    status,
-    detail,
-    createdAt: new Date()
-  });
-  auditLogsByAgentId.set(identity.id, entries.slice(0, 100));
+function normalizeRuntime(runtime: string): NonNullable<AgentDocument["runtime"]> {
+  const normalized = runtime.trim().toLowerCase();
+  if (normalized === "openclaw" || normalized === "hermes" || normalized === "api") {
+    return normalized;
+  }
+  return "other";
 }
 
-function serializeAuditLog(agentId: string) {
-  return (auditLogsByAgentId.get(agentId) ?? []).map((entry) => ({
-    id: entry.id,
-    agent_id: entry.agentId,
-    action: entry.action,
-    status: entry.status,
-    detail: entry.detail,
-    created_at: entry.createdAt.toISOString()
-  }));
+function identityTokenMode(config: AppConfig): IdentityTokenMode {
+  return config.PROVIDER_MODE_EMAIL === "mock" && config.PROVIDER_MODE_PHONE === "mock" ? "test" : "live";
 }
 
 function serializePermissions(identity: AgentIdentity) {
@@ -307,48 +404,6 @@ function serializePermissions(identity: AgentIdentity) {
   };
 }
 
-// Accessors shared with other tool modules (e.g. payments.ts) so they can
-// authenticate against the same in-memory identity store and write to the
-// same audit log.
-export function getAgentIdentityByToken(token: string): AgentIdentity | null {
-  return identitiesByToken.get(token) ?? null;
-}
-
-export function getAgentIdentityById(agentId: string): AgentIdentity | null {
-  return identitiesById.get(agentId) ?? null;
-}
-
-export function recordIdentityAudit(
-  agentId: string,
-  action: string,
-  status: AuditLogEntry["status"],
-  detail: string
-): void {
-  const identity = identitiesById.get(agentId);
-  if (!identity) {
-    return;
-  }
-  pushAudit(identity, action, status, detail);
-}
-
 function randomId(byteLength: number): string {
   return crypto.randomBytes(byteLength).toString("base64url");
-}
-
-function randomDigits(length: number): string {
-  let value = "";
-  for (let index = 0; index < length; index += 1) {
-    value += crypto.randomInt(10).toString();
-  }
-  return value;
-}
-
-function slugify(value: string): string {
-  const slug = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return slug || "agent";
 }

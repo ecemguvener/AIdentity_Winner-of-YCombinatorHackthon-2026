@@ -5,7 +5,8 @@ import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
-import { getAgentIdentityByToken, recordIdentityAudit, type AgentIdentity } from "./identity.js";
+import { AUDIT_ACTIONS, recordAuditForAgentHexId } from "./audit.js";
+import { loadAgentIdentityFromRequest, type AgentIdentity } from "./identity.js";
 
 // ---------------------------------------------------------------------------
 // Email Capability Add-on
@@ -76,6 +77,7 @@ const messagesByAccount = new Map<string, EmailMessage[]>();
 const messageByProviderId = new Map<string, EmailMessage>();
 const notificationsByAccount = new Map<string, EmailReplyNotification[]>();
 const threadByCounterparty = new Map<string, string>(); // `${accountId}:${counterparty}` -> threadId
+let auditCollections: Collections | null = null;
 
 /** Error carrying an HTTP status so route handlers can translate cleanly. */
 export class EmailError extends Error {
@@ -129,7 +131,7 @@ export function provisionEmailIdentity(accountId: string, emailAddress: string, 
   };
   emailIdentityByAccount.set(accountId, identity);
   accountByAddress.set(emailAddress.toLowerCase(), accountId);
-  recordIdentityAudit(accountId, "email.provision", "allowed", `Email identity ${emailAddress} provisioned (${identity.provider}).`);
+  recordAccountAudit(accountId, AUDIT_ACTIONS.email.provision, "allowed", `Email identity ${emailAddress} provisioned (${identity.provider}).`);
   return identity;
 }
 
@@ -153,7 +155,7 @@ export function setEmailIdentityStatus(accountId: string, status: EmailIdentityS
     throw new EmailError(404, "no email identity for this agent");
   }
   identity.status = status;
-  recordIdentityAudit(accountId, status === "paused" ? "email.pause" : "email.resume", "allowed", `Email identity ${status === "paused" ? "paused" : "resumed"}.`);
+  recordAccountAudit(accountId, status === "paused" ? AUDIT_ACTIONS.email.pause : AUDIT_ACTIONS.email.resume, "allowed", `Email identity ${status === "paused" ? "paused" : "resumed"}.`);
   return identity;
 }
 
@@ -203,7 +205,7 @@ async function performSend(
       status: "sent",
       parsedBy: parsed?.parsedBy ?? null
     });
-    recordIdentityAudit(accountId, "email.send", "allowed", `Email sent to ${input.to}: ${input.subject}`);
+    recordAccountAudit(accountId, AUDIT_ACTIONS.email.send, "allowed", `Email sent to ${input.to}: ${input.subject}`);
     return message;
   } catch (error) {
     storeMessage({
@@ -218,7 +220,7 @@ async function performSend(
       status: "failed",
       parsedBy: parsed?.parsedBy ?? null
     });
-    recordIdentityAudit(accountId, "email.send", "blocked", `Send to ${input.to} failed: ${(error as Error).message}`);
+    recordAccountAudit(accountId, AUDIT_ACTIONS.email.blocked, "blocked", `Send to ${input.to} failed: ${(error as Error).message}`);
     throw error instanceof EmailError ? error : new EmailError(502, `email provider error: ${(error as Error).message}`);
   }
 }
@@ -335,7 +337,7 @@ export async function ingestInboundReply(normalized: NormalizedInbound, config: 
   notificationsByAccount.set(accountId, list.slice(0, 200));
 
   // Notify the hub: audit + a structured log line a hub listener can pick up.
-  recordIdentityAudit(accountId, "email.reply", "allowed", `Reply from ${sender}: ${summary}`);
+  recordAccountAudit(accountId, AUDIT_ACTIONS.email.receive, "allowed", `Reply from ${sender}: ${summary}`);
   // eslint-disable-next-line no-console
   console.info(`[email:reply] agent=${accountId} thread=${threadId} from=${sender} :: ${summary}`);
   return notification;
@@ -708,10 +710,24 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
 // Routes — agent-facing (Bearer identity token)
 // ---------------------------------------------------------------------------
 
-export function registerEmailRoutes(app: FastifyInstance, config: AppConfig) {
+export function registerEmailRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
+  auditCollections = collections;
+  // The email store is still in-memory (real persistence lands in a later
+  // task), so agent-facing routes lazily mint the address on first use — the
+  // identity init response no longer pre-provisions one.
+  const requireEmailAgent = async (request: FastifyRequest, reply: FastifyReply): Promise<AgentIdentity | null> => {
+    const identity = await loadAgentIdentityFromRequest(request, collections);
+    if (!identity) {
+      reply.code(401).send({ error: "missing or invalid identity token" });
+      return null;
+    }
+    ensureSiteEmailIdentity(identity.id, identity.name, config);
+    return identity;
+  };
+
   app.post("/api/tools/email/request", async (request, reply) => {
-    const identity = readBearerIdentity(request);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    const identity = await requireEmailAgent(request, reply);
+    if (!identity) return;
     const payload = requestSchema.parse(request.body ?? {});
     return runEmail(reply, async () => {
       const { message, parsed } = await sendEmailFromRequest(identity, payload, config);
@@ -720,27 +736,27 @@ export function registerEmailRoutes(app: FastifyInstance, config: AppConfig) {
   });
 
   app.post("/api/tools/email/send", async (request, reply) => {
-    const identity = readBearerIdentity(request);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    const identity = await requireEmailAgent(request, reply);
+    if (!identity) return;
     const payload = sendSchema.parse(request.body ?? {});
     return runEmail(reply, async () => reply.code(201).send(serializeSend(await sendEmail(identity, payload, config))));
   });
 
   app.post("/api/tools/email/pause", async (request, reply) => {
-    const identity = readBearerIdentity(request);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    const identity = await requireEmailAgent(request, reply);
+    if (!identity) return;
     return runEmail(reply, () => serializeIdentity(setEmailIdentityStatus(identity.id, "paused")));
   });
 
   app.post("/api/tools/email/resume", async (request, reply) => {
-    const identity = readBearerIdentity(request);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    const identity = await requireEmailAgent(request, reply);
+    if (!identity) return;
     return runEmail(reply, () => serializeIdentity(setEmailIdentityStatus(identity.id, "active")));
   });
 
   app.get("/api/identity/:agentId/email-activity", async (request, reply) => {
-    const identity = readBearerIdentity(request);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    const identity = await requireEmailAgent(request, reply);
+    if (!identity) return;
     const { agentId } = request.params as { agentId: string };
     if (identity.id !== agentId) return reply.code(403).send({ error: "identity token does not match requested agent" });
     return getEmailActivity(agentId);
@@ -770,6 +786,7 @@ export function registerEmailRoutes(app: FastifyInstance, config: AppConfig) {
 // ---------------------------------------------------------------------------
 
 export function registerSiteEmailRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
+  auditCollections = collections;
   const resolveSite = async (request: FastifyRequest, reply: FastifyReply): Promise<{ accountId: string; name: string } | null> => {
     const authContext = await requireAuth(request, reply, collections, config);
     if (!authContext) return null;
@@ -890,16 +907,6 @@ function formatFrom(identity: EmailIdentity): string {
   return `${identity.displayName} <${identity.emailAddress}>`;
 }
 
-function readBearerIdentity(request: FastifyRequest): AgentIdentity | null {
-  const authorization = request.headers.authorization;
-  if (!authorization) return null;
-  const [scheme, token] = authorization.split(/\s+/, 2);
-  if (scheme?.toLowerCase() !== "bearer" || !token) return null;
-  const identity = getAgentIdentityByToken(token.trim());
-  if (!identity || identity.status !== "active") return null;
-  return identity;
-}
-
 function serializeSend(message: EmailMessage) {
   return {
     ok: message.status === "sent",
@@ -966,6 +973,24 @@ function serializeIdentity(identity: EmailIdentity) {
 
 function parseObjectId(value: string): ObjectId | null {
   return ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+
+function recordAccountAudit(
+  accountId: string,
+  action: string,
+  status: "allowed" | "blocked" | "pending" | "error",
+  detail: string
+): void {
+  const collections = auditCollections;
+  if (!collections) {
+    return;
+  }
+  void recordAuditForAgentHexId(collections, accountId, {
+    actor: "agent",
+    action,
+    status,
+    detail
+  });
 }
 
 function slugify(value: string): string {

@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import type { AppConfig } from "./config.js";
 import type { Collections } from "./db.js";
 import { buildCorsOptionsForRequest, isPublicCorsPath, isTrustedDashboardOrigin } from "./cors.js";
+import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
 import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
@@ -84,12 +85,13 @@ export async function buildApp(config: AppConfig, collections: Collections) {
 
   app.get("/api/health", async () => ({ ok: true }));
 
+  registerAuditRoutes(app, collections, config);
   registerAuthRoutes(app, collections, config);
   registerDashboardChatRoutes(app, collections, config);
-  registerEmailRoutes(app, config);
+  registerEmailRoutes(app, collections, config);
   registerSiteEmailRoutes(app, collections, config);
-  registerIdentityRoutes(app, config);
-  registerPaymentRoutes(app, config);
+  registerIdentityRoutes(app, collections, config);
+  registerPaymentRoutes(app, collections, config);
   registerSitePaymentRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);
 
