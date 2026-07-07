@@ -17,6 +17,7 @@ import sitePreviewIdentityReady from "../assets/barkan/images/site-preview-ident
 export const dashboardPath = "/agents";
 export const dashboardChatPath = `${dashboardPath}/chat`;
 export const userSettingsPath = `${dashboardPath}/settings`;
+export const approvalsPath = "/approvals";
 export const newSitePath = "/agents/new";
 export const signinPath = "/signin";
 export const plansPath = "/plans";
@@ -27,7 +28,7 @@ export type AuthMode = "login" | "signup";
 export type AuthStep = "email" | "password";
 export type SiteOnboardingStep = "name" | "openclaw" | "setup" | "install" | "finish";
 export type OpenClawConnectionMode = "existing" | "deploy";
-export type DashboardSection = "sites" | "chat" | "settings";
+export type DashboardSection = "sites" | "chat" | "approvals" | "settings";
 export type DashboardChatRole = "assistant" | "user";
 export type DashboardChatMessage = {
   id: string;
@@ -166,6 +167,7 @@ export function isProtectedAppRoute(path: string): boolean {
   return (
     isDashboardRoute(path) ||
     isDashboardChatRoute(path) ||
+    isApprovalsRoute(path) ||
     isUserSettingsRoute(path) ||
     isNewSiteRoute(path) ||
     getSiteDetailRoute(path) !== null
@@ -182,6 +184,10 @@ export function isDashboardChatRoute(path: string): boolean {
 
 export function isUserSettingsRoute(path: string): boolean {
   return path === userSettingsPath || path === `${userSettingsPath}/`;
+}
+
+export function isApprovalsRoute(path: string): boolean {
+  return path === approvalsPath || path === `${approvalsPath}/`;
 }
 
 export function isNewSiteRoute(path: string): boolean {
@@ -219,7 +225,7 @@ export function navigateToPublicHome() {
 }
 
 export function getSiteDetailRoute(path: string, search = ""): { siteId: string; tab: SiteDetailTab } | null {
-  if (isNewSiteRoute(path) || isDashboardChatRoute(path) || isUserSettingsRoute(path) || isDashboardRoute(path)) {
+  if (isNewSiteRoute(path) || isDashboardChatRoute(path) || isApprovalsRoute(path) || isUserSettingsRoute(path) || isDashboardRoute(path)) {
     return null;
   }
 

@@ -31,6 +31,9 @@ describe("App shell", () => {
       if (url.endsWith("/api/v1/agents")) {
         return jsonResponse({ agents: [] });
       }
+      if (url.includes("/api/v1/approvals")) {
+        return jsonResponse({ approvals: [], nextCursor: null });
+      }
       return jsonResponse({ error: "not found" }, 404);
     });
 

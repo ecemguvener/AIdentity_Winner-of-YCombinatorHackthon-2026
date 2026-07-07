@@ -88,3 +88,24 @@ export interface CreateTokenResponse {
   secret: string;
   prefix: string;
 }
+
+export interface Approval {
+  id: string;
+  agentId: string;
+  agentName?: string;
+  ownerUserId: string;
+  kind: "email.send" | "phone.call" | "sms.send";
+  status: "pending" | "approved" | "rejected" | "expired";
+  payloadSummary: string;
+  payload: Record<string, unknown>;
+  decisionNote: string | null;
+  decidedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApprovalsListResponse {
+  approvals: Approval[];
+  nextCursor: string | null;
+}

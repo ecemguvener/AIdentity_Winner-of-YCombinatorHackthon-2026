@@ -1,10 +1,11 @@
-import { LogOut, Mail, Phone, Plus } from "lucide-react";
-import type { AgentDetailResponse, AgentListItem, IdentityToken } from "../api/types";
+import { Bell, LogOut, Mail, Phone, Plus } from "lucide-react";
+import type { AgentDetailResponse, AgentListItem, Approval, IdentityToken } from "../api/types";
 import type { User } from "../api";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
 import { Brand, formatSiteRelativeTime, getProjectCardStyle, type DashboardSection, type SiteDetailTab, type UserSettingsSection } from "../legacy/shared";
 import { DashboardChatIcon, DashboardChatScreen, DashboardSitesIcon, getDashboardChatGreetingName } from "../pages/ChatPage";
 import { AgentDetailPage } from "../pages/AgentDetailPage";
+import { ApprovalsPage } from "../pages/ApprovalsPage";
 import { UserSettingsPage, getUserInitials } from "../pages/SettingsPage";
 
 export function DashboardScreen({
@@ -13,12 +14,16 @@ export function DashboardScreen({
   agents,
   selectedAgentDetail,
   activeSection,
+  pendingApprovals,
+  approvalHistory,
+  focusedApprovalId,
   activeSiteDetailTab,
   activeUserSettingsSection,
   onCreateAgent,
   onLogout,
   onSelectAgent,
   onOpenDashboard,
+  onOpenApprovals,
   onOpenDashboardChat,
   onOpenProfileSettings,
   onUserSettingsSectionChange,
@@ -27,6 +32,9 @@ export function DashboardScreen({
   onAgentUpdated,
   onAgentDeleted,
   onTokensChanged,
+  onApproveApproval,
+  onRejectApproval,
+  onRefreshApprovalHistory,
   onNotify,
   onCloseDetail
 }: {
@@ -35,12 +43,16 @@ export function DashboardScreen({
   agents: AgentListItem[];
   selectedAgentDetail: AgentDetailResponse | null;
   activeSection: DashboardSection;
+  pendingApprovals: Approval[];
+  approvalHistory: Approval[];
+  focusedApprovalId: string | null;
   activeSiteDetailTab: SiteDetailTab;
   activeUserSettingsSection: UserSettingsSection;
   onCreateAgent: () => void;
   onLogout: () => void;
   onSelectAgent: (agentId: string) => void;
   onOpenDashboard: () => void;
+  onOpenApprovals: () => void;
   onOpenDashboardChat: () => void;
   onOpenProfileSettings: () => void;
   onUserSettingsSectionChange: (section: UserSettingsSection) => void;
@@ -49,6 +61,9 @@ export function DashboardScreen({
   onAgentUpdated: (detail: AgentDetailResponse) => void;
   onAgentDeleted: (agentId: string) => void;
   onTokensChanged: (tokens: IdentityToken[]) => void;
+  onApproveApproval: (approvalId: string, note?: string) => Promise<void>;
+  onRejectApproval: (approvalId: string, note?: string) => Promise<void>;
+  onRefreshApprovalHistory: () => Promise<void>;
   onNotify: (notification: ToastNotificationInput) => void;
   onCloseDetail: () => void;
 }) {
@@ -73,6 +88,15 @@ export function DashboardScreen({
             >
               <DashboardChatIcon />
               <span>Chat</span>
+            </button>
+            <button
+              className={`dashboard-page__rail-button${activeSection === "approvals" ? " dashboard-page__rail-button--active" : ""}`}
+              type="button"
+              onClick={onOpenApprovals}
+            >
+              <Bell size={18} aria-hidden="true" />
+              <span>Approvals</span>
+              {pendingApprovals.length > 0 ? <strong>{pendingApprovals.length}</strong> : null}
             </button>
             <button className="dashboard-page__rail-button" type="button" onClick={onCreateAgent}>
               <Plus size={18} aria-hidden="true" />
@@ -103,6 +127,16 @@ export function DashboardScreen({
 
       {activeSection === "chat" ? (
         <DashboardChatScreen user={user} sites={agents.map(agentToChatSite)} />
+      ) : activeSection === "approvals" ? (
+        <ApprovalsPage
+          approvals={pendingApprovals}
+          history={approvalHistory}
+          focusedApprovalId={focusedApprovalId}
+          onApprove={onApproveApproval}
+          onReject={onRejectApproval}
+          onRefreshHistory={onRefreshApprovalHistory}
+          onNotify={onNotify}
+        />
       ) : activeSection === "settings" ? (
         <UserSettingsPage
           user={user}

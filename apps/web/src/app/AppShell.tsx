@@ -1,10 +1,12 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { agentsApi } from "../api/agents";
-import type { AgentDetailResponse, AgentListItem, CreateAgentResponse, IdentityToken } from "../api/types";
+import { approvalsApi } from "../api/approvals";
+import { getApiBaseUrl } from "../api/client";
+import type { AgentDetailResponse, AgentListItem, Approval, CreateAgentResponse, IdentityToken } from "../api/types";
 import { api, type User } from "../api";
 import { ToastNotifications, type ToastNotification, type ToastNotificationInput } from "../components/ToastNotifications";
-import { dashboardChatPath, dashboardPath, getCurrentLocation, getErrorMessage, getSiteDetailPath, getSiteDetailRoute, getUserSettingsPath, getUserSettingsSection, isAppRoute, isDashboardChatRoute, isNewSiteRoute, isPlansRoute, isProtectedAppRoute, isSigninRoute, isUserSettingsRoute, navigateToPublicHome, newSitePath, signinPath, type DashboardSection } from "../legacy/shared";
+import { approvalsPath, dashboardChatPath, dashboardPath, getCurrentLocation, getErrorMessage, getSiteDetailPath, getSiteDetailRoute, getUserSettingsPath, getUserSettingsSection, isAppRoute, isApprovalsRoute, isDashboardChatRoute, isNewSiteRoute, isPlansRoute, isProtectedAppRoute, isSigninRoute, isUserSettingsRoute, navigateToPublicHome, newSitePath, signinPath, type DashboardSection } from "../legacy/shared";
 import { AuthScreen } from "../pages/AuthPage";
 import { AgentCreationWizard } from "../pages/AgentsListPage";
 import { LandingPage, PricingPage } from "../pages/PublicPages";
@@ -15,6 +17,8 @@ export function AppShell() {
   const [user, setUser] = useState<User | null>(null);
   const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [selectedAgentDetail, setSelectedAgentDetail] = useState<AgentDetailResponse | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<Approval[]>([]);
+  const [approvalHistory, setApprovalHistory] = useState<Approval[]>([]);
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
   const notificationIdRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,9 +37,12 @@ export function AppShell() {
   const isCreatingAgent = isNewSiteRoute(currentPath);
   const activeDashboardSection: DashboardSection = isUserSettingsRoute(currentPath)
     ? "settings"
+    : isApprovalsRoute(currentPath)
+      ? "approvals"
     : isDashboardChatRoute(currentPath)
       ? "chat"
       : "sites";
+  const focusedApprovalId = useMemo(() => new URLSearchParams(currentSearch).get("focus"), [currentSearch]);
 
   useEffect(() => {
     const handleNavigation = () => setCurrentLocation(getCurrentLocation());
@@ -54,6 +61,52 @@ export function AppShell() {
       replacePath(dashboardPath);
     }
   }, [currentPath, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: number | null = null;
+    let lastEventAt = new Date().toISOString();
+    let isStopped = false;
+
+    const connect = () => {
+      const apiBaseUrl = getApiBaseUrl();
+      const search = new URLSearchParams({ since: lastEventAt });
+      eventSource = new EventSource(`${apiBaseUrl}/api/v1/events?${search.toString()}`, { withCredentials: true });
+      eventSource.addEventListener("approval.requested", (event) => {
+        lastEventAt = new Date().toISOString();
+        const approval = JSON.parse((event as MessageEvent).data) as Approval;
+        setPendingApprovals((current) => upsertApproval(current, approval).filter((item) => item.status === "pending"));
+        showNotification({ title: approval.payloadSummary || "Approval requested" });
+      });
+      const handleTerminal = (event: Event) => {
+        lastEventAt = new Date().toISOString();
+        const approval = JSON.parse((event as MessageEvent).data) as Approval;
+        setPendingApprovals((current) => current.filter((item) => item.id !== approval.id));
+        setApprovalHistory((current) => upsertApproval(current, approval));
+      };
+      eventSource.addEventListener("approval.decided", handleTerminal);
+      eventSource.addEventListener("approval.expired", handleTerminal);
+      eventSource.onerror = () => {
+        eventSource?.close();
+        void refreshPendingApprovals();
+        if (!isStopped) {
+          reconnectTimeout = window.setTimeout(connect, 2500);
+        }
+      };
+    };
+
+    void refreshPendingApprovals();
+    if (typeof EventSource === "undefined") {
+      return;
+    }
+    connect();
+    return () => {
+      isStopped = true;
+      eventSource?.close();
+      if (reconnectTimeout !== null) window.clearTimeout(reconnectTimeout);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (selectedAgentId && user && !isCreatingAgent) {
@@ -76,6 +129,7 @@ export function AppShell() {
       const response = await api.me();
       setUser(response.user);
       await refreshAgents();
+      await refreshPendingApprovals();
     } catch {
       setUser(null);
       if (isProtectedAppRoute(path)) replacePath(signinPath);
@@ -121,6 +175,8 @@ export function AppShell() {
       setUser(null);
       setAgents([]);
       setSelectedAgentDetail(null);
+      setPendingApprovals([]);
+      setApprovalHistory([]);
       navigateToPublicHome();
     }
   }
@@ -155,6 +211,43 @@ export function AppShell() {
     setAgents((currentAgents) => currentAgents.filter((agent) => agent.id !== agentId));
     setSelectedAgentDetail(null);
     replacePath(dashboardPath);
+  }
+
+  async function refreshPendingApprovals() {
+    const response = await approvalsApi.list("pending");
+    setPendingApprovals(response.approvals);
+  }
+
+  async function refreshApprovalHistory() {
+    const response = await approvalsApi.list("all");
+    setApprovalHistory(response.approvals.filter((approval) => approval.status !== "pending"));
+  }
+
+  async function decideApproval(approvalId: string, decision: "approve" | "reject", note?: string) {
+    const previousPending = pendingApprovals;
+    const selected = pendingApprovals.find((approval) => approval.id === approvalId);
+    if (selected) {
+      const optimistic: Approval = {
+        ...selected,
+        status: decision === "approve" ? "approved" : "rejected",
+        decisionNote: note?.trim() || null,
+        decidedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setPendingApprovals((current) => current.filter((approval) => approval.id !== approvalId));
+      setApprovalHistory((current) => upsertApproval(current, optimistic));
+    }
+    try {
+      const response = decision === "approve"
+        ? await approvalsApi.approve(approvalId, note)
+        : await approvalsApi.reject(approvalId, note);
+      setApprovalHistory((current) => upsertApproval(current, response.approval));
+      showNotification({ title: decision === "approve" ? "Approval granted" : "Approval rejected" });
+    } catch (error) {
+      setPendingApprovals(previousPending);
+      showNotification({ kind: "error", title: getErrorMessage(error, "Approval decision failed") });
+      throw error;
+    }
   }
 
   function dismissNotification(notificationId: string) {
@@ -218,12 +311,16 @@ export function AppShell() {
         agents={agents}
         selectedAgentDetail={selectedAgentDetail}
         activeSection={activeDashboardSection}
+        pendingApprovals={pendingApprovals}
+        approvalHistory={approvalHistory}
+        focusedApprovalId={focusedApprovalId}
         activeSiteDetailTab={activeSiteDetailTab}
         activeUserSettingsSection={activeUserSettingsSection}
         onCreateAgent={() => pushPath(newSitePath)}
         onLogout={handleLogout}
         onSelectAgent={(agentId) => pushPath(getSiteDetailPath(agentId, "credentials"))}
         onOpenDashboard={() => replacePath(dashboardPath)}
+        onOpenApprovals={() => pushPath(approvalsPath)}
         onOpenDashboardChat={() => replacePath(dashboardChatPath)}
         onOpenProfileSettings={() => replacePath(getUserSettingsPath("profile"))}
         onUserSettingsSectionChange={(section) => pushPath(getUserSettingsPath(section))}
@@ -233,6 +330,9 @@ export function AppShell() {
         onAgentDeleted={handleAgentDeleted}
         onTokensChanged={handleTokensChanged}
         onNotify={showNotification}
+        onApproveApproval={(approvalId, note) => decideApproval(approvalId, "approve", note)}
+        onRejectApproval={(approvalId, note) => decideApproval(approvalId, "reject", note)}
+        onRefreshApprovalHistory={refreshApprovalHistory}
         onCloseDetail={() => {
           setSelectedAgentDetail(null);
           replacePath(dashboardPath);
@@ -240,6 +340,12 @@ export function AppShell() {
       />
       <ToastNotifications notifications={notifications} />
     </>
+  );
+}
+
+function upsertApproval(approvals: Approval[], approval: Approval): Approval[] {
+  return [approval, ...approvals.filter((item) => item.id !== approval.id)].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
   );
 }
 
