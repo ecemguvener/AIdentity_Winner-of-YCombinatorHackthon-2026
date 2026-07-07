@@ -105,8 +105,23 @@ function subscriptionEvent<TEvent extends Stripe.Event>(
         id: "sub_test_123",
         object: "subscription",
         customer: "cus_test_123",
-        status: "active"
-      } as Stripe.Subscription
+        status: "active",
+        current_period_end: 1786046400,
+        items: {
+          object: "list",
+          data: [
+            {
+              id: "si_test_123",
+              object: "subscription_item",
+              price: {
+                id: "price_pro",
+                object: "price",
+                lookup_key: "barkan_pro_monthly"
+              }
+            }
+          ]
+        }
+      } as unknown as Stripe.Subscription
     },
     ...overrides
   } as TEvent;

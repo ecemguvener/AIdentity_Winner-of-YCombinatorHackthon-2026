@@ -44,7 +44,8 @@ export const AUDIT_ACTIONS = {
     request: "billing.request",
     approved: "billing.approved",
     rejected: "billing.rejected",
-    execute: "billing.execute"
+    execute: "billing.execute",
+    paymentFailed: "billing.payment_failed"
   }
 } as const;
 

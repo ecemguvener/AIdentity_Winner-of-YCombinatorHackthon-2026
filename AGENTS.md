@@ -74,6 +74,9 @@ The Node API exposes:
 - Agent email routes: `GET /api/v1/agent/email/address`, `POST /api/v1/agent/email/send`, `GET /api/v1/agent/email/threads`, `GET /api/v1/agent/email/threads/:threadId`, `POST /api/v1/agent/email/threads/:threadId/reply`, `GET /api/v1/agent/email/threads/:threadId/attachments/:attachmentId`
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
+- `GET /api/v1/billing`
+- `POST /api/v1/billing/checkout`
+- `POST /api/v1/billing/portal`
 - `POST /webhooks/stripe` (registered only when `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` are configured; SaaS billing only)
 - `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
 - `POST /webhooks/elevenlabs/personalization` (ElevenLabs signed inbound-call personalization; returns conversation initiation data)
@@ -93,6 +96,7 @@ The Node API exposes:
 | `apps/web/src/components/EmailPanel.tsx` | Real email inbox, threads, compose, and policy UI |
 | `apps/api/src/app.ts` | Fastify app wiring |
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
+| `apps/api/src/billing.ts` | Stripe Billing account, checkout, portal, plan limits, and subscription webhook sync |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |

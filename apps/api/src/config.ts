@@ -28,6 +28,8 @@ const rawEnvironmentSchema = z.object({
   PROVIDER_MODE_PHONE: providerModeSchema.default("mock"),
   STRIPE_SECRET_KEY: optionalNonEmptyStringSchema,
   STRIPE_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
+  BILLING_PRICE_PRO: optionalNonEmptyStringSchema,
+  BILLING_PRICE_SCALE: optionalNonEmptyStringSchema,
   TWILIO_ACCOUNT_SID: optionalNonEmptyStringSchema,
   TWILIO_AUTH_TOKEN: optionalNonEmptyStringSchema,
   TWILIO_NUMBER_COUNTRY: z.string().min(1).default("US"),

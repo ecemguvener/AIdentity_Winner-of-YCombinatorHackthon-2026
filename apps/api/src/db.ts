@@ -307,6 +307,7 @@ export interface BillingAccountDocument extends Document {
   subscriptionId?: string;
   subscriptionStatus?: string;
   currentPeriodEnd?: Date;
+  lastStripeEventCreated?: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -14,6 +14,7 @@ import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth.js";
 import { requireAuth } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
+import { registerBillingRoutes, registerBillingStripeHandlers } from "./billing.js";
 import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
 import { registerEmailApprovalExecutor } from "./email-service.js";
 import { createEmailProvider } from "./providers/email-provider.js";
@@ -159,6 +160,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerEmailApprovalExecutor(collections, config, emailProvider);
   registerPhoneApprovalExecutor(collections, config);
   registerSmsApprovalExecutor(collections, config);
+  registerBillingStripeHandlers(collections);
   app.get("/api/v1/ops/email-domain", async (request, reply) => {
     await requireAuth(request, reply, collections, config);
     const status = config.PROVIDER_MODE_EMAIL === "live"
@@ -171,6 +173,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerApprovalRoutes(app, collections, config);
   registerAuditRoutes(app, collections, config);
   registerAuthRoutes(app, collections, config);
+  registerBillingRoutes(app, collections, config);
   registerDashboardChatRoutes(app, collections, config);
   registerEmailRoutes(app, collections, config, emailProvider);
   registerSiteEmailRoutes(app, collections, config, emailProvider);

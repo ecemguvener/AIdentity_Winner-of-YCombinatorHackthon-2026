@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "seed:demo": "tsx src/seed-demo.ts",
+    "stripe:bootstrap-billing": "tsx src/scripts/stripe-bootstrap-billing.ts",
     "stripe:listen": "stripe listen --forward-to localhost:4001/webhooks/stripe",
     "twilio:audit": "tsx src/scripts/twilio-audit.ts",
     "migrate": "tsx src/migrations/run.ts",

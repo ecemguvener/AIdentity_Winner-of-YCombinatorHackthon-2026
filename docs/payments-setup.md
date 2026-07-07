@@ -9,9 +9,26 @@ Set both values before using the Stripe webhook endpoint:
 ```bash
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+BILLING_PRICE_PRO=price_...
+BILLING_PRICE_SCALE=price_...
 ```
 
 The API registers `POST /webhooks/stripe` only when both are configured.
+
+## Bootstrap Plans
+
+Create or reuse Stripe Products/Prices by lookup key:
+
+```bash
+npm --workspace @barkan/api run stripe:bootstrap-billing
+npm --workspace @barkan/api run stripe:bootstrap-billing -- --write-env
+```
+
+Plan prices:
+
+- `free`: €0, 1 agent, email only, 50 emails/month
+- `pro`: €29/month, 3 agents, 1 phone number, 500 emails, 120 call minutes, 200 SMS
+- `scale`: €99/month, 10 agents, 3 phone numbers, 2000 emails, 600 call minutes, 1000 SMS
 
 ## Local Webhook
 

@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { Collections, UserDocument } from "./db.js";
+import { ensureBillingAccount } from "./billing.js";
 import { ApiError } from "./errors.js";
 import {
   createSessionExpiry,
@@ -90,6 +91,7 @@ export function registerAuthRoutes(
       throw new ApiError(500, "internal", "internal server error");
     }
 
+    await ensureBillingAccount(collections, config, user);
     await createSession(reply, collections, config, user._id);
     return { user: serializeUser(user) };
   });
