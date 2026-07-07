@@ -4,6 +4,7 @@ import type { AgentDocument, CallDocument, Collections } from "./db.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { emitOwnerEvent } from "./approvals.js";
 import { getPhonePolicy } from "./policies.js";
+import { recordUsage } from "./usage.js";
 
 type TranscriptTurn = NonNullable<CallDocument["transcript"]>[number];
 
@@ -139,17 +140,12 @@ async function recordUsageEvent(
   if (!agent.ownerUserId) return;
   const quantity = Math.ceil(Math.max(durationSecs, 0) / 60);
   if (quantity <= 0) return;
-  await collections.usageEvents.insertOne({
-    _id: new ObjectId(),
+  await recordUsage(collections, {
     ownerUserId: agent.ownerUserId,
     agentId: agent._id,
     meter: "call_minutes",
-    quantity,
-    stripeReported: false,
-    periodKey: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
-    createdAt: now,
-    updatedAt: now
-  });
+    quantity
+  }, now);
 }
 
 function readDynamicVariables(body: Record<string, unknown>): Record<string, unknown> {

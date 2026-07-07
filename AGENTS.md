@@ -75,6 +75,7 @@ The Node API exposes:
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
 - `GET /api/v1/billing`
+- `GET /api/v1/billing/usage`
 - `POST /api/v1/billing/checkout`
 - `POST /api/v1/billing/portal`
 - `POST /webhooks/stripe` (registered only when `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` are configured; SaaS billing only)
@@ -97,6 +98,7 @@ The Node API exposes:
 | `apps/api/src/app.ts` | Fastify app wiring |
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
 | `apps/api/src/billing.ts` | Stripe Billing account, checkout, portal, plan limits, and subscription webhook sync |
+| `apps/api/src/usage.ts` | Usage ledger, summaries, Stripe meter reporting, and active-number sampling |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |

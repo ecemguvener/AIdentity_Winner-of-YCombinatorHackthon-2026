@@ -81,7 +81,7 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: account.stripeCustomerId,
-      line_items: [{ price, quantity: 1 }],
+      line_items: [{ price, quantity: 1 }, ...overagePriceLineItems(config)],
       success_url: `${config.PUBLIC_APP_URL.replace(/\/$/, "")}/settings/billing?checkout=success`,
       cancel_url: `${config.PUBLIC_APP_URL.replace(/\/$/, "")}/settings/billing?checkout=cancelled`,
       metadata: { barkanUserId: authContext.user._id.toHexString(), plan: payload.plan },
@@ -105,6 +105,15 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
     });
     return { portalUrl: session.url };
   });
+}
+
+function overagePriceLineItems(config: AppConfig): Array<{ price: string }> {
+  return [
+    config.BILLING_PRICE_OVERAGE_EMAILS,
+    config.BILLING_PRICE_OVERAGE_CALL_MINUTES,
+    config.BILLING_PRICE_OVERAGE_SMS,
+    config.BILLING_PRICE_OVERAGE_ACTIVE_NUMBERS
+  ].filter((price): price is string => Boolean(price)).map((price) => ({ price }));
 }
 
 export function registerBillingStripeHandlers(collections: Collections): void {

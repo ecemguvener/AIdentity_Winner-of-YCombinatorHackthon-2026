@@ -6,6 +6,7 @@ import { emitOwnerEvent, registerApprovalExecutor, requestApproval, waitForDecis
 import { ApiError } from "./errors.js";
 import type { EmailAttachmentInput, EmailInboundClient, EmailProvider, ReceivedEmailContent } from "./providers/email-provider.js";
 import { getEmailPolicy, isRecipientAllowedByPatterns } from "./policies.js";
+import { recordUsage } from "./usage.js";
 
 export interface SendAgentEmailInput {
   agent: AgentDocument;
@@ -160,7 +161,7 @@ export async function sendAgentEmail(
       resourceId: message._id.toHexString(),
       metadata: { providerMessageId: sendResult.providerMessageId }
     });
-    recordEmailUsageEvent();
+    await recordEmailUsage(collections, input.agent);
     return { message: updated ?? { ...message, providerMessageId: sendResult.providerMessageId, status: "sent", updatedAt: sentAt }, thread, replayed: false };
   } catch (error) {
     const failedAt = new Date();
@@ -653,6 +654,12 @@ function isDuplicateKey(error: unknown): boolean {
   return error instanceof MongoServerError && error.code === 11000;
 }
 
-function recordEmailUsageEvent(): void {
-  // Usage metering lands in task 042.
+async function recordEmailUsage(collections: Collections, agent: AgentDocument): Promise<void> {
+  if (!agent.ownerUserId) return;
+  await recordUsage(collections, {
+    ownerUserId: agent.ownerUserId,
+    agentId: agent._id,
+    meter: "emails_sent",
+    quantity: 1
+  });
 }

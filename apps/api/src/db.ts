@@ -331,8 +331,23 @@ export interface UsageEventDocument extends Document {
   quantity: number;
   stripeReported: boolean;
   periodKey: string;
+  dedupeKey?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface UsageReportDocument extends Document {
+  _id: ObjectId;
+  ownerUserId: ObjectId;
+  billingAccountId: ObjectId;
+  stripeCustomerId: string;
+  meter: UsageEventDocument["meter"];
+  periodKey: string;
+  reportedQuantity: number;
+  sequence: number;
+  lastIdentifier?: string;
+  updatedAt: Date;
+  createdAt: Date;
 }
 
 export interface Collections {
@@ -356,6 +371,7 @@ export interface Collections {
   webhookEvents: Collection<WebhookEventDocument>;
   billingAccounts: Collection<BillingAccountDocument>;
   usageEvents: Collection<UsageEventDocument>;
+  usageReports: Collection<UsageReportDocument>;
   migrations: Collection<MigrationDocument>;
 }
 
@@ -390,6 +406,7 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     webhookEvents: db.collection<WebhookEventDocument>("webhookEvents"),
     billingAccounts: db.collection<BillingAccountDocument>("billingAccounts"),
     usageEvents: db.collection<UsageEventDocument>("usageEvents"),
+    usageReports: db.collection<UsageReportDocument>("usageReports"),
     migrations: db.collection<MigrationDocument>("migrations")
   };
 
@@ -448,6 +465,8 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.webhookEvents.createIndex({ provider: 1, providerEventId: 1 }, { unique: true }),
     collections.billingAccounts.createIndex({ ownerUserId: 1 }, { unique: true }),
     collections.usageEvents.createIndex({ ownerUserId: 1, periodKey: 1, meter: 1 }),
+    collections.usageEvents.createIndex({ dedupeKey: 1 }, { unique: true, sparse: true }),
+    collections.usageReports.createIndex({ ownerUserId: 1, periodKey: 1, meter: 1 }, { unique: true }),
     collections.migrations.createIndex({ name: 1 }, { unique: true })
   ]);
 

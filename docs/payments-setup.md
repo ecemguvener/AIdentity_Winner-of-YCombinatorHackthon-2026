@@ -30,6 +30,20 @@ Plan prices:
 - `pro`: €29/month, 3 agents, 1 phone number, 500 emails, 120 call minutes, 200 SMS
 - `scale`: €99/month, 10 agents, 3 phone numbers, 2000 emails, 600 call minutes, 1000 SMS
 
+The bootstrap also creates Billing Meters and metered overage prices:
+
+- `emails_sent`: €0.02/email
+- `call_minutes`: €0.15/minute
+- `sms_messages`: €0.05/SMS
+- `active_numbers`: €2.00/number/month
+
+Report usage locally:
+
+```bash
+npm --workspace @barkan/api run usage:report -- --dry-run
+npm --workspace @barkan/api run usage:report
+```
+
 ## Local Webhook
 
 Install and log in to the Stripe CLI, then forward events:

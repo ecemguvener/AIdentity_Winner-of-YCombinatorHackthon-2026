@@ -8,6 +8,7 @@ import { normalizeE164PhoneNumber } from "./lib/phone.js";
 import { enforcePhoneCountry, startOfPolicyDay } from "./phone-policy.js";
 import { getPhonePolicy } from "./policies.js";
 import { sendSms as sendTwilioSms } from "./providers/twilio-sms.js";
+import { recordUsage } from "./usage.js";
 
 const maxSmsBodyLength = 1600;
 
@@ -281,17 +282,12 @@ async function activePhoneNumber(collections: Collections, agent: AgentDocument)
 
 async function recordSmsUsage(collections: Collections, agent: AgentDocument, now: Date): Promise<void> {
   if (!agent.ownerUserId) return;
-  await collections.usageEvents.insertOne({
-    _id: new ObjectId(),
+  await recordUsage(collections, {
     ownerUserId: agent.ownerUserId,
     agentId: agent._id,
     meter: "sms_messages",
-    quantity: 1,
-    stripeReported: false,
-    periodKey: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
-    createdAt: now,
-    updatedAt: now
-  });
+    quantity: 1
+  }, now);
 }
 
 async function evaluateSmsPolicy(

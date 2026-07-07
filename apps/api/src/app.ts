@@ -15,6 +15,7 @@ import { registerAuthRoutes } from "./auth.js";
 import { requireAuth } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
 import { registerBillingRoutes, registerBillingStripeHandlers } from "./billing.js";
+import { registerUsageRoutes } from "./usage.js";
 import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
 import { registerEmailApprovalExecutor } from "./email-service.js";
 import { createEmailProvider } from "./providers/email-provider.js";
@@ -181,6 +182,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerPhoneRoutes(app, collections, config);
   registerPolicyRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);
+  registerUsageRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
 
   if (config.PROVIDER_MODE_EMAIL === "live") {
