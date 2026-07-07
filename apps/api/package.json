@@ -14,7 +14,8 @@
     "usage:report": "tsx src/scripts/usage-report.ts",
     "openapi:export": "tsx src/scripts/openapi-export.ts",
     "migrate": "tsx src/migrations/run.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e:integration": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

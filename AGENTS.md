@@ -115,6 +115,7 @@ The Node API exposes:
 | `apps/api/src/entitlements.ts` | Plan entitlement checks for agent creation, capabilities, usage, and phone numbers |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
 | `apps/api/src/mcp/server.ts` | MCP Streamable HTTP server, agent-token auth, capability-scoped tools, and resources |
+| `apps/api/e2e/` | Mock-mode integration harness for owner, SDK/MCP, webhook, audit, and billing golden paths |
 | `apps/api/src/pairing.ts` | Device-code-style runtime pairing routes, one-time token reveal, and expiry sweeper |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
@@ -174,6 +175,7 @@ Barkan runs with hot reload on:
 npm install
 npm run build
 npm test
+npm run e2e:integration
 ```
 
 Development:
