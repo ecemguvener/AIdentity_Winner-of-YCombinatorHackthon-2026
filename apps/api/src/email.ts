@@ -182,16 +182,7 @@ async function performSend(
   const threadId = threadFor(accountId, input.to);
   const from = formatFrom(emailIdentity);
 
-  // Sandbox redirect: deliver real mail to the account owner via Resend's
-  // pre-verified test sender until the real domain is verified.
-  const wire = config.EMAIL_SANDBOX_REDIRECT_TO
-    ? {
-        from: "Barkan <onboarding@resend.dev>",
-        to: config.EMAIL_SANDBOX_REDIRECT_TO,
-        subject: input.subject,
-        text: `[Sandbox delivery — originally addressed to ${input.to} from ${emailIdentity.emailAddress}]\n\n${input.body}`
-      }
-    : { from, to: input.to, subject: input.subject, text: input.body };
+  const wire = { from, to: input.to, subject: input.subject, text: input.body };
 
   try {
     const result = await dispatchSend(config, wire);

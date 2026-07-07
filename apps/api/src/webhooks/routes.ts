@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppConfig } from "../config.js";
 import type { Collections, WebhookEventDocument } from "../db.js";
 import { requireAuth } from "../auth.js";
+import { AUDIT_ACTIONS, recordAudit } from "../audit.js";
 import {
   WEBHOOK_PROVIDERS,
   mockSignatureAllowed,
@@ -17,6 +18,15 @@ const webhookEventsQuerySchema = z.object({
 });
 
 export function registerWebhookRoutes(app: FastifyInstance, collections: Collections, config: AppConfig): void {
+  registerWebhookRoute(app, collections, config, {
+    path: "/webhooks/resend",
+    provider: "resend",
+    verify: providerVerifier("resend"),
+    extractEventId: (payload) => (isRecord(payload) && typeof payload.id === "string" ? payload.id : null),
+    extractEventType: (payload) => (isRecord(payload) && typeof payload.type === "string" ? payload.type : "unknown"),
+    handle: (payload) => handleResendLifecycle(payload, collections)
+  });
+
   // Ops visibility into the dead-letter queue (e.g. ?status=failed). Session
   // auth for now; owner-agnostic admin scoping lands in a later task.
   app.get("/api/v1/webhook-events", async (request, reply) => {
@@ -48,6 +58,56 @@ export function registerWebhookRoutes(app: FastifyInstance, collections: Collect
       handle: () => {}
     });
   }
+}
+
+async function handleResendLifecycle(payload: unknown, collections: Collections): Promise<void> {
+  if (!isRecord(payload) || typeof payload.type !== "string" || !isRecord(payload.data)) {
+    return;
+  }
+  const status = resendStatusForEvent(payload.type);
+  if (!status) {
+    return;
+  }
+  const providerMessageId = readProviderMessageId(payload.data);
+  if (!providerMessageId) {
+    return;
+  }
+  const updated = await collections.emailMessages.findOneAndUpdate(
+    { providerMessageId },
+    { $set: { status, updatedAt: new Date() } },
+    { returnDocument: "after" }
+  );
+  if (!updated || (payload.type !== "email.bounced" && payload.type !== "email.complained")) {
+    return;
+  }
+  await recordAudit(collections, {
+    agentId: updated.agentId,
+    actor: "system",
+    action: AUDIT_ACTIONS.email.blocked,
+    status: "blocked",
+    detail: `${payload.type} for ${updated.toEmail}: ${updated.subject}`,
+    resourceType: "emailMessage",
+    resourceId: updated._id.toHexString(),
+    metadata: { providerMessageId }
+  });
+}
+
+function resendStatusForEvent(eventType: string) {
+  if (eventType === "email.sent") return "sent";
+  if (eventType === "email.delivered") return "delivered";
+  if (eventType === "email.bounced") return "bounced";
+  if (eventType === "email.complained") return "failed";
+  return null;
+}
+
+function readProviderMessageId(data: Record<string, unknown>): string | null {
+  for (const key of ["email_id", "message_id", "id"]) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function serializeWebhookEvent(event: WebhookEventDocument) {

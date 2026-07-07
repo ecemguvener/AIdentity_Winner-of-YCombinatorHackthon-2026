@@ -45,12 +45,6 @@ const rawEnvironmentSchema = z.object({
   EMAIL_PLATFORM_FROM: z.string().min(1).default("Barkan <no-reply@barkan.dev>"),
   RESEND_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
   EMAIL_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
-  // Sandbox redirect: before a sending domain is verified, Resend only allows
-  // sending from onboarding@resend.dev to the account owner. When this is set,
-  // every outbound email is really delivered to this address (from Resend's
-  // test sender), so the app sends real mail you can see. The activity log
-  // still records the originally-intended recipient.
-  EMAIL_SANDBOX_REDIRECT_TO: optionalNonEmptyStringSchema,
   SENTRY_DSN: optionalNonEmptyStringSchema,
   API_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300)
 });

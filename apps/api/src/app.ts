@@ -12,6 +12,7 @@ import { registerAgentRoutes } from "./agents-routes.js";
 import { registerApprovalRoutes } from "./approvals.js";
 import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth.js";
+import { requireAuth } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
 import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
 import { registerIdentityRoutes } from "./identity.js";
@@ -19,6 +20,7 @@ import { registerPaymentRoutes, registerSitePaymentRoutes } from "./payments.js"
 import { registerSiteRoutes } from "./sites.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
 import { registerWebhookRoutes } from "./webhooks/routes.js";
+import { ensureAgentDomain, getDomainStatus } from "./providers/resend-domain.js";
 
 export async function buildApp(config: AppConfig, collections: Collections) {
   const app = fastify({
@@ -144,6 +146,13 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   });
 
   app.get("/api/health", async () => ({ ok: true }));
+  app.get("/api/v1/ops/email-domain", async (request, reply) => {
+    await requireAuth(request, reply, collections, config);
+    const status = config.PROVIDER_MODE_EMAIL === "live"
+      ? await ensureAgentDomain(config)
+      : await getDomainStatus(config, mockMissingResendClient(config.EMAIL_AGENT_DOMAIN));
+    return { domain: status };
+  });
 
   registerAgentRoutes(app, collections, config);
   registerApprovalRoutes(app, collections, config);
@@ -158,7 +167,30 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerSiteRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
 
+  if (config.PROVIDER_MODE_EMAIL === "live") {
+    setImmediate(() => {
+      void ensureAgentDomain(config).then((status) => {
+        if (!status.verified) {
+          app.log.warn({ records: status.records }, "Resend email domain is not verified");
+        }
+      }).catch((error) => {
+        app.log.warn({ error }, "could not verify Resend email domain");
+      });
+    });
+  }
+
   return app;
+}
+
+function mockMissingResendClient(domain: string) {
+  return {
+    domains: {
+      create: async () => ({ data: { id: "mock", name: domain, status: "not_created", records: [] }, error: null }),
+      list: async () => ({ data: { data: [] }, error: null }),
+      get: async () => ({ data: null, error: { message: "not found" } }),
+      verify: async () => ({ data: { id: "mock", status: "not_created" }, error: null })
+    }
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -52,6 +52,8 @@ The Node API exposes:
 - Payment tool routes under `/api/tools/payments/*`
 - Email tool routes under `/api/tools/email/*` and `/api/sites/:siteId/email/*`
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
+- `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
+- `POST /webhooks/resend` (Resend Svix-signed email lifecycle webhook)
 - Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
 
 ## Key Files
