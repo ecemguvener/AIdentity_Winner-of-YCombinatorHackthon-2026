@@ -19,9 +19,9 @@ const environmentSchema = z.object({
   API_PORT: z.coerce.number().default(4000),
   PUBLIC_APP_URL: z.string().url().default("http://localhost:5173"),
   PUBLIC_API_URL: z.string().url().default("http://localhost:4000"),
-  MONGODB_URI: z.string().min(1).default("mongodb://127.0.0.1:27017/aidentity"),
-  SESSION_COOKIE_NAME: z.string().min(1).default("aidentity_session"),
-  SESSION_SECRET: z.string().min(16).default("dev-aidentity-session-secret-change-me"),
+  MONGODB_URI: z.string().min(1).default("mongodb://127.0.0.1:27017/barkan"),
+  SESSION_COOKIE_NAME: z.string().min(1).default("barkan_session"),
+  SESSION_SECRET: z.string().min(16).default("dev-barkan-session-secret-change-me"),
   ELEVENLABS_API_KEY: optionalNonEmptyStringSchema,
   ELEVENLABS_AGENT_ID: optionalNonEmptyStringSchema,
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: optionalNonEmptyStringSchema,
@@ -32,7 +32,7 @@ const environmentSchema = z.object({
   // mock mode (it logs the message and returns a synthetic id) so the full flow
   // is demoable without a verified sending domain.
   RESEND_API_KEY: optionalNonEmptyStringSchema,
-  EMAIL_FROM_DOMAIN: z.string().min(1).default("aidentity.space"),
+  EMAIL_FROM_DOMAIN: z.string().min(1).default("barkan.space"),
   EMAIL_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
   // Sandbox redirect: before a sending domain is verified, Resend only allows
   // sending from onboarding@resend.dev to the account owner. When this is set,
@@ -89,7 +89,7 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 function normalizeMongoUriForEnvironment(mongodbUri: string, nodeEnv: string): string {
-  const mongodbUriWithDefaultDatabase = ensureMongoDatabaseName(mongodbUri, "aidentity");
+  const mongodbUriWithDefaultDatabase = ensureMongoDatabaseName(mongodbUri, "barkan");
   if (nodeEnv !== "production") {
     return mongodbUriWithDefaultDatabase;
   }
@@ -112,7 +112,7 @@ function normalizeLegacyMongoDatabaseName(mongodbUri: string): string {
 }
 
 function ensureProductionMongoDatabaseName(mongodbUri: string): string {
-  const defaultDatabaseName = "aidentity-prod";
+  const defaultDatabaseName = "barkan-prod";
 
   try {
     const parsedUri = new URL(mongodbUri);

@@ -6,7 +6,7 @@ import type { ApiKeyDocument, AtlasProjectDocument, Collections, SiteDocument } 
 import { requireAuth } from "./auth.js";
 import {
   createAtlasProjectId,
-  createAidentityApiKey,
+  createBarkanApiKey,
   createPublicSiteKey,
   createSitePreviewImage,
   hashApiKey,
@@ -75,7 +75,7 @@ export function registerSiteRoutes(
       createdAt: now,
       updatedAt: now
     } as AtlasProjectDocument;
-    const apiKey = createAidentityApiKey();
+    const apiKey = createBarkanApiKey();
     const apiKeyDocument: ApiKeyDocument = {
       _id: new ObjectId(),
       userId: authContext.user._id,
@@ -238,7 +238,7 @@ export function registerSiteRoutes(
 
     const payload = createSiteApiKeySchema.parse(request.body ?? {});
     const atlasProject = await findOrCreateSiteAtlasProject(collections, site);
-    const apiKey = createAidentityApiKey();
+    const apiKey = createBarkanApiKey();
     const now = new Date();
     const name = payload.name?.trim() || `${site.name} link token`;
     const insertResult = await collections.apiKeys.insertOne({

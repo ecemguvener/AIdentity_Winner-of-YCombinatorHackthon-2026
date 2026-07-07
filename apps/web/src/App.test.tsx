@@ -51,7 +51,7 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText("Identities")).toBeInTheDocument());
     expect(screen.getByText("New identity")).toBeInTheDocument();
-    expect(screen.queryByText(/npx aidentity connect/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/npx barkan connect/i)).not.toBeInTheDocument();
   });
 });
 

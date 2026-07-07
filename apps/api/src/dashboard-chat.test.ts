@@ -10,9 +10,9 @@ const baseConfig: AppConfig = {
   API_PORT: 4000,
   PUBLIC_APP_URL: "http://localhost:5173",
   PUBLIC_API_URL: "http://localhost:4000",
-  MONGODB_URI: "mongodb://127.0.0.1:27017/aidentity-web-test",
-  SESSION_COOKIE_NAME: "aidentity_session",
-  SESSION_SECRET: "test-aidentity-session-secret",
+  MONGODB_URI: "mongodb://127.0.0.1:27017/barkan-web-test",
+  SESSION_COOKIE_NAME: "barkan_session",
+  SESSION_SECRET: "test-barkan-session-secret",
   ELEVENLABS_VOICE_ID: "voice_test",
   OPENAI_API_KEY: "openai",
 };
@@ -22,7 +22,7 @@ describe("dashboard chat", () => {
     const sessionToken = "session_test";
     const user = createUser();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      new Response(JSON.stringify({ output_text: "Hello from Aidentity." }), {
+      new Response(JSON.stringify({ output_text: "Hello from Barkan." }), {
         status: 200,
         headers: { "content-type": "application/json" }
       })
@@ -57,7 +57,7 @@ describe("dashboard chat", () => {
     expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(response.payload).toContain("data: {\"type\":\"ready\"");
-    expect(response.payload).toContain("data: {\"type\":\"delta\",\"text\":\"Hello from Aidentity.\"}");
+    expect(response.payload).toContain("data: {\"type\":\"delta\",\"text\":\"Hello from Barkan.\"}");
     expect(response.payload).toContain("data: {\"type\":\"done\"}");
 
     vi.unstubAllGlobals();
@@ -256,7 +256,7 @@ function createCollections({
 function createUser(): UserDocument {
   return {
     _id: new ObjectId(),
-    email: "dev@aidentity.test",
+    email: "dev@barkan.test",
     passwordHash: "unused",
     createdAt: new Date()
   } as UserDocument;

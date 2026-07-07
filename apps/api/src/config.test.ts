@@ -4,6 +4,8 @@ import { loadConfig } from "./config.js";
 const originalEnvironment = { ...process.env };
 
 describe("loadConfig", () => {
+  const legacyDatabasePrefix = ["ai", "dentity"].join("");
+
   afterEach(() => {
     for (const key of Object.keys(process.env)) {
       delete process.env[key];
@@ -30,47 +32,47 @@ describe("loadConfig", () => {
 
   it("keeps the configured MongoDB database name outside production", () => {
     process.env.NODE_ENV = "development";
-    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/aidentity";
+    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/barkan";
 
-    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/aidentity");
+    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/barkan");
   });
 
   it("rewrites the legacy MongoDB database name", () => {
     process.env.NODE_ENV = "development";
-    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/aidentity-web";
+    process.env.MONGODB_URI = `mongodb://127.0.0.1:27017/${legacyDatabasePrefix}-web`;
 
-    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/aidentity");
+    expect(loadConfig().MONGODB_URI).toBe(`mongodb://127.0.0.1:27017/${legacyDatabasePrefix}`);
   });
 
-  it("uses aidentity when a MongoDB URI has no database name", () => {
+  it("uses barkan when a MongoDB URI has no database name", () => {
     process.env.NODE_ENV = "development";
     process.env.MONGODB_URI = "mongodb://127.0.0.1:27017";
 
-    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/aidentity");
+    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/barkan");
   });
 
   it("appends the production suffix to the MongoDB database name", () => {
     process.env.NODE_ENV = "production";
-    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/aidentity";
+    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/barkan";
     process.env.PUBLIC_API_URL = "http://localhost:4000";
 
-    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/aidentity-prod");
+    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/barkan-prod");
   });
 
   it("does not duplicate the production suffix", () => {
     process.env.NODE_ENV = "production";
-    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/aidentity-prod";
+    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/barkan-prod";
     process.env.PUBLIC_API_URL = "http://localhost:4000";
 
-    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/aidentity-prod");
+    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/barkan-prod");
   });
 
   it("rewrites the legacy production MongoDB database name", () => {
     process.env.NODE_ENV = "production";
-    process.env.MONGODB_URI = "mongodb://127.0.0.1:27017/aidentity-web-prod";
+    process.env.MONGODB_URI = `mongodb://127.0.0.1:27017/${legacyDatabasePrefix}-web-prod`;
     process.env.PUBLIC_API_URL = "http://localhost:4000";
 
-    expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/aidentity-prod");
+    expect(loadConfig().MONGODB_URI).toBe(`mongodb://127.0.0.1:27017/${legacyDatabasePrefix}-prod`);
   });
 
   it("requires HTTPS for non-local production API URLs", () => {

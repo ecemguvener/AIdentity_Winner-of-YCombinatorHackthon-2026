@@ -4,7 +4,7 @@
 
 @font-face {
   font-family: "Leurn";
-  src: url("./assets/aidentity/fonts/aidentity-sans-regular.ttf") format("truetype");
+  src: url("./assets/barkan/fonts/barkan-sans-regular.ttf") format("truetype");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -12,7 +12,7 @@
 
 @font-face {
   font-family: "Leurn";
-  src: url("./assets/aidentity/fonts/aidentity-sans-medium.ttf") format("truetype");
+  src: url("./assets/barkan/fonts/barkan-sans-medium.ttf") format("truetype");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -20,7 +20,7 @@
 
 @font-face {
   font-family: "Leurn";
-  src: url("./assets/aidentity/fonts/aidentity-sans-semibold.ttf") format("truetype");
+  src: url("./assets/barkan/fonts/barkan-sans-semibold.ttf") format("truetype");
   font-style: normal;
   font-weight: 600;
   font-display: swap;
@@ -28,7 +28,7 @@
 
 @font-face {
   font-family: "Leurn";
-  src: url("./assets/aidentity/fonts/aidentity-sans-bold.ttf") format("truetype");
+  src: url("./assets/barkan/fonts/barkan-sans-bold.ttf") format("truetype");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -98,17 +98,17 @@ button:disabled {
   cursor: default;
 }
 
-.aidentity-loading {
+.barkan-loading {
   min-height: 100vh;
   display: grid;
   place-items: center;
   background: var(--color-dashboard-canvas);
 }
 
-.aidentity-loading__spinner {
+.barkan-loading__spinner {
   width: 24px;
   height: 24px;
-  animation: aidentity-spin 700ms linear infinite;
+  animation: barkan-spin 700ms linear infinite;
 }
 
 .toast-notifications {
@@ -231,25 +231,25 @@ button:disabled {
   pointer-events: none;
 }
 
-.aidentity-brand {
+.barkan-brand {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   color: var(--color-text);
 }
 
-.aidentity-brand--dark {
+.barkan-brand--dark {
   color: #ffffff;
 }
 
-.aidentity-brand__mark {
+.barkan-brand__mark {
   width: 24px;
   height: 24px;
   flex: none;
   object-fit: contain;
 }
 
-.aidentity-brand__name {
+.barkan-brand__name {
   font-family: var(--font-brand);
   font-size: 20px;
   font-weight: 700;
@@ -1046,7 +1046,7 @@ button:disabled {
   background: #c8c8c8;
 }
 
-.site-onboarding-page__submit--secondary .aidentity-button-loader {
+.site-onboarding-page__submit--secondary .barkan-button-loader {
   border-color: rgba(0, 0, 0, 0.18);
   border-top-color: #242424;
 }
@@ -1078,13 +1078,13 @@ button:disabled {
   opacity: 0.68;
 }
 
-.aidentity-button-loader {
+.barkan-button-loader {
   width: 18px;
   height: 18px;
   border: 2px solid rgba(255, 255, 255, 0.32);
   border-top-color: #ffffff;
   border-radius: 999px;
-  animation: aidentity-spin 620ms linear infinite;
+  animation: barkan-spin 620ms linear infinite;
 }
 
 .floating-field {
@@ -1213,11 +1213,11 @@ button:disabled {
   justify-content: center;
 }
 
-.dashboard-page__brand .aidentity-brand__name {
+.dashboard-page__brand .barkan-brand__name {
   display: none;
 }
 
-.dashboard-page__brand .aidentity-brand__mark {
+.dashboard-page__brand .barkan-brand__mark {
   width: 18px;
   height: 18px;
 }
@@ -2981,7 +2981,7 @@ button:disabled {
 }
 
 .site-detail-page__save svg {
-  animation: aidentity-spin 700ms linear infinite;
+  animation: barkan-spin 700ms linear infinite;
 }
 
 .site-detail-page__section-heading {
@@ -3095,12 +3095,12 @@ button:disabled {
   width: max-content;
 }
 
-.site-detail-page__preview-brand .aidentity-brand__mark {
+.site-detail-page__preview-brand .barkan-brand__mark {
   width: 22px;
   height: 22px;
 }
 
-.site-detail-page__preview-brand .aidentity-brand__name {
+.site-detail-page__preview-brand .barkan-brand__name {
   max-width: 240px;
   overflow: hidden;
   color: #414141;
@@ -3657,12 +3657,12 @@ button:disabled {
   gap: 6px;
 }
 
-.site-onboarding-page__brand .aidentity-brand__mark {
+.site-onboarding-page__brand .barkan-brand__mark {
   width: 18px;
   height: 18px;
 }
 
-.site-onboarding-page__brand .aidentity-brand__name {
+.site-onboarding-page__brand .barkan-brand__name {
   font-size: 14px;
 }
 
@@ -3748,11 +3748,11 @@ button:disabled {
 }
 
 .site-onboarding-page__completion-backdrop--incoming {
-  animation: aidentity-backdrop-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: barkan-backdrop-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .site-onboarding-page__completion-backdrop--outgoing {
-  animation: aidentity-backdrop-out 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: barkan-backdrop-out 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .site-onboarding-page__stage {
@@ -3816,12 +3816,12 @@ button:disabled {
 }
 
 .site-onboarding-page__panel--incoming .site-onboarding-page__sequence-item {
-  animation: aidentity-onboarding-item-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: barkan-onboarding-item-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(42ms + var(--onboarding-enter-delay));
 }
 
 .site-onboarding-page__panel--outgoing .site-onboarding-page__sequence-item {
-  animation: aidentity-onboarding-item-out 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: barkan-onboarding-item-out 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
   animation-delay: var(--onboarding-exit-delay);
 }
 
@@ -4163,7 +4163,7 @@ button:disabled {
   text-align: center;
 }
 
-@keyframes aidentity-spin {
+@keyframes barkan-spin {
   to {
     transform: rotate(360deg);
   }
@@ -4276,7 +4276,7 @@ button:disabled {
   }
 }
 
-@keyframes aidentity-onboarding-item-in {
+@keyframes barkan-onboarding-item-in {
   from {
     opacity: 0;
     filter: blur(3px);
@@ -4290,7 +4290,7 @@ button:disabled {
   }
 }
 
-@keyframes aidentity-onboarding-item-out {
+@keyframes barkan-onboarding-item-out {
   from {
     opacity: 1;
     filter: blur(0);
@@ -4304,7 +4304,7 @@ button:disabled {
   }
 }
 
-@keyframes aidentity-onboarding-panel-in {
+@keyframes barkan-onboarding-panel-in {
   from {
     opacity: 1;
   }
@@ -4314,7 +4314,7 @@ button:disabled {
   }
 }
 
-@keyframes aidentity-onboarding-panel-out {
+@keyframes barkan-onboarding-panel-out {
   from {
     opacity: 1;
   }
@@ -4324,7 +4324,7 @@ button:disabled {
   }
 }
 
-@keyframes aidentity-backdrop-in {
+@keyframes barkan-backdrop-in {
   from {
     opacity: 0;
   }
@@ -4334,7 +4334,7 @@ button:disabled {
   }
 }
 
-@keyframes aidentity-backdrop-out {
+@keyframes barkan-backdrop-out {
   from {
     opacity: 1;
   }

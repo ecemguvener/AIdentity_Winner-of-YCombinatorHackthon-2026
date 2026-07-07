@@ -121,7 +121,7 @@ function resolveApiBaseUrl(configuredUrl: string): string {
 }
 
 const apiBaseUrl = resolveApiBaseUrl(configuredApiBaseUrl);
-const forcedLogoutStorageKey = "aidentity:forced-logout";
+const forcedLogoutStorageKey = "barkan:forced-logout";
 
 type ApiRequestOptions = RequestInit & {
   apiBaseUrlOverride?: string;

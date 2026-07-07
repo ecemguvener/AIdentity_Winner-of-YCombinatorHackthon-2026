@@ -44,14 +44,11 @@ import {
   type SiteDetailResponse,
   type User
 } from "./api";
-import aidentityMarkDark from "./assets/aidentity/brand/aidentity-mark-dark.svg";
-import aidentityMarkLight from "./assets/aidentity/brand/aidentity-mark-light.svg";
-import sitePreviewBlueFlow from "./assets/aidentity/images/site-preview-blue-flow.webp";
-import sitePreviewCoralMint from "./assets/aidentity/images/site-preview-coral-mint.webp";
-import sitePreviewCyanMist from "./assets/aidentity/images/site-preview-cyan-mist.webp";
-import sitePreviewDashboard from "./assets/aidentity/images/site-preview-dashboard.webp";
-import sitePreviewLimeBlue from "./assets/aidentity/images/site-preview-lime-blue.webp";
-import sitePreviewLimeViolet from "./assets/aidentity/images/site-preview-lime-violet.webp";
+import barkanMarkDark from "./assets/barkan/brand/barkan-mark-dark.svg";
+import barkanMarkLight from "./assets/barkan/brand/barkan-mark-light.svg";
+import sitePreviewAgentIdentities from "./assets/barkan/images/site-preview-agent-identities.jpg";
+import sitePreviewConnectOpenClaw from "./assets/barkan/images/site-preview-connect-openclaw.jpg";
+import sitePreviewIdentityReady from "./assets/barkan/images/site-preview-identity-ready.jpg";
 
 const dashboardPath = "/dashboard";
 const dashboardChatPath = `${dashboardPath}/chat`;
@@ -113,11 +110,11 @@ function isCompletionOnboardingStep(step: SiteOnboardingStep) {
   return step === "setup" || step === "install" || step === "finish";
 }
 const sitePreviewImages = {
-  "site-preview-blue-flow": sitePreviewBlueFlow,
-  "site-preview-coral-mint": sitePreviewCoralMint,
-  "site-preview-cyan-mist": sitePreviewCyanMist,
-  "site-preview-dashboard": sitePreviewDashboard,
-  "site-preview-lime-blue": sitePreviewLimeBlue
+  "site-preview-blue-flow": sitePreviewConnectOpenClaw,
+  "site-preview-coral-mint": sitePreviewAgentIdentities,
+  "site-preview-cyan-mist": sitePreviewIdentityReady,
+  "site-preview-dashboard": sitePreviewConnectOpenClaw,
+  "site-preview-lime-blue": sitePreviewAgentIdentities
 } as const;
 const sitePreviewImageNames = Object.keys(sitePreviewImages) as Array<keyof typeof sitePreviewImages>;
 const agentIdentityCapabilities = [
@@ -129,7 +126,7 @@ const agentIdentityCapabilities = [
   },
   {
     label: "Email",
-    value: "agent@identity.aidentity.dev",
+    value: "agent@identity.barkan.dev",
     description: "Inbox and outbound email identity",
     Icon: Mail
   },
@@ -181,25 +178,25 @@ function buildOpenClawLinkPrompt(identityName: string, token: string | undefined
   const safeToken = token ?? "LINK_TOKEN_PENDING";
   const safeProjectId = projectId ?? "PROJECT_ID_PENDING";
 
-  return `Install the Aidentity Agent Identity skill for this OpenClaw instance.
+  return `Install the Barkan Agent Identity skill for this OpenClaw instance.
 
 Identity name: ${identityName.trim() || "New agent identity"}
 Link endpoint: ${linkEndpoint}
 Project token: ${safeProjectId}
 Confirmation token: ${safeToken}
 
-After installing the skill, call the link endpoint with the confirmation token so Aidentity can attach this OpenClaw instance to the identity. Once linked, use the provisioned phone number, email inbox, payment card, calendar, and future real-world tools through the Aidentity identity layer.`;
+After installing the skill, call the link endpoint with the confirmation token so Barkan can attach this OpenClaw instance to the identity. Once linked, use the provisioned phone number, email inbox, payment card, calendar, and future real-world tools through the Barkan identity layer.`;
 }
 
 function buildIdentityReceipt(site: Site | null): string {
   const identityName = site?.name ?? "Agent identity";
-  const endpoint = site?.domain ?? "managed-openclaw.aidentity.dev";
+  const endpoint = site?.domain ?? "managed-openclaw.barkan.dev";
 
-  return `Aidentity Agent Identity
+  return `Barkan Agent Identity
 name=${identityName}
 openclaw=${endpoint}
 phone=+1-415-555-0198
-email=agent@identity.aidentity.dev
+email=agent@identity.barkan.dev
 card=visa_4242
 calendar=managed`;
 }
@@ -545,8 +542,8 @@ export function App() {
 
   if (isLoading) {
     return (
-      <main className="aidentity-loading" aria-label="Loading Aidentity">
-        <Loader2 className="aidentity-loading__spinner" aria-hidden="true" />
+      <main className="barkan-loading" aria-label="Loading Barkan">
+        <Loader2 className="barkan-loading__spinner" aria-hidden="true" />
       </main>
     );
   }
@@ -617,8 +614,8 @@ export function App() {
 }
 
 const heroTitleLines = [
-  ["Turn", "your", "SaaS", "into", "an", "AI-native"],
-  ["product."]
+  ["Give", "AI", "agents"],
+  ["real-world", "identity."]
 ];
 
 const pricingTitleLines = [
@@ -658,24 +655,24 @@ const landingFeatureCards = [
     title: "Real-world agent identity",
     description:
       "Give each AI worker a durable identity with a phone number, inbox, payment rail, calendar, and policy controls your team can audit.",
-    image: sitePreviewCyanMist,
-    imageAlt: "Blurred product landscape preview",
+    image: sitePreviewConnectOpenClaw,
+    imageAlt: "Connect OpenClaw setup screen",
     imagePosition: "left"
   },
   {
     title: "OpenClaw runtime linking",
     description:
       "Link an identity to an OpenClaw runtime so the agent can operate with scoped credentials, clear ownership, and current tool state.",
-    image: sitePreviewCoralMint,
-    imageAlt: "Blurred workflow landscape preview",
+    image: sitePreviewAgentIdentities,
+    imageAlt: "Agent identities dashboard screen",
     imagePosition: "right"
   },
   {
     title: "Operational tool surface",
     description:
       "Simulate, review, and provision calls, email, payments, and scheduling from the dashboard before wiring an agent into production.",
-    image: sitePreviewLimeBlue,
-    imageAlt: "Blurred automation landscape preview",
+    image: sitePreviewIdentityReady,
+    imageAlt: "Identity ready confirmation screen",
     imagePosition: "left"
   }
 ] as const;
@@ -693,7 +690,7 @@ const landingBenefitCards = [
   },
   {
     title: "Your runtime stays yours",
-    description: "Keep agent execution in your chosen infrastructure while Aidentity manages the identity and operational tool layer.",
+    description: "Keep agent execution in your chosen infrastructure while Barkan manages the identity and operational tool layer.",
     Icon: LockKeyhole
   },
   {
@@ -734,7 +731,7 @@ const pricingPlans = [
     name: "Enterprise",
     price: "Custom",
     priceNote: "based on volume, integrations, and support needs",
-    description: "For teams rolling Aidentity identities across larger operations and custom agent runtimes.",
+    description: "For teams rolling Barkan identities across larger operations and custom agent runtimes.",
     features: ["Volume-based usage planning", "Custom integrations and rollout help", "Dedicated support path", "Advanced workflow coverage"],
     isRecommended: false
   }
@@ -742,7 +739,7 @@ const pricingPlans = [
 
 const pricingComparisonRows = [
   { feature: "Agent identities", launch: "1 identity", growth: "Multiple identities", enterprise: "Custom rollout" },
-  { feature: "Assisted sessions", launch: "Small-business usage", growth: "Growing product usage", enterprise: "Volume planning" },
+  { feature: "Usage volume", launch: "Early tool usage", growth: "Growing agent usage", enterprise: "Volume planning" },
   { feature: "Real-world tools", launch: "Core tools", growth: "Expanded tool coverage", enterprise: "Custom tool scope" },
   { feature: "OpenClaw setup", launch: "Prompt-based link", growth: "Managed support", enterprise: "Custom runtime support" },
   { feature: "Support", launch: "Standard support", growth: "Priority support", enterprise: "Dedicated support path" },
@@ -753,7 +750,7 @@ const pricingFaqItems = [
   {
     question: "Why does pricing depend on usage?",
     answer:
-      "Aidentity usage depends on how many identities you run, how often voice and email are used, and how many real-world tool events the agent triggers."
+      "Barkan usage depends on how many identities you run, how often voice and email are used, and how many real-world tool events the agent triggers."
   },
   {
     question: "What counts as usage?",
@@ -768,12 +765,12 @@ const pricingFaqItems = [
   {
     question: "Can we switch plans later?",
     answer:
-      "Yes. The first version of this page is presentational, but the pricing model is meant to flex as your product usage grows."
+      "Yes. Start with the identity and tool volume you need now, then expand as more agents rely on Barkan for real-world operations."
   },
   {
     question: "What does Enterprise include?",
     answer:
-      "Enterprise is for higher volume, deeper integrations, and teams that need more support during rollout and workflow expansion."
+      "Enterprise is for higher volume, deeper integrations, custom runtime support, and teams that need hands-on rollout help."
   }
 ] as const;
 
@@ -938,8 +935,8 @@ function LandingPage() {
   }, []);
 
   return (
-    <main className="aidentity-loading" aria-label="Loading Aidentity homepage">
-      <Loader2 className="aidentity-loading__spinner" aria-hidden="true" />
+    <main className="barkan-loading" aria-label="Loading Barkan homepage">
+      <Loader2 className="barkan-loading__spinner" aria-hidden="true" />
     </main>
   );
 }
@@ -964,8 +961,8 @@ function PricingPage() {
             ease: [0.22, 1, 0.36, 1]
           }}
         >
-          Start with AI product guidance, then expand into voice, action execution, and deeper workflow automation as
-          your users grow.
+          Start with one accountable agent identity, then scale OpenClaw links, phone, email, payments, and scheduling
+          as real-world usage grows.
         </motion.p>
       </motion.section>
 
@@ -989,7 +986,7 @@ function PricingPage() {
               <span>{plan.price}</span>
               <small>{plan.priceNote}</small>
             </div>
-            <a className="pricing-page__plan-cta" href={signinPath}>
+            <a className="pricing-page__plan-cta" href={dashboardPath}>
               Get started
             </a>
             <motion.ul
@@ -1096,10 +1093,10 @@ function PublicSiteNav({ page }: { page: "landing" | "pricing" }) {
   const closeMenu = () => setIsMenuOpen(false);
 
   return (
-    <header className="landing-page__nav" aria-label="Aidentity navigation">
+    <header className="landing-page__nav" aria-label="Barkan navigation">
       <a className="landing-page__brand" href="/" onClick={closeMenu}>
-        <img className="landing-page__brand-mark" src={aidentityMarkLight} alt="" aria-hidden="true" />
-        <span>Aidentity</span>
+        <img className="landing-page__brand-mark" src={barkanMarkLight} alt="" aria-hidden="true" />
+        <span>Barkan</span>
       </a>
       <button
         className="landing-page__menu-button"
@@ -1133,7 +1130,7 @@ function PublicSiteNav({ page }: { page: "landing" | "pricing" }) {
 
 function PublicSiteFooter() {
   return (
-    <footer className="public-site-footer" aria-label="Aidentity footer">
+    <footer className="public-site-footer" aria-label="Barkan footer">
       <svg
         className="public-site-footer__wordmark"
         viewBox="0 0 100 16"
@@ -1141,7 +1138,7 @@ function PublicSiteFooter() {
         focusable="false"
       >
         <text x="50" y="15" textAnchor="middle" textLength="100" lengthAdjust="spacingAndGlyphs">
-          AIDENTITY
+          BARKAN
         </text>
       </svg>
     </footer>
@@ -1156,7 +1153,7 @@ function LandingFeatureCards() {
 
   return (
     <section className="landing-page__features" id="features" aria-labelledby="landingFeaturesTitle">
-      <p className="landing-page__section-kicker">// How Aidentity works</p>
+      <p className="landing-page__section-kicker">// How Barkan works</p>
       <div className="landing-page__feature-stack">
         {landingFeatureCards.map((card, index) => (
           <LandingFeatureCard
@@ -1334,19 +1331,19 @@ function AnimatedPricingTitle() {
 
 function Brand({
   className = "",
-  label = "Aidentity",
+  label = "Barkan",
   theme = "light"
 }: {
   className?: string;
   label?: string;
   theme?: "light" | "dark";
 }) {
-  const markSrc = aidentityMarkDark;
+  const markSrc = barkanMarkDark;
 
   return (
-    <div className={`aidentity-brand aidentity-brand--${theme} ${className}`} aria-label={label}>
-      <img className="aidentity-brand__mark" src={markSrc} alt="" aria-hidden="true" />
-      <span className="aidentity-brand__name">{label}</span>
+    <div className={`barkan-brand barkan-brand--${theme} ${className}`} aria-label={label}>
+      <img className="barkan-brand__mark" src={markSrc} alt="" aria-hidden="true" />
+      <span className="barkan-brand__name">{label}</span>
     </div>
   );
 }
@@ -1519,7 +1516,7 @@ function AuthScreen({
                   disabled={isEmailSubmitting}
                   aria-busy={isEmailSubmitting}
                 >
-                  {isEmailSubmitting ? <span className="aidentity-button-loader" aria-hidden="true" /> : <span>Continue</span>}
+                  {isEmailSubmitting ? <span className="barkan-button-loader" aria-hidden="true" /> : <span>Continue</span>}
                 </button>
               </form>
             </div>
@@ -1536,7 +1533,7 @@ function AuthScreen({
                       Continue as <span>{email}</span>
                     </>
                   ) : (
-                    "Use at least 8 characters to secure your Aidentity workspace."
+                    "Use at least 8 characters to secure your Barkan workspace."
                   )}
                 </p>
               </header>
@@ -1562,7 +1559,7 @@ function AuthScreen({
                   disabled={isSubmitting}
                   aria-busy={isSubmitting}
                 >
-                  {isSubmitting ? <span className="aidentity-button-loader" aria-hidden="true" /> : <span>Continue</span>}
+                  {isSubmitting ? <span className="barkan-button-loader" aria-hidden="true" /> : <span>Continue</span>}
                 </button>
               </form>
 
@@ -1946,7 +1943,7 @@ function DashboardChatScreen({ user, sites }: { user: User; sites: Site[] }) {
       setMessages((currentMessages) =>
         currentMessages.filter((message) => message.id !== assistantMessage.id || message.content.trim().length > 0)
       );
-      setChatError(getErrorMessage(error, "Aidentity could not answer right now."));
+      setChatError(getErrorMessage(error, "Barkan could not answer right now."));
     } finally {
       setIsWaitingForFirstToken(false);
       setIsResponding(false);
@@ -2034,7 +2031,7 @@ function DashboardChatScreen({ user, sites }: { user: User; sites: Site[] }) {
           <div className="dashboard-chat__composer-shell">
             <form className="dashboard-chat__composer" onSubmit={handleSubmit}>
               <label className="dashboard-chat__sr-only" htmlFor="dashboardChatPrompt">
-                Message Aidentity
+                Message Barkan
               </label>
               <div className="dashboard-chat__composer-body">
                 <textarea
@@ -2075,7 +2072,7 @@ function DashboardChatScreen({ user, sites }: { user: User; sites: Site[] }) {
             <div className="dashboard-chat__composer-meta" aria-hidden="true">
               <div className="dashboard-chat__composer-meta-group">
                 <DashboardChatFolderIcon />
-                <span className="dashboard-chat__composer-meta-text">Aidentity dashboard</span>
+                <span className="dashboard-chat__composer-meta-text">Barkan dashboard</span>
                 <DashboardChatChevronIcon />
               </div>
               <div className="dashboard-chat__composer-meta-group dashboard-chat__composer-meta-group--sites">
@@ -2807,7 +2804,7 @@ function UserSettingsPage({
                 <div className="site-detail-page__section-heading">
                   <div>
                     <h3>Account details</h3>
-                    <p>Basic information used across the Aidentity dashboard.</p>
+                    <p>Basic information used across the Barkan dashboard.</p>
                   </div>
                 </div>
                 <div className="user-settings-page__info-grid">
@@ -3611,7 +3608,7 @@ function SiteDetailOverlay({
                 <div className="site-detail-page__section-heading">
                   <div>
                     <h3>OpenClaw linking tokens</h3>
-                    <p>Create a scoped token for an OpenClaw instance to confirm the Aidentity identity skill install.</p>
+                    <p>Create a scoped token for an OpenClaw instance to confirm the Barkan identity skill install.</p>
                   </div>
                   <button
                     className="site-detail-page__section-action"
@@ -3891,7 +3888,7 @@ function SiteOnboardingScreen({
 
     const normalizedEndpoint = openClawMode === "existing"
       ? domain.trim()
-      : `${slugifyIdentityName(name)}.managed-openclaw.aidentity.dev`;
+      : `${slugifyIdentityName(name)}.managed-openclaw.barkan.dev`;
 
     setDomain(normalizedEndpoint);
     setSubmittingStep("openclaw");
@@ -4073,8 +4070,8 @@ function SiteOnboardingScreen({
   const openClawPrompt = buildOpenClawLinkPrompt(name, createdApiKeySecret?.secret, setupProjectId);
   const setupTitle = openClawMode === "deploy" ? "Deploying OpenClaw" : "Link existing OpenClaw";
   const setupDescription = openClawMode === "deploy"
-    ? "We are deploying a managed OpenClaw instance and installing the Aidentity identity layer."
-    : "Send this prompt to your OpenClaw instance. It installs the Aidentity identity skill and confirms the link with a token.";
+    ? "We are deploying a managed OpenClaw instance and installing the Barkan identity layer."
+    : "Send this prompt to your OpenClaw instance. It installs the Barkan identity skill and confirms the link with a token.";
   const readyReceipt = buildIdentityReceipt(createdSiteDetail?.site ?? null);
 
   return (
@@ -4136,7 +4133,7 @@ function SiteOnboardingScreen({
                   <>
                     <OnboardingHeader
                       title="Connect OpenClaw"
-                      description="Use an existing OpenClaw instance, or let Aidentity deploy one with the identity layer already installed."
+                      description="Use an existing OpenClaw instance, or let Barkan deploy one with the identity layer already installed."
                     />
                     <form className="site-onboarding-page__form" onSubmit={startSetup} noValidate>
                       <div className="site-onboarding-page__sequence-item site-onboarding-page__mode-grid" style={getStaggerStyle(2)}>
@@ -4182,7 +4179,7 @@ function SiteOnboardingScreen({
                         ) : (
                           <div className="site-onboarding-page__managed-note">
                             <Server size={16} aria-hidden="true" />
-                            <span>{`${slugifyIdentityName(name)}.managed-openclaw.aidentity.dev`}</span>
+                            <span>{`${slugifyIdentityName(name)}.managed-openclaw.barkan.dev`}</span>
                           </div>
                         )}
                       </div>
@@ -4272,7 +4269,7 @@ function SiteOnboardingScreen({
                           aria-busy={isSkippingSetup}
                         >
                           {isSkippingSetup ? (
-                            <span className="aidentity-button-loader" aria-hidden="true" />
+                            <span className="barkan-button-loader" aria-hidden="true" />
                           ) : (
                             <span>{openClawMode === "existing" ? "Demo: mark linked" : "Continue"}</span>
                           )}
@@ -4408,7 +4405,7 @@ function OnboardingSubmitAction({ isLoading = false, label = "Continue" }: { isL
         disabled={isLoading}
         aria-busy={isLoading}
       >
-        {isLoading ? <span className="aidentity-button-loader" aria-hidden="true" /> : <span>{label}</span>}
+        {isLoading ? <span className="barkan-button-loader" aria-hidden="true" /> : <span>{label}</span>}
       </button>
     </div>
   );

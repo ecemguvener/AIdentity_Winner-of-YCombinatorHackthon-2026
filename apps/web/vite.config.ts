@@ -3,7 +3,7 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-const homepageDirectory = path.resolve(__dirname, "public/aidentity-homepage");
+const homepageDirectory = path.resolve(__dirname, "public/barkan-homepage");
 
 function getHomepageFilePath(requestUrl: string | undefined) {
   if (!requestUrl) {
@@ -49,6 +49,10 @@ function getContentType(filePath: string) {
     return "image/png";
   }
 
+  if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+
   if (filePath.endsWith(".svg")) {
     return "image/svg+xml";
   }
@@ -68,7 +72,7 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      name: "aidentity-homepage-root",
+      name: "barkan-homepage-root",
       configureServer(server) {
         server.middlewares.use((request, response, next) => {
           if (request.method !== "GET" && request.method !== "HEAD") {
@@ -83,6 +87,7 @@ export default defineConfig({
           }
 
           response.setHeader("Content-Type", getContentType(filePath));
+          response.setHeader("Cache-Control", "no-store, max-age=0");
           if (request.method === "HEAD") {
             response.end();
             return;

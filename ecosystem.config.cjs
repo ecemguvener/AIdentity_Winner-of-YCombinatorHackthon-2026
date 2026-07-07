@@ -3,16 +3,27 @@ const dotenv = require("dotenv");
 
 dotenv.config({ path: path.join(__dirname, ".env"), override: true });
 
-const publicHost = process.env.AIDENTITY_PUBLIC_HOST || "100.81.152.74";
-const devWebPort = process.env.AIDENTITY_DEV_WEB_PORT || "4888";
-const devApiPort = process.env.AIDENTITY_DEV_API_PORT || "4001";
-const prodApiPort = process.env.AIDENTITY_PROD_API_PORT || "4000";
-const devPublicAppUrl = process.env.AIDENTITY_DEV_PUBLIC_APP_URL || `http://${publicHost}:${devWebPort}`;
-const devPublicApiUrl = process.env.AIDENTITY_DEV_PUBLIC_API_URL || `http://${publicHost}:${devApiPort}`;
-const prodPublicAppUrl = process.env.AIDENTITY_PROD_PUBLIC_APP_URL || "https://aidentity.tech";
-const prodPublicApiUrl = process.env.AIDENTITY_PROD_PUBLIC_API_URL || "https://aidentity.tech";
-const devApiProxyTarget = process.env.AIDENTITY_DEV_API_PROXY_TARGET || `http://127.0.0.1:${devApiPort}`;
-const devViteApiUrl = process.env.AIDENTITY_DEV_VITE_API_URL || "";
+const publicHost = process.env.BARKAN_PUBLIC_HOST || process.env.AIDENTITY_PUBLIC_HOST || "100.81.152.74";
+const devWebPort = process.env.BARKAN_DEV_WEB_PORT || process.env.AIDENTITY_DEV_WEB_PORT || "4888";
+const devApiPort = process.env.BARKAN_DEV_API_PORT || process.env.AIDENTITY_DEV_API_PORT || "4001";
+const prodApiPort = process.env.BARKAN_PROD_API_PORT || process.env.AIDENTITY_PROD_API_PORT || "4000";
+const devPublicAppUrl =
+  process.env.BARKAN_DEV_PUBLIC_APP_URL ||
+  process.env.AIDENTITY_DEV_PUBLIC_APP_URL ||
+  `http://${publicHost}:${devWebPort}`;
+const devPublicApiUrl =
+  process.env.BARKAN_DEV_PUBLIC_API_URL ||
+  process.env.AIDENTITY_DEV_PUBLIC_API_URL ||
+  `http://${publicHost}:${devApiPort}`;
+const prodPublicAppUrl =
+  process.env.BARKAN_PROD_PUBLIC_APP_URL || process.env.AIDENTITY_PROD_PUBLIC_APP_URL || "https://barkan.tech";
+const prodPublicApiUrl =
+  process.env.BARKAN_PROD_PUBLIC_API_URL || process.env.AIDENTITY_PROD_PUBLIC_API_URL || "https://barkan.tech";
+const devApiProxyTarget =
+  process.env.BARKAN_DEV_API_PROXY_TARGET ||
+  process.env.AIDENTITY_DEV_API_PROXY_TARGET ||
+  `http://127.0.0.1:${devApiPort}`;
+const devViteApiUrl = process.env.BARKAN_DEV_VITE_API_URL || process.env.AIDENTITY_DEV_VITE_API_URL || "";
 
 const common = {
   cwd: __dirname,
@@ -44,9 +55,9 @@ module.exports = {
   apps: [
     {
       ...common,
-      name: "dev-aidentity-api",
+      name: "dev-barkan-api",
       script: "npm",
-      args: "--workspace @aidentity/api run dev",
+      args: "--workspace @barkan/api run dev",
       env: {
         NODE_ENV: "development",
         API_PORT: devApiPort,
@@ -56,7 +67,7 @@ module.exports = {
     },
     {
       ...common,
-      name: "dev-aidentity-web",
+      name: "dev-barkan-web",
       cwd: path.join(__dirname, "apps/web"),
       script: "node_modules/vite/bin/vite.js",
       args: `--host 0.0.0.0 --port ${devWebPort} --strictPort`,
@@ -69,9 +80,9 @@ module.exports = {
     },
     {
       ...common,
-      name: "prod-aidentity-api",
+      name: "prod-barkan-api",
       script: "npm",
-      args: "--workspace @aidentity/api run start",
+      args: "--workspace @barkan/api run start",
       watch: false,
       env: {
         NODE_ENV: "production",

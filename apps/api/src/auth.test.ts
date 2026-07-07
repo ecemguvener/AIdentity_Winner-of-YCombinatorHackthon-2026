@@ -10,9 +10,9 @@ const baseConfig: AppConfig = {
   API_PORT: 4000,
   PUBLIC_APP_URL: "http://localhost:5173",
   PUBLIC_API_URL: "http://localhost:4000",
-  MONGODB_URI: "mongodb://127.0.0.1:27017/aidentity-web-test",
-  SESSION_COOKIE_NAME: "aidentity_session",
-  SESSION_SECRET: "test-aidentity-session-secret",
+  MONGODB_URI: "mongodb://127.0.0.1:27017/barkan-web-test",
+  SESSION_COOKIE_NAME: "barkan_session",
+  SESSION_SECRET: "test-barkan-session-secret",
   ELEVENLABS_VOICE_ID: "voice_test",
   OPENAI_API_KEY: "openai",
 };
@@ -30,7 +30,7 @@ describe("auth profile routes", () => {
         [baseConfig.SESSION_COOKIE_NAME]: sessionToken
       },
       payload: {
-        displayName: "Max Aidentity",
+        displayName: "Max Barkan",
         email: "MAX@Example.COM",
         avatarUrl: "data:image/png;base64,aGVsbG8="
       }
@@ -39,7 +39,7 @@ describe("auth profile routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().user).toMatchObject({
       id: String(user._id),
-      displayName: "Max Aidentity",
+      displayName: "Max Barkan",
       email: "max@example.com",
       avatarUrl: "data:image/png;base64,aGVsbG8="
     });
@@ -163,7 +163,7 @@ function createCollections({
 async function createUser(password = "password-test"): Promise<UserDocument> {
   return {
     _id: new ObjectId(),
-    email: "dev@aidentity.test",
+    email: "dev@barkan.test",
     displayName: "Dev",
     notificationPreferences: {
       productEmails: true,

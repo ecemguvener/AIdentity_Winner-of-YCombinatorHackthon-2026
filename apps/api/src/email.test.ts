@@ -9,7 +9,7 @@ import { registerIdentityRoutes } from "./identity.js";
 // runs in mock-send mode with heuristic drafting — fully offline.
 const config = {
   PUBLIC_API_URL: "http://localhost:4001",
-  EMAIL_FROM_DOMAIN: "agents.aidentity.dev"
+  EMAIL_FROM_DOMAIN: "agents.barkan.dev"
 } as unknown as AppConfig;
 
 async function buildTestApp() {
@@ -45,9 +45,9 @@ describe("extractEmail", () => {
 
 describe("normalizeInbound", () => {
   it("normalizes a flat payload", () => {
-    const result = normalizeInbound({ from: "John <john@example.com>", to: "ava@aidentity.space", subject: "Re: Hi", text: "Yes." });
+    const result = normalizeInbound({ from: "John <john@example.com>", to: "ava@barkan.space", subject: "Re: Hi", text: "Yes." });
     expect(result.from).toBe("john@example.com");
-    expect(result.toCandidates).toEqual(["ava@aidentity.space"]);
+    expect(result.toCandidates).toEqual(["ava@barkan.space"]);
     expect(result.subject).toBe("Re: Hi");
   });
 
@@ -56,14 +56,14 @@ describe("normalizeInbound", () => {
       type: "inbound.email",
       data: {
         from: { address: "john@example.com", name: "John" },
-        to: [{ address: "ava@aidentity.space" }, { address: "cc@example.com" }],
+        to: [{ address: "ava@barkan.space" }, { address: "cc@example.com" }],
         subject: "Re: Meeting",
         html: "<p>Sounds good</p>",
         headers: [{ name: "In-Reply-To", value: "<msg-1@x>" }, { name: "Message-Id", value: "<msg-2@y>" }]
       }
     });
     expect(result.from).toBe("john@example.com");
-    expect(result.toCandidates).toContain("ava@aidentity.space");
+    expect(result.toCandidates).toContain("ava@barkan.space");
     expect(result.text).toBe("Sounds good");
     expect(result.inReplyTo).toBe("<msg-1@x>");
     expect(result.messageId).toBe("<msg-2@y>");
@@ -255,7 +255,7 @@ describe("email capability routes", () => {
     const inbound = await app.inject({
       method: "POST",
       url: "/api/webhooks/email/inbound",
-      payload: { from: "spam@nowhere.com", to: "nobody@agents.aidentity.dev", subject: "Hello", text: "..." }
+      payload: { from: "spam@nowhere.com", to: "nobody@agents.barkan.dev", subject: "Hello", text: "..." }
     });
     expect(inbound.statusCode).toBe(200);
     expect(inbound.json().matched).toBe(false);

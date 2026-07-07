@@ -5,7 +5,7 @@ import type { AppConfig } from "./config.js";
 
 const config = {
   PUBLIC_API_URL: "http://localhost:4001",
-  EMAIL_FROM_DOMAIN: "agents.aidentity.dev"
+  EMAIL_FROM_DOMAIN: "agents.barkan.dev"
 } as AppConfig;
 
 describe("identity layer routes", () => {
@@ -33,7 +33,7 @@ describe("identity layer routes", () => {
     }>();
     expect(initPayload.agent_id).toMatch(/^agent_maya_/);
     expect(initPayload.identity_token).toMatch(/^identity_live_/);
-    expect(initPayload.email).toContain("@agents.aidentity.dev");
+    expect(initPayload.email).toContain("@agents.barkan.dev");
 
     const blockedCallResponse = await app.inject({
       method: "POST",

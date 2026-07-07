@@ -66,7 +66,7 @@ npm run seed:demo
 Login:
 
 ```text
-Email: demo@aidentity.test
+Email: demo@barkan.test
 Password: demo-password
 ```
 

@@ -5,7 +5,7 @@ import { connectDatabase } from "./db.js";
 import type { ApiKeyDocument, AtlasProjectDocument, InteractionLogDocument, SiteDocument, UserDocument } from "./db.js";
 import { hashApiKey, hashPassword } from "./security.js";
 
-const demoEmail = normalizeDemoEmail(process.env.DEMO_EMAIL ?? "demo@aidentity.test");
+const demoEmail = normalizeDemoEmail(process.env.DEMO_EMAIL ?? "demo@barkan.test");
 const demoPassword = process.env.DEMO_PASSWORD ?? "demo-password";
 const demoDisplayName = process.env.DEMO_NAME ?? "Maya Chen";
 const demoHash = crypto.createHash("sha256").update(demoEmail).digest("hex").slice(0, 8);
@@ -14,7 +14,7 @@ const demoIdentities = [
   {
     slug: "ava-concierge",
     name: "Ava Concierge",
-    domain: "ava-concierge.managed-openclaw.aidentity.dev",
+    domain: "ava-concierge.managed-openclaw.barkan.dev",
     previewImage: "site-preview-dashboard",
     chatTheme: "light" as const,
     createdDaysAgo: 14,
@@ -34,7 +34,7 @@ const demoIdentities = [
   {
     slug: "penny-finance",
     name: "Penny Finance Scout",
-    domain: "penny-finance.managed-openclaw.aidentity.dev",
+    domain: "penny-finance.managed-openclaw.barkan.dev",
     previewImage: "site-preview-lime-blue",
     chatTheme: "system" as const,
     createdDaysAgo: 3,

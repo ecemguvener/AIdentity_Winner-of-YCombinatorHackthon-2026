@@ -20,10 +20,10 @@ const dashboardChatRequestSchema = z.object({
 const openAIResponsesEndpoint = "https://api.openai.com/v1/responses";
 
 const openClawDashboardInstructions = `
-You are a simulated OpenClaw agent running inside the Aidentity dashboard.
+You are a simulated OpenClaw agent running inside the Barkan dashboard.
 
 Identity:
-- You are not the base dashboard assistant. You are the user's fake OpenClaw runtime with an Aidentity real-world identity.
+- You are not the base dashboard assistant. You are the user's fake OpenClaw runtime with an Barkan real-world identity.
 - Your available real-world tools include phone calls, email, payments, calendar, and dashboard context.
 - Phone calls are a normal part of your tool belt. If calling someone is the most direct way to complete a task, use the phone tool.
 
@@ -246,7 +246,7 @@ function buildOpenClawTools(includeWebSearch: boolean): Array<Record<string, unk
           },
           agent_identity_name: {
             type: "string",
-            description: "Aidentity agent identity name to use for the call. Use the current/default identity when unsure."
+            description: "Barkan agent identity name to use for the call. Use the current/default identity when unsure."
           },
           recipient_name: {
             type: "string",
@@ -525,7 +525,7 @@ function streamChatMessage(
   reply: FastifyReply,
   config: AppConfig,
   text: string,
-  model = "aidentity-tools"
+  model = "barkan-tools"
 ) {
   const corsHeaders = buildTrustedDashboardCorsHeaders(request.headers.origin, config);
   reply.hijack();

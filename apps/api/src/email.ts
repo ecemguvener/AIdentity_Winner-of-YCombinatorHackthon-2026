@@ -184,7 +184,7 @@ async function performSend(
   // pre-verified test sender until the real domain is verified.
   const wire = config.EMAIL_SANDBOX_REDIRECT_TO
     ? {
-        from: "Aidentity <onboarding@resend.dev>",
+        from: "Barkan <onboarding@resend.dev>",
         to: config.EMAIL_SANDBOX_REDIRECT_TO,
         subject: input.subject,
         text: `[Sandbox delivery — originally addressed to ${input.to} from ${emailIdentity.emailAddress}]\n\n${input.body}`
