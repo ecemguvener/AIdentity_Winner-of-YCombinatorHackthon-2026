@@ -17,6 +17,7 @@ import sitePreviewIdentityReady from "../assets/barkan/images/site-preview-ident
 export const dashboardPath = "/agents";
 export const dashboardChatPath = `${dashboardPath}/chat`;
 export const userSettingsPath = `${dashboardPath}/settings`;
+export const billingSettingsPath = "/settings/billing";
 export const approvalsPath = "/approvals";
 export const newSitePath = "/agents/new";
 export const signinPath = "/signin";
@@ -183,7 +184,7 @@ export function isDashboardChatRoute(path: string): boolean {
 }
 
 export function isUserSettingsRoute(path: string): boolean {
-  return path === userSettingsPath || path === `${userSettingsPath}/`;
+  return path === userSettingsPath || path === `${userSettingsPath}/` || path === billingSettingsPath || path === `${billingSettingsPath}/`;
 }
 
 export function isApprovalsRoute(path: string): boolean {
@@ -207,6 +208,7 @@ export function getSiteDetailPath(siteId: string, tab: SiteDetailTab = "credenti
 }
 
 export function getUserSettingsPath(section: UserSettingsSection = "profile"): string {
+  if (section === "billing") return billingSettingsPath;
   return `${userSettingsPath}?section=${section}`;
 }
 
@@ -255,6 +257,9 @@ export function getSiteDetailRoute(path: string, search = ""): { siteId: string;
 export function getUserSettingsSection(path: string, search = ""): UserSettingsSection {
   if (!isUserSettingsRoute(path)) {
     return "profile";
+  }
+  if (path === billingSettingsPath || path === `${billingSettingsPath}/`) {
+    return "billing";
   }
 
   const rawSection = new URLSearchParams(search).get("section");

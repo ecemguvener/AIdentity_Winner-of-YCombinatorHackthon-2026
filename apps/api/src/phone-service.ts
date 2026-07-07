@@ -3,6 +3,7 @@ import type { AppConfig } from "./config.js";
 import type { AgentDocument, ApprovalDocument, CallDocument, Collections, PhoneNumberDocument } from "./db.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
+import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
 import { ApiError, type ApiErrorCode } from "./errors.js";
 import { normalizeE164PhoneNumber } from "./lib/phone.js";
 import { getPhonePolicy } from "./policies.js";
@@ -65,6 +66,9 @@ export async function placeOutboundCall(
   const phoneNumber = await collections.phoneNumbers.findOne({ agentId: input.agent._id, status: "active" });
   if (!phoneNumber?.elevenLabsPhoneNumberId) {
     throw new PhoneCallError("phone capability not provisioned", 409, "policy_blocked");
+  }
+  if (input.agent.ownerUserId) {
+    throwPlanLimit(await checkEntitlement(collections, input.agent.ownerUserId, { type: "usage", meter: "call_minutes" }));
   }
   const policyDecision = await evaluateCallPolicy(collections, input);
   if (policyDecision.type === "blocked") {

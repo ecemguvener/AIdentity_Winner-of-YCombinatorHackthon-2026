@@ -115,6 +115,20 @@ describe("sendAgentEmail", () => {
     })).rejects.toMatchObject({ statusCode: 403, code: "policy_blocked" });
     expect(provider.sent).toHaveLength(0);
   });
+
+  it("blocks the free 101st email before provider work", async () => {
+    const { agent } = await createFreeOwnedAgentAtEmailLimit();
+    const provider = new MockEmailProvider();
+
+    await expect(sendAgentEmail(database.collections, config, provider, {
+      agent,
+      to: "person@example.com",
+      subject: "Over limit",
+      text: "Over limit"
+    })).rejects.toMatchObject({ statusCode: 402, code: "plan_limit" });
+    expect(provider.sent).toHaveLength(0);
+    expect(await database.collections.emailMessages.countDocuments({ agentId: agent._id })).toBe(0);
+  });
 });
 
 async function createAgent(
@@ -146,4 +160,52 @@ async function createAgent(
     updatedAt: now
   });
   return agent;
+}
+
+async function createFreeOwnedAgentAtEmailLimit(): Promise<{ agent: AgentDocument }> {
+  const now = new Date("2026-07-07T00:00:00.000Z");
+  const ownerUserId = new ObjectId();
+  const agent: AgentDocument = {
+    _id: new ObjectId(),
+    ownerUserId,
+    name: "Limited Bot",
+    slug: "limited-bot",
+    status: "active",
+    runtime: "openclaw",
+    capabilities: { email: true, phone: false },
+    approvalMode: "autonomous",
+    createdAt: now,
+    updatedAt: now
+  };
+  await database.collections.billingAccounts.insertOne({
+    _id: new ObjectId(),
+    ownerUserId,
+    stripeCustomerId: `cus_${ownerUserId.toHexString()}`,
+    plan: "free",
+    currentPeriodEnd: new Date("2026-07-31T00:00:00.000Z"),
+    createdAt: now,
+    updatedAt: now
+  });
+  await database.collections.agents.insertOne(agent);
+  await database.collections.emailAccounts.insertOne({
+    _id: new ObjectId(),
+    agentId: agent._id,
+    address: "limited-bot@agents.barkan.dev",
+    displayName: "Limited Bot",
+    status: "active",
+    createdAt: now,
+    updatedAt: now
+  });
+  await database.collections.usageEvents.insertOne({
+    _id: new ObjectId(),
+    ownerUserId,
+    agentId: agent._id,
+    meter: "emails_sent",
+    quantity: 100,
+    stripeReported: false,
+    periodKey: "2026-07",
+    createdAt: now,
+    updatedAt: now
+  });
+  return { agent };
 }

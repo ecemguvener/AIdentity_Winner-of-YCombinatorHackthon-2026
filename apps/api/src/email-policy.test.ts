@@ -1,6 +1,6 @@
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { ObjectId } from "mongodb";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import type { AppConfig } from "./config.js";
 import { connectDatabase, type Database } from "./db.js";
@@ -42,6 +42,20 @@ afterAll(async () => {
   await app?.close();
   await database?.client.close();
   await mongoServer?.stop();
+});
+
+beforeEach(async () => {
+  await Promise.all([
+    database.collections.agents.deleteMany({}),
+    database.collections.identityTokens.deleteMany({}),
+    database.collections.emailAccounts.deleteMany({}),
+    database.collections.emailThreads.deleteMany({}),
+    database.collections.emailMessages.deleteMany({}),
+    database.collections.approvals.deleteMany({}),
+    database.collections.policies.deleteMany({}),
+    database.collections.auditLogs.deleteMany({}),
+    database.collections.usageEvents.deleteMany({})
+  ]);
 });
 
 describe("email policy enforcement", () => {
@@ -295,6 +309,10 @@ async function signup(email: string): Promise<string> {
     payload: { email, password: "password12345" }
   });
   expect(response.statusCode).toBe(200);
+  await database.collections.billingAccounts.updateOne(
+    { ownerUserId: (await database.collections.users.findOne({ email }))!._id },
+    { $set: { plan: "scale", subscriptionStatus: "active", updatedAt: new Date() } }
+  );
   return response.cookies.find((candidate) => candidate.name === config.SESSION_COOKIE_NAME)!.value;
 }
 

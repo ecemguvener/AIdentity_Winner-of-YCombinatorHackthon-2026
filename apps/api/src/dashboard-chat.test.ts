@@ -249,6 +249,17 @@ function createCollections({
     users: {
       findOne: vi.fn().mockResolvedValue(user)
     },
+    billingAccounts: {
+      findOne: vi.fn().mockResolvedValue({
+        _id: new ObjectId(),
+        ownerUserId: user._id,
+        stripeCustomerId: "cus_test",
+        plan: "scale",
+        subscriptionStatus: "active",
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+    },
     agents: {
       find: vi.fn().mockImplementation(({ ownerUserId }: { ownerUserId: ObjectId }) => ({
         sort: vi.fn().mockReturnValue({

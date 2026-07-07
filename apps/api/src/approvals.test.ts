@@ -174,6 +174,10 @@ async function signup(email: string): Promise<string> {
   expect(response.statusCode).toBe(200);
   const cookie = response.cookies.find((candidate) => candidate.name === config.SESSION_COOKIE_NAME);
   expect(cookie).toBeDefined();
+  await database.collections.billingAccounts.updateOne(
+    { ownerUserId: (await database.collections.users.findOne({ email }))!._id },
+    { $set: { plan: "scale", subscriptionStatus: "active", updatedAt: new Date() } }
+  );
   return cookie!.value;
 }
 

@@ -7,6 +7,7 @@ import { ApiError } from "./errors.js";
 import { requireAuth } from "./auth.js";
 import { issueIdentityToken } from "./agent-auth.js";
 import { recordAudit } from "./audit.js";
+import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
 import { identityTokenMode, reserveAgentSlug } from "./identity.js";
 import {
   CAPABILITY_NAMES,
@@ -55,6 +56,12 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
   app.post("/api/v1/agents", async (request, reply) => {
     const authContext = await requireAuth(request, reply, collections, config);
     const payload = createAgentSchema.parse(request.body ?? {});
+    throwPlanLimit(await checkEntitlement(collections, authContext.user._id, { type: "agent.create" }));
+    for (const capability of CAPABILITY_NAMES) {
+      if (payload.capabilities?.[capability]) {
+        throwPlanLimit(await checkEntitlement(collections, authContext.user._id, { type: "capability.enable", capability }));
+      }
+    }
 
     const now = new Date();
     const agent: AgentDocument = {
@@ -249,6 +256,9 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
     const capability = parseCapabilityParam(request.params);
     const agent = await findOwnedAgent(collections, authContext.user._id, request.params);
     requireNotRevoked(agent);
+    if (action === "enable") {
+      throwPlanLimit(await checkEntitlement(collections, authContext.user._id, { type: "capability.enable", capability }));
+    }
 
     const provisioner = getProvisioner(capability);
     // Provisioning runs async; the UI polls GET /api/v1/agents/:agentId.

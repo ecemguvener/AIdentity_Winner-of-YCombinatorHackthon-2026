@@ -4,6 +4,7 @@ import type { AgentDocument, ApprovalDocument, Collections, EmailMessageDocument
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { emitOwnerEvent, registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
 import { ApiError } from "./errors.js";
+import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
 import type { EmailAttachmentInput, EmailInboundClient, EmailProvider, ReceivedEmailContent } from "./providers/email-provider.js";
 import { getEmailPolicy, isRecipientAllowedByPatterns } from "./policies.js";
 import { recordUsage } from "./usage.js";
@@ -69,6 +70,9 @@ export async function sendAgentEmail(
   }
   if (account.status !== "active") {
     throw new ApiError(403, "policy_blocked", "email identity is paused");
+  }
+  if (input.agent.ownerUserId) {
+    throwPlanLimit(await checkEntitlement(collections, input.agent.ownerUserId, { type: "usage", meter: "email" }));
   }
 
   const to = normalizeEmailAddress(input.to);

@@ -13,6 +13,7 @@ import {
 import { searchNumbers, purchaseNumber, releaseNumber, type PurchasedTwilioNumber, type TwilioNumberCandidate } from "./providers/twilio-numbers.js";
 import { assignAgentToNumber, importTwilioNumber, removeNumber } from "./providers/elevenlabs-phone.js";
 import { ApiError } from "./errors.js";
+import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
 
 export interface PhoneProvisioningProviders {
   searchNumbers?(input: { country: string }): Promise<TwilioNumberCandidate[]>;
@@ -53,6 +54,9 @@ export async function provisionAgentPhoneNumber(
   }
   if (existing) {
     throw new ApiError(409, "validation_failed", "phone provisioning is already in progress");
+  }
+  if (agent.ownerUserId) {
+    throwPlanLimit(await checkEntitlement(collections, agent.ownerUserId, { type: "number.provision" }));
   }
 
   let row: PhoneNumberDocument | null = null;

@@ -78,6 +78,7 @@ The Node API exposes:
 - `GET /api/v1/billing/usage`
 - `POST /api/v1/billing/checkout`
 - `POST /api/v1/billing/portal`
+- Plan entitlement failures return 402 `plan_limit` with `upgradeHint`
 - `POST /webhooks/stripe` (registered only when `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` are configured; SaaS billing only)
 - `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
 - `POST /webhooks/elevenlabs/personalization` (ElevenLabs signed inbound-call personalization; returns conversation initiation data)
@@ -99,6 +100,7 @@ The Node API exposes:
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
 | `apps/api/src/billing.ts` | Stripe Billing account, checkout, portal, plan limits, and subscription webhook sync |
 | `apps/api/src/usage.ts` | Usage ledger, summaries, Stripe meter reporting, and active-number sampling |
+| `apps/api/src/entitlements.ts` | Plan entitlement checks for agent creation, capabilities, usage, and phone numbers |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |

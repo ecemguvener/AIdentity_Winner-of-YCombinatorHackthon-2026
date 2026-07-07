@@ -12,6 +12,12 @@ import { AgentCreationWizard } from "../pages/AgentsListPage";
 import { LandingPage, PricingPage } from "../pages/PublicPages";
 import { DashboardScreen } from "./DashboardScreen";
 
+interface PlanLimitNotice {
+  message: string;
+  plan?: string;
+  upgradeHint?: string;
+}
+
 export function AppShell() {
   const [currentLocation, setCurrentLocation] = useState(getCurrentLocation);
   const [user, setUser] = useState<User | null>(null);
@@ -20,6 +26,7 @@ export function AppShell() {
   const [pendingApprovals, setPendingApprovals] = useState<Approval[]>([]);
   const [approvalHistory, setApprovalHistory] = useState<Approval[]>([]);
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
+  const [planLimitNotice, setPlanLimitNotice] = useState<PlanLimitNotice | null>(null);
   const notificationIdRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -48,6 +55,19 @@ export function AppShell() {
     const handleNavigation = () => setCurrentLocation(getCurrentLocation());
     window.addEventListener("popstate", handleNavigation);
     return () => window.removeEventListener("popstate", handleNavigation);
+  }, []);
+
+  useEffect(() => {
+    const handlePlanLimit = (event: Event) => {
+      const detail = (event as CustomEvent<PlanLimitNotice>).detail ?? {};
+      setPlanLimitNotice({
+        message: detail.message || "Your plan limit was reached.",
+        plan: detail.plan,
+        upgradeHint: detail.upgradeHint
+      });
+    };
+    window.addEventListener("barkan:plan-limit", handlePlanLimit);
+    return () => window.removeEventListener("barkan:plan-limit", handlePlanLimit);
   }, []);
 
   useEffect(() => {
@@ -266,6 +286,47 @@ export function AppShell() {
     window.setTimeout(() => dismissNotification(id), durationMs);
   }
 
+  const planLimitModal = planLimitNotice ? (
+    <div className="user-settings-page__modal-backdrop" role="presentation">
+      <section
+        className="user-settings-page__password-modal plan-limit-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plan-limit-title"
+      >
+        <header className="user-settings-page__modal-header">
+          <div>
+            <h2 id="plan-limit-title">Plan limit reached</h2>
+            <p>{planLimitNotice.upgradeHint ?? planLimitNotice.message}</p>
+          </div>
+          <button
+            className="user-settings-page__modal-close"
+            type="button"
+            onClick={() => setPlanLimitNotice(null)}
+            aria-label="Close plan limit dialog"
+          >
+            ×
+          </button>
+        </header>
+        <footer className="user-settings-page__modal-actions">
+          <button className="user-settings-page__modal-secondary" type="button" onClick={() => setPlanLimitNotice(null)}>
+            Not now
+          </button>
+          <button
+            className="plan-limit-modal__primary"
+            type="button"
+            onClick={() => {
+              setPlanLimitNotice(null);
+              pushPath(getUserSettingsPath("billing"));
+            }}
+          >
+            View billing
+          </button>
+        </footer>
+      </section>
+    </div>
+  ) : null;
+
   if (isPlansRoute(currentPath)) return <PricingPage />;
   if (!isAppRoute(currentPath)) return <LandingPage />;
 
@@ -299,6 +360,7 @@ export function AppShell() {
           onNotify={showNotification}
         />
         <ToastNotifications notifications={notifications} />
+        {planLimitModal}
       </>
     );
   }
@@ -339,6 +401,7 @@ export function AppShell() {
         }}
       />
       <ToastNotifications notifications={notifications} />
+      {planLimitModal}
     </>
   );
 }

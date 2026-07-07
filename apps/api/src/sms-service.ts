@@ -3,6 +3,7 @@ import type { AppConfig } from "./config.js";
 import type { AgentDocument, ApprovalDocument, Collections, PhoneNumberDocument, SmsMessageDocument } from "./db.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { emitOwnerEvent, registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
+import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
 import { ApiError } from "./errors.js";
 import { normalizeE164PhoneNumber } from "./lib/phone.js";
 import { enforcePhoneCountry, startOfPolicyDay } from "./phone-policy.js";
@@ -40,6 +41,9 @@ export async function sendAgentSms(
     if (existing) return existing;
   }
   const phoneNumber = await activePhoneNumber(collections, input.agent);
+  if (input.agent.ownerUserId) {
+    throwPlanLimit(await checkEntitlement(collections, input.agent.ownerUserId, { type: "usage", meter: "sms" }));
+  }
   const now = new Date();
   const message: SmsMessageDocument = {
     _id: new ObjectId(),

@@ -21,6 +21,11 @@ export class ApiClientError extends Error {
   }
 }
 
+interface PlanLimitDetails {
+  plan?: string;
+  upgradeHint?: string;
+}
+
 export type RequestJsonOptions = RequestInit & {
   apiBaseUrlOverride?: string;
 };
@@ -117,13 +122,15 @@ async function buildApiClientError(response: Response): Promise<ApiClientError> 
     const parsed = JSON.parse(text) as ApiErrorEnvelope;
     const envelope = parsed.error;
     const message = parsed.message || envelope?.message || parsed.legacyError || fallbackMessage;
-    return new ApiClientError({
+    const error = new ApiClientError({
       status: response.status,
       code: envelope?.code || codeForStatus(response.status),
       message,
       requestId: envelope?.requestId ?? null,
       details: envelope?.details
     });
+    notifyPlanLimit(error);
+    return error;
   } catch {
     return new ApiClientError({
       status: response.status,
@@ -131,6 +138,22 @@ async function buildApiClientError(response: Response): Promise<ApiClientError> 
       message: fallbackMessage
     });
   }
+}
+
+function notifyPlanLimit(error: ApiClientError): void {
+  if (error.code !== "plan_limit" || typeof window === "undefined") return;
+  const details = isPlanLimitDetails(error.details) ? error.details : {};
+  window.dispatchEvent(new CustomEvent("barkan:plan-limit", {
+    detail: {
+      message: error.message,
+      plan: details.plan,
+      upgradeHint: details.upgradeHint
+    }
+  }));
+}
+
+function isPlanLimitDetails(value: unknown): value is PlanLimitDetails {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function codeForStatus(status: number): string {

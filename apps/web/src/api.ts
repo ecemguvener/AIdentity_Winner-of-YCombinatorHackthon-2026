@@ -98,7 +98,9 @@ type ApiRequestOptions = RequestInit & {
 export class ApiHttpError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly code?: string,
+    readonly details?: unknown
   ) {
     super(message);
     this.name = "ApiHttpError";
@@ -122,7 +124,10 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiHttpError(parseApiError(text, getHttpErrorFallback(response)), response.status);
+    const parsed = parseApiError(text, getHttpErrorFallback(response));
+    const error = new ApiHttpError(parsed.message, response.status, parsed.code, parsed.details);
+    notifyPlanLimit(error);
+    throw error;
   }
 
   return (await response.json()) as T;
@@ -319,7 +324,7 @@ async function streamDashboardChatMessage(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(parseApiError(text, getHttpErrorFallback(response)));
+    throw new Error(parseApiError(text, getHttpErrorFallback(response)).message);
   }
 
   if (!response.body) {
@@ -427,34 +432,57 @@ function isDashboardChatCallTranscriptTurn(value: unknown): value is DashboardCh
   );
 }
 
-function parseApiError(text: string, fallback = "request failed"): string {
+function parseApiError(text: string, fallback = "request failed"): { message: string; code?: string; details?: unknown } {
   try {
     const parsed = JSON.parse(text) as {
       error?: string | {
+        code?: string;
         message?: string;
-        details?: {
-          fieldErrors?: Record<string, string[] | undefined>;
-          formErrors?: string[];
-        };
+        details?: unknown;
       };
       message?: string;
-      details?: {
-        fieldErrors?: Record<string, string[] | undefined>;
-        formErrors?: string[];
-      };
+      details?: unknown;
     };
     const details = typeof parsed.error === "object" && parsed.error !== null ? parsed.error.details ?? parsed.details : parsed.details;
     const nestedMessage = typeof parsed.error === "object" && parsed.error !== null ? parsed.error.message : undefined;
     const legacyMessage = typeof parsed.error === "string" ? parsed.error : undefined;
-    const fieldError = Object.values(details?.fieldErrors ?? {})
+    const validationDetails = isValidationDetails(details) ? details : undefined;
+    const fieldError = Object.values(validationDetails?.fieldErrors ?? {})
       .flatMap((messages) => messages ?? [])
       .find((message) => message.trim());
-    const formError = details?.formErrors?.find((message) => message.trim());
+    const formError = validationDetails?.formErrors?.find((message) => message.trim());
 
-    return fieldError || formError || parsed.message || nestedMessage || legacyMessage || fallback;
+    return {
+      message: fieldError || formError || parsed.message || nestedMessage || legacyMessage || fallback,
+      code: typeof parsed.error === "object" && parsed.error !== null ? parsed.error.code : undefined,
+      details
+    };
   } catch {
-    return fallback;
+    return { message: fallback };
   }
+}
+
+function notifyPlanLimit(error: ApiHttpError): void {
+  if (error.code !== "plan_limit" || typeof window === "undefined") return;
+  const details = isPlanLimitDetails(error.details) ? error.details : {};
+  window.dispatchEvent(new CustomEvent("barkan:plan-limit", {
+    detail: {
+      message: error.message,
+      plan: details.plan,
+      upgradeHint: details.upgradeHint
+    }
+  }));
+}
+
+function isPlanLimitDetails(value: unknown): value is { plan?: string; upgradeHint?: string } {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isValidationDetails(value: unknown): value is {
+  fieldErrors?: Record<string, string[] | undefined>;
+  formErrors?: string[];
+} {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function getHttpErrorFallback(response: Response): string {

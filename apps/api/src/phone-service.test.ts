@@ -28,7 +28,8 @@ beforeEach(async () => {
     database.collections.phoneNumbers.deleteMany({}),
     database.collections.calls.deleteMany({}),
     database.collections.policies.deleteMany({}),
-    database.collections.auditLogs.deleteMany({})
+    database.collections.auditLogs.deleteMany({}),
+    database.collections.billingAccounts.deleteMany({})
   ]);
 });
 
@@ -79,6 +80,21 @@ describe("phone service outbound calls", () => {
       code: "policy_blocked",
       message: "phone capability not provisioned"
     });
+  });
+
+  it("blocks outbound calls when the free plan has no call minutes", async () => {
+    const { agent, user } = await insertFixture();
+    await database.collections.billingAccounts.updateOne(
+      { ownerUserId: user._id },
+      { $set: { plan: "free", updatedAt: new Date() }, $unset: { subscriptionStatus: "" } }
+    );
+
+    await expect(placeOutboundCall(database.collections, config, {
+      agent,
+      toNumber: "+33757509222",
+      task: "Book an appointment."
+    })).rejects.toMatchObject({ statusCode: 402, code: "plan_limit" });
+    expect(await database.collections.calls.countDocuments()).toBe(0);
   });
 
   it("runs mock lifecycle queued to completed with a labeled transcript", async () => {
@@ -332,6 +348,15 @@ async function insertFixture(input: { withPhone?: boolean; withoutOwner?: boolea
   };
 
   await database.collections.users.insertOne(user);
+  await database.collections.billingAccounts.insertOne({
+    _id: new ObjectId(),
+    ownerUserId: user._id,
+    stripeCustomerId: `cus_${user._id.toHexString()}`,
+    plan: "pro",
+    subscriptionStatus: "active",
+    createdAt: now,
+    updatedAt: now
+  });
   await database.collections.agents.insertOne(agent);
   await database.collections.policies.insertOne({
     _id: new ObjectId(),

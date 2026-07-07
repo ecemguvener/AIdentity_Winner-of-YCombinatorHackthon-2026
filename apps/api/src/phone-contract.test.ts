@@ -51,6 +51,15 @@ beforeEach(async () => {
     updatedAt: new Date()
   };
   await database.collections.users.insertOne(ownerUser);
+  await database.collections.billingAccounts.insertOne({
+    _id: new ObjectId(),
+    ownerUserId: ownerUser._id,
+    stripeCustomerId: `cus_${ownerUser._id.toHexString()}`,
+    plan: "scale",
+    subscriptionStatus: "active",
+    createdAt: new Date(),
+    updatedAt: new Date()
+  });
   await database.collections.sessions.insertOne({
     _id: new ObjectId(),
     userId: ownerUser._id,

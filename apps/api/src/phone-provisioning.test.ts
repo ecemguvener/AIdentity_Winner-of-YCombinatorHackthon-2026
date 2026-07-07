@@ -49,7 +49,8 @@ beforeEach(async () => {
     database.collections.identityTokens.deleteMany({}),
     database.collections.phoneNumbers.deleteMany({}),
     database.collections.auditLogs.deleteMany({}),
-    database.collections.policies.deleteMany({})
+    database.collections.policies.deleteMany({}),
+    database.collections.billingAccounts.deleteMany({})
   ]);
 });
 
@@ -92,6 +93,22 @@ describe("phone provisioner", () => {
       "phone.number.active",
       "phone.provisioned"
     ]);
+  });
+
+  it("blocks number provisioning when the plan has no phone numbers", async () => {
+    const agent = await insertAgent();
+    await database.collections.billingAccounts.updateOne(
+      { ownerUserId: agent.ownerUserId },
+      { $set: { plan: "free", updatedAt: new Date() }, $unset: { subscriptionStatus: "" } }
+    );
+    const providers = fakeProviders();
+
+    await expect(provisionAgentPhoneNumber(database.collections, config, agent, providers)).rejects.toMatchObject({
+      statusCode: 402,
+      code: "plan_limit"
+    });
+    expect(providers.searches).toEqual([]);
+    expect(await database.collections.phoneNumbers.countDocuments({ agentId: agent._id })).toBe(0);
   });
 
   it("compensates Twilio purchase when ElevenLabs import fails", async () => {
@@ -182,9 +199,10 @@ describe("phone provisioner", () => {
 
 async function insertAgent(input: { phone?: boolean } = {}): Promise<AgentDocument> {
   const now = new Date();
+  const ownerUserId = new ObjectId();
   const agent: AgentDocument = {
     _id: new ObjectId(),
-    ownerUserId: new ObjectId(),
+    ownerUserId,
     name: "Phone Agent",
     slug: `phone-agent-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     status: "active",
@@ -193,6 +211,15 @@ async function insertAgent(input: { phone?: boolean } = {}): Promise<AgentDocume
     createdAt: now,
     updatedAt: now
   };
+  await database.collections.billingAccounts.insertOne({
+    _id: new ObjectId(),
+    ownerUserId,
+    stripeCustomerId: `cus_${ownerUserId.toHexString()}`,
+    plan: "pro",
+    subscriptionStatus: "active",
+    createdAt: now,
+    updatedAt: now
+  });
   await database.collections.agents.insertOne(agent);
   return agent;
 }
@@ -269,6 +296,12 @@ async function signup(email: string): Promise<string> {
   expect([200, 201]).toContain(response.statusCode);
   const cookie = response.cookies.find((candidate) => candidate.name === config.SESSION_COOKIE_NAME);
   expect(cookie).toBeDefined();
+  const user = await database.collections.users.findOne({ email });
+  expect(user).toBeTruthy();
+  await database.collections.billingAccounts.updateOne(
+    { ownerUserId: user!._id },
+    { $set: { plan: "pro", subscriptionStatus: "active", updatedAt: new Date() } }
+  );
   return cookie!.value;
 }
 

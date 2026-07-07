@@ -47,6 +47,7 @@ beforeEach(async () => {
     database.collections.smsMessages.deleteMany({}),
     database.collections.policies.deleteMany({}),
     database.collections.auditLogs.deleteMany({}),
+    database.collections.billingAccounts.deleteMany({}),
     database.collections.webhookEvents.deleteMany({}),
     database.collections.usageEvents.deleteMany({})
   ]);
@@ -136,6 +137,25 @@ describe("SMS provider and service", () => {
       error: { code: "validation_failed" },
       message: "to must be an E.164 phone number"
     });
+    expect(await database.collections.smsMessages.countDocuments()).toBe(0);
+  });
+
+  it("blocks SMS when the free plan has no included SMS", async () => {
+    const { user, token } = await insertFixture();
+    await database.collections.billingAccounts.updateOne(
+      { ownerUserId: user._id },
+      { $set: { plan: "free", updatedAt: new Date() }, $unset: { subscriptionStatus: "" } }
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent/phone/sms",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { to: "+33612345678", body: "Hi" }
+    });
+
+    expect(response.statusCode).toBe(402);
+    expect(response.json().error.code).toBe("plan_limit");
     expect(await database.collections.smsMessages.countDocuments()).toBe(0);
   });
 
@@ -315,6 +335,15 @@ async function insertFixture(): Promise<{ user: UserDocument; agent: AgentDocume
     updatedAt: now
   };
   await database.collections.users.insertOne(user);
+  await database.collections.billingAccounts.insertOne({
+    _id: new ObjectId(),
+    ownerUserId: user._id,
+    stripeCustomerId: `cus_${user._id.toHexString()}`,
+    plan: "pro",
+    subscriptionStatus: "active",
+    createdAt: now,
+    updatedAt: now
+  });
   await database.collections.agents.insertOne(agent);
   await database.collections.phoneNumbers.insertOne(phoneNumber);
   await database.collections.policies.insertOne({

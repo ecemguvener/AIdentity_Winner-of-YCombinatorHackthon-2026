@@ -163,6 +163,10 @@ async function signup(email: string): Promise<string> {
     payload: { email, password: "password12345" }
   });
   expect(response.statusCode).toBe(200);
+  await database.collections.billingAccounts.updateOne(
+    { ownerUserId: (await database.collections.users.findOne({ email }))!._id },
+    { $set: { plan: "scale", subscriptionStatus: "active", updatedAt: new Date() } }
+  );
   return response.cookies.find((candidate) => candidate.name === config.SESSION_COOKIE_NAME)!.value;
 }
 

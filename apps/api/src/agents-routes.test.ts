@@ -42,6 +42,24 @@ async function signup(email: string): Promise<string> {
   return cookie!.value;
 }
 
+async function setBillingPlan(email: string, plan: "free" | "pro" | "scale"): Promise<void> {
+  const user = await database.collections.users.findOne({ email });
+  expect(user).toBeTruthy();
+  await database.collections.billingAccounts.updateOne(
+    { ownerUserId: user!._id },
+    {
+      $set: {
+        stripeCustomerId: `cus_${plan}_${user!._id.toHexString()}`,
+        plan,
+        subscriptionStatus: plan === "free" ? undefined : "active",
+        updatedAt: new Date()
+      },
+      $setOnInsert: { _id: new ObjectId(), createdAt: new Date() }
+    },
+    { upsert: true }
+  );
+}
+
 async function createAgent(payload: Record<string, unknown> = {}) {
   const response = await app.inject({
     method: "POST",
@@ -83,6 +101,8 @@ beforeAll(async () => {
   app = await buildApp(config, database.collections);
   ownerCookie = await signup("owner@example.com");
   otherCookie = await signup("other@example.com");
+  await setBillingPlan("owner@example.com", "scale");
+  await setBillingPlan("other@example.com", "scale");
 }, 60_000);
 
 afterAll(async () => {
@@ -253,6 +273,86 @@ describe("capability toggles", () => {
       cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie }
     });
     expect(unknown.statusCode).toBe(400);
+  });
+});
+
+describe("plan entitlements", () => {
+  it("returns 402 plan_limit when a free account creates a second agent", async () => {
+    const cookie = await signup("free-second-agent@example.com");
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      cookies: { [config.SESSION_COOKIE_NAME]: cookie },
+      payload: { name: "Free One" }
+    });
+    expect(first.statusCode).toBe(201);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      cookies: { [config.SESSION_COOKIE_NAME]: cookie },
+      payload: { name: "Free Two" }
+    });
+    expect(second.statusCode).toBe(402);
+    expect(second.json()).toMatchObject({
+      error: {
+        code: "plan_limit",
+        details: { upgradeHint: "Upgrade to Pro for 3 agents." }
+      }
+    });
+  });
+
+  it("returns 402 plan_limit when a free account enables phone", async () => {
+    const cookie = await signup("free-phone@example.com");
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      cookies: { [config.SESSION_COOKIE_NAME]: cookie },
+      payload: { name: "Free Phone" }
+    });
+    expect(created.statusCode).toBe(201);
+
+    const enable = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${created.json().agent.id}/capabilities/phone/enable`,
+      cookies: { [config.SESSION_COOKIE_NAME]: cookie }
+    });
+    expect(enable.statusCode).toBe(402);
+    expect(enable.json()).toMatchObject({
+      error: {
+        code: "plan_limit",
+        details: { upgradeHint: "Upgrade to Pro for phone access." }
+      }
+    });
+  });
+
+  it("returns 402 plan_limit when a pro account creates a fourth agent", async () => {
+    const email = "pro-fourth-agent@example.com";
+    const cookie = await signup(email);
+    await setBillingPlan(email, "pro");
+    for (const name of ["Pro One", "Pro Two", "Pro Three"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/agents",
+        cookies: { [config.SESSION_COOKIE_NAME]: cookie },
+        payload: { name }
+      });
+      expect(response.statusCode).toBe(201);
+    }
+
+    const fourth = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents",
+      cookies: { [config.SESSION_COOKIE_NAME]: cookie },
+      payload: { name: "Pro Four" }
+    });
+    expect(fourth.statusCode).toBe(402);
+    expect(fourth.json()).toMatchObject({
+      error: {
+        code: "plan_limit",
+        details: { upgradeHint: "Upgrade to Scale for 10 agents." }
+      }
+    });
   });
 });
 
