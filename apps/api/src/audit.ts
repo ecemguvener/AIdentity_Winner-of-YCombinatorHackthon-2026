@@ -20,7 +20,9 @@ export const AUDIT_ACTIONS = {
   },
   phone: {
     outbound: "phone.call.outbound",
-    inbound: "phone.call.inbound"
+    inbound: "phone.call.inbound",
+    provisioned: "phone.provisioned",
+    released: "phone.released"
   },
   sms: {
     send: "sms.send",

@@ -82,12 +82,15 @@ The Node API exposes:
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
 | `apps/api/src/phone.ts` | Phone call integration/mock fallback |
+| `apps/api/src/phone-provisioning.ts` | Twilio number purchase + ElevenLabs voice-agent phone capability provisioner |
 | `apps/api/src/phone-numbers.ts` | Twilio phone number persistence and lifecycle helpers |
 | `apps/api/src/providers/twilio-numbers.ts` | Twilio/mock number search, purchase, release, and audit listing |
+| `apps/api/src/providers/elevenlabs-phone.ts` | ElevenLabs Conversational AI phone number import/assign/remove provider |
 | `apps/api/src/email.ts` | Email routes, drafting helpers, and email activity serializers |
 | `apps/api/src/email-service.ts` | Persistent outbound/inbound email threads, idempotency, and replies |
 | `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |
 | `docs/api/email.md` | Frozen agent-facing email API contract |
+| `docs/phone-setup.md` | Live phone provisioning and ElevenLabs setup guide |
 | `apps/api/src/payments.ts` | Payment capability and policy engine |
 | `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |
 | `apps/api/src/webhooks/verify.ts` | Stripe/Svix/Twilio/ElevenLabs signature verifiers |

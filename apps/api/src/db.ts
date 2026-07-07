@@ -209,6 +209,7 @@ export interface PhoneNumberDocument extends Document {
   capabilitiesSms: boolean;
   status: "provisioning" | "active" | "releasing" | "released";
   monthlyPriceCents?: number;
+  provisioningDetail?: string;
   releaseDetail?: string;
   createdAt: Date;
   updatedAt: Date;

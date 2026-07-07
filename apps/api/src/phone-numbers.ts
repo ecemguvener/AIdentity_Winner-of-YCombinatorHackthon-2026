@@ -53,6 +53,7 @@ export async function reserveNumberRow(
     capabilitiesVoice: false,
     capabilitiesSms: false,
     status: "provisioning",
+    provisioningDetail: "Buying number...",
     createdAt: now,
     updatedAt: now
   };

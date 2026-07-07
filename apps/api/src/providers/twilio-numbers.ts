@@ -56,11 +56,12 @@ export interface TwilioNumbersClient {
 export async function searchNumbers(
   config: AppConfig,
   input: SearchNumbersInput,
-  client: TwilioNumbersClient = createTwilioNumbersClient(config)
+  client?: TwilioNumbersClient
 ): Promise<TwilioNumberCandidate[]> {
   if (config.PROVIDER_MODE_PHONE === "mock" && !hasLiveTwilioCredentials(config)) {
     return new MockTwilioNumbers().searchNumbers(input);
   }
+  const twilioClient = client ?? createTwilioNumbersClient(config);
   const country = (input.country || config.TWILIO_NUMBER_COUNTRY || "US").toUpperCase();
   const params: Record<string, unknown> = {
     limit: 10,
@@ -69,19 +70,20 @@ export async function searchNumbers(
   };
   if (input.areaCode) params.areaCode = input.areaCode;
   if (input.contains) params.contains = input.contains;
-  const results = await client.availablePhoneNumbers(country).local.list(params);
+  const results = await twilioClient.availablePhoneNumbers(country).local.list(params);
   return results.slice(0, 10).map((candidate) => normalizeCandidate(candidate, country));
 }
 
 export async function purchaseNumber(
   config: AppConfig,
   input: PurchaseNumberInput,
-  client: TwilioNumbersClient = createTwilioNumbersClient(config)
+  client?: TwilioNumbersClient
 ): Promise<PurchasedTwilioNumber> {
   if (config.PROVIDER_MODE_PHONE === "mock" && !hasLiveTwilioCredentials(config)) {
     return new MockTwilioNumbers().purchaseNumber(input);
   }
-  const created = await client.incomingPhoneNumbers.create(buildPurchaseParams(config, input));
+  const twilioClient = client ?? createTwilioNumbersClient(config);
+  const created = await twilioClient.incomingPhoneNumbers.create(buildPurchaseParams(config, input));
   return {
     twilioSid: readString(created.sid) || readString(created.accountSid) || "",
     e164: readString(created.phoneNumber) || input.e164,
@@ -96,14 +98,15 @@ export async function purchaseNumber(
 export async function releaseNumber(
   config: AppConfig,
   twilioSid: string,
-  client: TwilioNumbersClient = createTwilioNumbersClient(config)
+  client?: TwilioNumbersClient
 ): Promise<void> {
   if (config.PROVIDER_MODE_PHONE === "mock" && !hasLiveTwilioCredentials(config)) {
     new MockTwilioNumbers().releaseNumber(twilioSid);
     return;
   }
+  const twilioClient = client ?? createTwilioNumbersClient(config);
   try {
-    await client.incomingPhoneNumbers(twilioSid).remove();
+    await twilioClient.incomingPhoneNumbers(twilioSid).remove();
   } catch (error) {
     if (isTwilioNotFound(error)) return;
     throw error;
@@ -112,12 +115,13 @@ export async function releaseNumber(
 
 export async function listPurchasedNumbers(
   config: AppConfig,
-  client: TwilioNumbersClient = createTwilioNumbersClient(config)
+  client?: TwilioNumbersClient
 ): Promise<TwilioPurchasedNumberSummary[]> {
   if (config.PROVIDER_MODE_PHONE === "mock" && !hasLiveTwilioCredentials(config)) {
     return new MockTwilioNumbers().listPurchasedNumbers();
   }
-  const numbers = await client.incomingPhoneNumbers.list({ limit: 1000 });
+  const twilioClient = client ?? createTwilioNumbersClient(config);
+  const numbers = await twilioClient.incomingPhoneNumbers.list({ limit: 1000 });
   return numbers.map((number) => ({
     twilioSid: readString(number.sid) || "",
     e164: readString(number.phoneNumber) || "",

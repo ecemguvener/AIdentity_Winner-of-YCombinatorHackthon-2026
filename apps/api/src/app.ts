@@ -21,6 +21,7 @@ import { registerEmailProvisioner } from "./email-provisioning.js";
 import { registerIdentityRoutes } from "./identity.js";
 import { registerPaymentRoutes, registerSitePaymentRoutes } from "./payments.js";
 import { registerPolicyRoutes } from "./policies.js";
+import { registerPhoneProvisioner } from "./phone-provisioning.js";
 import { registerSiteRoutes } from "./sites.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
 import { registerWebhookRoutes } from "./webhooks/routes.js";
@@ -151,6 +152,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
 
   app.get("/api/health", async () => ({ ok: true }));
   registerEmailProvisioner(collections, config);
+  registerPhoneProvisioner(collections, config);
   const emailProvider = createEmailProvider(config);
   registerEmailApprovalExecutor(collections, config, emailProvider);
   app.get("/api/v1/ops/email-domain", async (request, reply) => {

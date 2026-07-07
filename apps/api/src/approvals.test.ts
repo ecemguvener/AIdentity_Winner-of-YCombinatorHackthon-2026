@@ -182,7 +182,7 @@ async function createAgent(name: string) {
     method: "POST",
     url: "/api/v1/agents",
     cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie },
-    payload: { name, capabilities: { email: true, phone: true } }
+    payload: { name, capabilities: { email: true, phone: false } }
   });
   expect(response.statusCode).toBe(201);
   const body = response.json<{
