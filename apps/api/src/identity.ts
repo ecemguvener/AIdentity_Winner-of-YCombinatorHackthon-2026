@@ -118,6 +118,10 @@ const smsLatestCodeQuerySchema = z.object({
   since: z.string().datetime().optional()
 });
 
+const auditRecentQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25)
+});
+
 const calendarBookSchema = z.object({
   title: z.string().min(1).max(200),
   attendee_email: z.string().email(),
@@ -127,6 +131,42 @@ const calendarBookSchema = z.object({
 
 export function registerIdentityRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
   registerEmailProvisioner(collections, config);
+
+  app.get("/api/v1/agent/whoami", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const [emailAccount, phoneNumber] = await Promise.all([
+      collections.emailAccounts.findOne({ agentId: agentContext.agent._id, status: "active" }),
+      collections.phoneNumbers.findOne({ agentId: agentContext.agent._id, status: "active" })
+    ]);
+    return {
+      agent_id: agentContext.agent._id.toHexString(),
+      name: agentContext.agent.name,
+      slug: agentContext.agent.slug,
+      status: agentContext.agent.status,
+      runtime: agentContext.agent.runtime ?? null,
+      capabilities: agentContext.agent.capabilities,
+      approval_mode: agentContext.agent.approvalMode,
+      email: emailAccount?.address ?? null,
+      phone: phoneNumber?.e164 ?? null,
+      token_prefix: agentContext.token.prefix
+    };
+  });
+
+  app.get("/api/v1/agent/audit/recent", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const query = auditRecentQuerySchema.parse(request.query ?? {});
+    const page = await listAuditEntries(collections, { agentId: agentContext.agent._id, limit: query.limit });
+    return {
+      entries: page.entries.map(serializeAuditEntry),
+      next_cursor: page.nextCursor
+    };
+  });
 
   app.post("/api/identity/init", async (request, reply) => {
     const payload = initIdentitySchema.parse(request.body ?? {});

@@ -37,6 +37,12 @@ const standardErrors = {
 export const agentOpenApiOperations: Record<string, true> = {};
 
 const paths: Record<string, PathItem> = {
+  "/api/v1/agent/whoami": {
+    get: agent("identity", "Get authenticated agent identity")
+  },
+  "/api/v1/agent/audit/recent": {
+    get: agent("audit", "List recent audit entries", undefined, [queryParam("limit")])
+  },
   "/api/v1/agent/email/address": {
     get: agent("email", "Get agent email address")
   },

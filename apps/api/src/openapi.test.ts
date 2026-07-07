@@ -23,6 +23,8 @@ const config = {
 } as unknown as AppConfig;
 
 const agentRoutes = [
+  "GET /api/v1/agent/whoami",
+  "GET /api/v1/agent/audit/recent",
   "POST /api/v1/agent/email/send",
   "GET /api/v1/agent/email/threads",
   "GET /api/v1/agent/email/address",
