@@ -8,6 +8,7 @@ This repo contains the web-based Barkan product for issuing real-world identitie
 
 - **Web dashboard**: React + Vite + TypeScript in `apps/web`
 - **Node API**: Fastify + MongoDB backend in `apps/api`
+- **MCP stdio bridge**: publishable `@barkan/mcp` package in `packages/mcp`
 
 The current product lets a user sign up, create an agent identity, link it to an OpenClaw instance, and manage real-world tools such as phone, email, and calendar. Payment cards are coming soon; Stripe is used for SaaS billing only. The old embeddable website assistant, browser widget, Action Mode, route documentation generator, and codebase-scanning CLI have been removed.
 
@@ -77,6 +78,9 @@ The Node API exposes:
 - `GET /api/v1/ops/status` (session-authed provider mode + billing/phone/email readiness)
 - `GET /api/v1/openapi.json`
 - `POST/GET /mcp` (agent-token MCP Streamable HTTP server with capability-scoped tools/resources)
+- `POST /api/v1/pairing/start`
+- `POST /api/v1/pairing/poll`
+- `POST /api/v1/pairing/:code/confirm`
 - `GET /api/v1/billing`
 - `GET /api/v1/billing/plans`
 - `GET /api/v1/billing/usage`
@@ -100,8 +104,10 @@ The Node API exposes:
 | `apps/web/src/api.ts` | Browser API client |
 | `apps/web/src/api/billing.ts` | Browser API client for billing and ops status |
 | `apps/web/src/api/phone.ts` | Browser API client for owner phone/SMS routes |
+| `apps/web/src/api/pairing.ts` | Browser API client for runtime pairing confirmation |
 | `apps/web/src/components/PhonePanel.tsx` | Real phone/SMS tab: number, calls, transcripts, SMS threads, and policy UI |
 | `apps/web/src/components/EmailPanel.tsx` | Real email inbox, threads, compose, and policy UI |
+| `apps/web/src/pages/PairingPage.tsx` | Dashboard page for confirming `@barkan/mcp --pair` codes |
 | `apps/api/src/app.ts` | Fastify app wiring |
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
 | `apps/api/src/billing.ts` | Stripe Billing account, checkout, portal, plan limits, and subscription webhook sync |
@@ -109,6 +115,7 @@ The Node API exposes:
 | `apps/api/src/entitlements.ts` | Plan entitlement checks for agent creation, capabilities, usage, and phone numbers |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
 | `apps/api/src/mcp/server.ts` | MCP Streamable HTTP server, agent-token auth, capability-scoped tools, and resources |
+| `apps/api/src/pairing.ts` | Device-code-style runtime pairing routes, one-time token reveal, and expiry sweeper |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |
@@ -135,6 +142,7 @@ The Node API exposes:
 | `docs/api/phone.md` | Frozen agent-facing phone/SMS API contract |
 | `docs/integrations/mcp.md` | MCP Streamable HTTP integration guide |
 | `docs/phone-setup.md` | Live phone provisioning and ElevenLabs setup guide |
+| `packages/mcp/src/cli.ts` | `@barkan/mcp` stdio bridge and pairing CLI |
 | `apps/api/src/providers/stripe-client.ts` | Stripe Billing SDK singleton |
 | `apps/api/src/stripe-webhooks.ts` | Stripe Billing webhook dispatcher |
 | `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |

@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "policy_blocked"
   | "approval_required"
   | "plan_limit"
+  | "already_claimed"
   | "internal";
 
 export class ApiError extends Error {

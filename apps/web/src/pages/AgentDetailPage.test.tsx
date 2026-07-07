@@ -90,6 +90,26 @@ describe("Agent detail page", () => {
 
     expect(await screen.findByText(/\+1 \(500\) 555-0001/)).toBeInTheDocument();
   });
+
+  it("renders remote and stdio MCP snippets", () => {
+    render(
+      <AgentDetailPage
+        detail={detail({ email: true })}
+        activeTab="credentials"
+        onAgentDetailLoaded={vi.fn()}
+        onAgentUpdated={vi.fn()}
+        onAgentDeleted={vi.fn()}
+        onTokensChanged={vi.fn()}
+        onNotify={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText("Remote MCP").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Stdio MCP").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/@barkan\/mcp/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/BARKAN_IDENTITY_TOKEN/).length).toBeGreaterThan(0);
+  });
 });
 
 function detail(capabilities: { email: boolean; phone?: boolean }): AgentDetailResponse {

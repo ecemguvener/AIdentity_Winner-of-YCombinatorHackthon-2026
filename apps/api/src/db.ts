@@ -350,6 +350,19 @@ export interface UsageReportDocument extends Document {
   createdAt: Date;
 }
 
+export interface PairingRequestDocument extends Document {
+  _id: ObjectId;
+  code: string;
+  status: "pending" | "confirmed" | "claimed" | "expired";
+  ownerUserId?: ObjectId;
+  agentId?: ObjectId;
+  identityTokenPlaintext?: string;
+  tokenIssuedAt?: Date;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Collections {
   users: Collection<UserDocument>;
   sessions: Collection<SessionDocument>;
@@ -372,6 +385,7 @@ export interface Collections {
   billingAccounts: Collection<BillingAccountDocument>;
   usageEvents: Collection<UsageEventDocument>;
   usageReports: Collection<UsageReportDocument>;
+  pairingRequests: Collection<PairingRequestDocument>;
   migrations: Collection<MigrationDocument>;
 }
 
@@ -407,6 +421,7 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     billingAccounts: db.collection<BillingAccountDocument>("billingAccounts"),
     usageEvents: db.collection<UsageEventDocument>("usageEvents"),
     usageReports: db.collection<UsageReportDocument>("usageReports"),
+    pairingRequests: db.collection<PairingRequestDocument>("pairingRequests"),
     migrations: db.collection<MigrationDocument>("migrations")
   };
 
@@ -467,6 +482,8 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.usageEvents.createIndex({ ownerUserId: 1, periodKey: 1, meter: 1 }),
     collections.usageEvents.createIndex({ dedupeKey: 1 }, { unique: true, sparse: true }),
     collections.usageReports.createIndex({ ownerUserId: 1, periodKey: 1, meter: 1 }, { unique: true }),
+    collections.pairingRequests.createIndex({ code: 1 }, { unique: true }),
+    collections.pairingRequests.createIndex({ status: 1, expiresAt: 1 }),
     collections.migrations.createIndex({ name: 1 }, { unique: true })
   ]);
 

@@ -3170,6 +3170,59 @@ button:disabled {
   padding-top: 0;
 }
 
+.site-detail-page__snippet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.site-detail-page__snippet {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.site-detail-page__snippet > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.site-detail-page__snippet strong {
+  color: #171717;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.site-detail-page__snippet button {
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.site-detail-page__snippet pre {
+  min-height: 168px;
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f5f6f7;
+  color: #161616;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .agent-email-policy {
   display: grid;
   gap: 14px;
@@ -3899,8 +3952,131 @@ button:disabled {
   white-space: nowrap;
 }
 
+.pairing-page {
+  min-height: 100vh;
+  padding: 48px 22px;
+  display: grid;
+  place-items: center;
+  background: #f5f6f7;
+}
+
+.pairing-page__panel {
+  width: min(520px, 100%);
+  border: 1px solid #e7e8ea;
+  border-radius: 8px;
+  padding: 28px;
+  display: grid;
+  gap: 22px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(20, 24, 31, 0.08);
+}
+
+.pairing-page__brand .barkan-brand__mark {
+  width: 24px;
+  height: 24px;
+}
+
+.pairing-page header h1,
+.pairing-page header p {
+  margin: 0;
+}
+
+.pairing-page header h1 {
+  color: #101010;
+  font-size: 26px;
+  line-height: 31px;
+  letter-spacing: 0;
+}
+
+.pairing-page header p {
+  margin-top: 8px;
+  color: #666666;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.pairing-page__form {
+  display: grid;
+  gap: 14px;
+}
+
+.pairing-page__form label {
+  display: grid;
+  gap: 7px;
+  color: #202020;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.pairing-page__form input,
+.pairing-page__form select {
+  width: 100%;
+  height: 44px;
+  border: 1px solid #e4e5e7;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #111111;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pairing-page__form button,
+.pairing-page__secondary {
+  height: 40px;
+  border-radius: 8px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.pairing-page__form button {
+  background: #111111;
+  color: #ffffff;
+}
+
+.pairing-page__form button:disabled {
+  cursor: not-allowed;
+  background: #dadde2;
+  color: #777d87;
+}
+
+.pairing-page__secondary {
+  background: #f2f3f5;
+  color: #202020;
+}
+
+.pairing-page__success {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(25, 135, 84, 0.1);
+  color: #13633d;
+}
+
+.pairing-page__success div {
+  display: grid;
+  gap: 2px;
+}
+
+.pairing-page__success span {
+  font-size: 13px;
+  font-weight: 650;
+}
+
 @media (max-width: 900px) {
   .billing-plan-grid__cards {
+    grid-template-columns: 1fr;
+  }
+
+  .site-detail-page__snippet-grid {
     grid-template-columns: 1fr;
   }
 }

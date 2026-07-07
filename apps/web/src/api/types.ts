@@ -267,6 +267,12 @@ export interface CreateTokenResponse {
   prefix: string;
 }
 
+export interface PairingConfirmResponse {
+  status: "confirmed";
+  agentId: string;
+  tokenPrefix: string;
+}
+
 export interface Approval {
   id: string;
   agentId: string;

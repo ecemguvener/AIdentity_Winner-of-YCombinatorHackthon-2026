@@ -22,6 +22,7 @@ import { createEmailProvider } from "./providers/email-provider.js";
 import { registerEmailProvisioner } from "./email-provisioning.js";
 import { registerIdentityRoutes } from "./identity.js";
 import { registerMcpRoutes } from "./mcp/server.js";
+import { registerPairingRoutes } from "./pairing.js";
 import { registerPhoneRoutes } from "./phone.js";
 import { registerPolicyRoutes } from "./policies.js";
 import { registerPhoneProvisioner } from "./phone-provisioning.js";
@@ -203,6 +204,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerSiteEmailRoutes(app, collections, config, emailProvider);
   registerIdentityRoutes(app, collections, config);
   registerMcpRoutes(app, collections, config, emailProvider);
+  registerPairingRoutes(app, collections, config);
   registerPhoneRoutes(app, collections, config);
   registerPolicyRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);

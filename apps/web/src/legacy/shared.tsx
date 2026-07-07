@@ -20,6 +20,7 @@ export const userSettingsPath = `${dashboardPath}/settings`;
 export const billingSettingsPath = "/settings/billing";
 export const approvalsPath = "/approvals";
 export const newSitePath = "/agents/new";
+export const pairPath = "/pair";
 export const signinPath = "/signin";
 export const plansPath = "/plans";
 export const profileAvatarMaxBytes = 256 * 1024;
@@ -169,6 +170,7 @@ export function isProtectedAppRoute(path: string): boolean {
     isDashboardRoute(path) ||
     isDashboardChatRoute(path) ||
     isApprovalsRoute(path) ||
+    isPairRoute(path) ||
     isUserSettingsRoute(path) ||
     isNewSiteRoute(path) ||
     getSiteDetailRoute(path) !== null
@@ -189,6 +191,10 @@ export function isUserSettingsRoute(path: string): boolean {
 
 export function isApprovalsRoute(path: string): boolean {
   return path === approvalsPath || path === `${approvalsPath}/`;
+}
+
+export function isPairRoute(path: string): boolean {
+  return path === pairPath || path === `${pairPath}/`;
 }
 
 export function isNewSiteRoute(path: string): boolean {
@@ -227,7 +233,7 @@ export function navigateToPublicHome() {
 }
 
 export function getSiteDetailRoute(path: string, search = ""): { siteId: string; tab: SiteDetailTab } | null {
-  if (isNewSiteRoute(path) || isDashboardChatRoute(path) || isApprovalsRoute(path) || isUserSettingsRoute(path) || isDashboardRoute(path)) {
+  if (isNewSiteRoute(path) || isDashboardChatRoute(path) || isApprovalsRoute(path) || isPairRoute(path) || isUserSettingsRoute(path) || isDashboardRoute(path)) {
     return null;
   }
 

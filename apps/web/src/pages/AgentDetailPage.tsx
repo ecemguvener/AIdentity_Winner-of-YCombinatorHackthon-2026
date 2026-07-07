@@ -1,6 +1,7 @@
 import { Copy, KeyRound, Loader2, Mail, Phone, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { agentsApi } from "../api/agents";
+import { getApiBaseUrl } from "../api/client";
 import type { AgentDetailResponse, IdentityToken } from "../api/types";
 import { EmailPanel } from "../components/EmailPanel";
 import { PhonePanel } from "../components/PhonePanel";
@@ -35,6 +36,8 @@ export function AgentDetailPage({
   const [newTokenSecret, setNewTokenSecret] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("runtime token");
   const isProvisioning = provisioning.email.state === "pending" || provisioning.phone.state === "pending";
+  const visibleToken = newTokenSecret ?? "BARKAN_IDENTITY_TOKEN";
+  const apiUrl = getApiBaseUrl() || window.location.origin;
 
   useEffect(() => {
     if (!isProvisioning) return;
@@ -185,6 +188,25 @@ export function AgentDetailPage({
 
             <section className="site-detail-page__section">
               <div className="site-detail-page__section-heading">
+                <h2>Connect runtime</h2>
+                <KeyRound size={17} aria-hidden="true" />
+              </div>
+              <div className="site-detail-page__snippet-grid">
+                <RuntimeSnippet
+                  title="Remote MCP"
+                  value={buildRemoteMcpConfig(apiUrl, visibleToken)}
+                  onNotify={onNotify}
+                />
+                <RuntimeSnippet
+                  title="Stdio MCP"
+                  value={buildStdioMcpConfig(apiUrl, visibleToken)}
+                  onNotify={onNotify}
+                />
+              </div>
+            </section>
+
+            <section className="site-detail-page__section">
+              <div className="site-detail-page__section-heading">
                 <h2>Identity tokens</h2>
                 <KeyRound size={17} aria-hidden="true" />
               </div>
@@ -299,6 +321,58 @@ function CapabilityRow({
       </label>
     </div>
   );
+}
+
+function RuntimeSnippet({
+  title,
+  value,
+  onNotify
+}: {
+  title: string;
+  value: string;
+  onNotify: (notification: ToastNotificationInput) => void;
+}) {
+  return (
+    <div className="site-detail-page__snippet">
+      <div>
+        <strong>{title}</strong>
+        <button type="button" onClick={() => void copyText(value, onNotify)}>
+          <Copy size={14} aria-hidden="true" />
+          <span>Copy</span>
+        </button>
+      </div>
+      <pre><code>{value}</code></pre>
+    </div>
+  );
+}
+
+function buildRemoteMcpConfig(apiUrl: string, token: string): string {
+  return JSON.stringify({
+    mcpServers: {
+      barkan: {
+        transport: "http",
+        url: `${apiUrl.replace(/\/$/, "")}/mcp`,
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    }
+  }, null, 2);
+}
+
+function buildStdioMcpConfig(apiUrl: string, token: string): string {
+  return JSON.stringify({
+    mcpServers: {
+      barkan: {
+        command: "npx",
+        args: ["-y", "@barkan/mcp"],
+        env: {
+          BARKAN_API_URL: apiUrl.replace(/\/$/, ""),
+          BARKAN_IDENTITY_TOKEN: token
+        }
+      }
+    }
+  }, null, 2);
 }
 
 async function copyText(value: string, onNotify: (notification: ToastNotificationInput) => void) {

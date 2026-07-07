@@ -109,4 +109,16 @@ const email = await client.callTool({
 }
 ```
 
-Task 047 adds a local stdio bridge/package for runtimes that cannot send remote Streamable HTTP directly.
+For stdio-only runtimes, use the npm bridge:
+
+```bash
+npx -y @barkan/mcp
+```
+
+Set `BARKAN_API_URL` and `BARKAN_IDENTITY_TOKEN`, or pair interactively:
+
+```bash
+npx -y @barkan/mcp --pair
+```
+
+Pairing prints a code and dashboard URL. After owner confirmation, the bridge stores credentials in `~/.barkan/credentials.json`.
