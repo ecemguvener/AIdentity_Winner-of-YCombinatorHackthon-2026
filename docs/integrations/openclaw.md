@@ -1,6 +1,10 @@
 # OpenClaw Integration
 
-Barkan ships an OpenClaw AgentSkill at `openclaw-skills/barkan-identity`.
+Barkan ships an OpenClaw AgentSkill at `openclaw-skills/barkan-identity`. Build it from the canonical shared source before publishing:
+
+```bash
+node scripts/build-skills.mjs
+```
 
 ## Publish To ClawHub
 
@@ -118,3 +122,5 @@ Expected:
 3. Owner approves in Barkan.
 4. OpenClaw reports the confirmed send result.
 5. Barkan audit contains the email action.
+
+The canonical skill source is shared with the Hermes variant; see [Hermes integration](./hermes.md).

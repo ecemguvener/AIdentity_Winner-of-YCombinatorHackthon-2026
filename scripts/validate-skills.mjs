@@ -4,7 +4,11 @@ import path from "node:path";
 import process from "node:process";
 
 const repoRoot = process.cwd();
-const skillRoot = path.join(repoRoot, "openclaw-skills");
+const skillRoots = [
+  path.join(repoRoot, "skills"),
+  path.join(repoRoot, "openclaw-skills"),
+  path.join(repoRoot, "hermes-skills")
+];
 const bannedPatterns = [
   /IDENTITY_LAYER_/,
   /identity_live_/,
@@ -17,14 +21,15 @@ const bannedPatterns = [
 
 async function main() {
   runSelfTest();
-  const skillFiles = await findSkillFiles(skillRoot);
+  const skillFiles = (await Promise.all(skillRoots.map(findSkillFiles))).flat();
   if (skillFiles.length === 0) {
-    throw new Error("no OpenClaw skills found");
+    throw new Error("no skills found");
   }
   for (const file of skillFiles) {
     await validateSkillFile(file);
   }
-  console.log(`Validated ${skillFiles.length} OpenClaw skill(s).`);
+  await assertBuiltBodiesMatch();
+  console.log(`Validated ${skillFiles.length} skill(s).`);
 }
 
 async function findSkillFiles(root) {
@@ -55,8 +60,11 @@ async function validateSkillFile(file) {
   if (!parsed.frontmatter.homepage) {
     throw new Error(`${relative}: missing homepage`);
   }
-  if (!/metadata\s*:\s*\{[^}]*openclaw/s.test(parsed.rawFrontmatter)) {
+  if (relative.startsWith("openclaw-skills/") && !/metadata\s*:\s*\{[^}]*openclaw/s.test(parsed.rawFrontmatter)) {
     throw new Error(`${relative}: metadata.openclaw missing`);
+  }
+  if (relative.startsWith("hermes-skills/") && !/metadata\s*:\s*\{[^}]*hermes/s.test(parsed.rawFrontmatter)) {
+    throw new Error(`${relative}: metadata.hermes missing`);
   }
   for (const pattern of bannedPatterns) {
     if (pattern.test(source)) {
@@ -81,6 +89,19 @@ function parseFrontmatter(source) {
     frontmatter[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
   }
   return { frontmatter, rawFrontmatter };
+}
+
+async function assertBuiltBodiesMatch() {
+  const openclaw = await fs.readFile(path.join(repoRoot, "openclaw-skills", "barkan-identity", "SKILL.md"), "utf8");
+  const hermes = await fs.readFile(path.join(repoRoot, "hermes-skills", "barkan-identity", "SKILL.md"), "utf8");
+  if (stripFrontmatter(openclaw) !== stripFrontmatter(hermes)) {
+    throw new Error("built OpenClaw and Hermes skill bodies differ");
+  }
+}
+
+function stripFrontmatter(source) {
+  const parsed = parseFrontmatter(source);
+  return source.slice(source.indexOf(parsed.rawFrontmatter) + parsed.rawFrontmatter.length + 4).trim();
 }
 
 function requireField(frontmatter, field, file) {

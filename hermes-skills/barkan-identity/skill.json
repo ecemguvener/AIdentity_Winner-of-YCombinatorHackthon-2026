@@ -1,0 +1,6 @@
+{
+  "name": "barkan-identity",
+  "description": "Give an agent a real-world Barkan identity for email, phone calls, SMS, approvals, policies, and audit history.",
+  "homepage": "https://barkan.dev",
+  "tags": ["identity", "mcp", "email", "phone", "sms", "approvals"]
+}

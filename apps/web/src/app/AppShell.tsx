@@ -110,7 +110,7 @@ export function AppShell() {
       eventSource.addEventListener("approval.expired", handleTerminal);
       eventSource.onerror = () => {
         eventSource?.close();
-        void refreshPendingApprovals();
+        void refreshPendingApprovals().catch(() => undefined);
         if (!isStopped) {
           reconnectTimeout = window.setTimeout(connect, 2500);
         }

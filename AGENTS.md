@@ -142,9 +142,13 @@ The Node API exposes:
 | `docs/api/phone.md` | Frozen agent-facing phone/SMS API contract |
 | `docs/integrations/mcp.md` | MCP Streamable HTTP integration guide |
 | `docs/integrations/openclaw.md` | OpenClaw skill publish, install, env, and verification guide |
+| `docs/integrations/hermes.md` | Hermes skill install, MCP config, messaging gateway, and verification guide |
 | `docs/phone-setup.md` | Live phone provisioning and ElevenLabs setup guide |
 | `packages/mcp/src/cli.ts` | `@barkan/mcp` stdio bridge and pairing CLI |
-| `openclaw-skills/barkan-identity/SKILL.md` | Production OpenClaw AgentSkill for Barkan identity usage |
+| `skills/barkan-identity/SKILL.md` | Canonical runtime-agnostic Barkan identity AgentSkill source |
+| `openclaw-skills/barkan-identity/SKILL.md` | Built OpenClaw AgentSkill variant for Barkan identity usage |
+| `hermes-skills/barkan-identity/SKILL.md` | Built Hermes AgentSkill variant for Barkan identity usage |
+| `scripts/build-skills.mjs` | Builds OpenClaw and Hermes skill variants from canonical source |
 | `scripts/validate-skills.mjs` | OpenClaw AgentSkill frontmatter and legacy-string validator |
 | `apps/api/src/providers/stripe-client.ts` | Stripe Billing SDK singleton |
 | `apps/api/src/stripe-webhooks.ts` | Stripe Billing webhook dispatcher |

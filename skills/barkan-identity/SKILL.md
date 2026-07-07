@@ -2,7 +2,6 @@
 name: barkan-identity
 description: Give this agent a real-world identity (email address, phone number) via Barkan. Use for sending/receiving email, making phone calls, and SMS (including fetching 2FA codes).
 homepage: https://barkan.dev
-metadata: { openclaw: { requiredEnv: ["BARKAN_API_URL", "BARKAN_IDENTITY_TOKEN"], emoji: "🪪" } }
 ---
 
 # Barkan Identity
