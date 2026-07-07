@@ -38,6 +38,8 @@ The Node API exposes:
 - `POST /api/v1/account/export`
 - `GET /api/v1/account/export/:exportId/download` (signed one-time URL)
 - `DELETE /api/v1/account` (password + typed confirmation; queued checkpoint deletion job)
+- `PATCH /api/v1/onboarding` (dismiss/restore first-run checklist)
+- `GET /api/v1/ops/activation` (session-authed activation funnel summary)
 - `POST /api/v1/waitlist` (public card waitlist; email + feature)
 - `POST /api/v1/agents`
 - `GET /api/v1/agents`
@@ -129,6 +131,7 @@ The Node API exposes:
 | `apps/api/src/health.ts` | Shallow and deep health endpoints |
 | `apps/api/src/sentry.ts` | API Sentry initialization and event scrubber |
 | `apps/api/src/account.ts` | Account export ZIPs, signed download URLs, and deletion checkpoint job |
+| `apps/api/src/onboarding.ts` | First-run checklist state, step completion helpers, and activation metrics endpoint |
 | `apps/api/src/waitlist.ts` | Public card waitlist endpoint with dedupe and IP rate limiting |
 | `apps/api/src/retention.ts` | Daily data retention sweep for transcripts, email bodies, webhooks, usage, approvals, pairing, audit, and tombstones |
 | `apps/api/src/backup-retention.ts` | Pure backup archive pruning helper used by tests/runbooks |

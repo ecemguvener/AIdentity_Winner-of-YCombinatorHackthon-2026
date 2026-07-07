@@ -1,8 +1,9 @@
-import { Bell, LogOut, Mail, Phone, Plus } from "lucide-react";
+import { Bell, Check, Clock, Copy, LogOut, Mail, Phone, Plus, ShieldAlert, Terminal, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { billingApi, type BillingPlanName } from "../api/billing";
+import { agentsApi } from "../api/agents";
 import type { AgentDetailResponse, AgentListItem, Approval, IdentityToken } from "../api/types";
-import type { User } from "../api";
+import { api, type User, type OnboardingStep } from "../api";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
 import { Brand, formatSiteRelativeTime, getProjectCardStyle, type DashboardSection, type SiteDetailTab, type UserSettingsSection } from "../legacy/shared";
 import { DashboardChatIcon, DashboardChatScreen, DashboardSitesIcon, getDashboardChatGreetingName } from "../pages/ChatPage";
@@ -70,6 +71,7 @@ export function DashboardScreen({
   onCloseDetail: () => void;
 }) {
   const [billingBadge, setBillingBadge] = useState<{ plan: BillingPlanName; warning: boolean } | null>(null);
+  const [sandboxBanner, setSandboxBanner] = useState(false);
 
   useEffect(() => {
     let isCancelled = false;
@@ -80,6 +82,21 @@ export function DashboardScreen({
           meter.included > 0 ? meter.used / meter.included >= 0.8 : meter.used > 0
         );
         setBillingBadge({ plan: account.plan, warning });
+      })
+      .catch(() => undefined);
+    return () => {
+      isCancelled = true;
+    };
+  }, [user.id]);
+
+  useEffect(() => {
+    const storageKey = `barkan:sandbox-dismissed:${user.id}`;
+    let isCancelled = false;
+    void billingApi.getOpsStatus()
+      .then((status) => {
+        if (isCancelled) return;
+        const allMock = status.providerModes.email === "mock" && status.providerModes.phone === "mock" && status.providerModes.billing === "mock";
+        setSandboxBanner(allMock && window.localStorage.getItem(storageKey) !== "true");
       })
       .catch(() => undefined);
     return () => {
@@ -151,6 +168,20 @@ export function DashboardScreen({
         </div>
       </aside>
 
+      {sandboxBanner ? (
+        <div className="sandbox-banner" role="status">
+          <ShieldAlert size={17} aria-hidden="true" />
+          <span>Sandbox mode - actions are simulated.</span>
+          <a href="/docs-site/operators/email">See setup guide</a>
+          <button type="button" aria-label="Dismiss sandbox banner" onClick={() => {
+            window.localStorage.setItem(`barkan:sandbox-dismissed:${user.id}`, "true");
+            setSandboxBanner(false);
+          }}>
+            <X size={15} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
       {activeSection === "chat" ? (
         <DashboardChatScreen user={user} sites={agents.map(agentToChatSite)} />
       ) : activeSection === "approvals" ? (
@@ -189,8 +220,13 @@ export function DashboardScreen({
         <AgentsList
           agents={agents}
           error={error}
+          pendingApprovals={pendingApprovals}
+          user={user}
           onCreateAgent={onCreateAgent}
           onSelectAgent={onSelectAgent}
+          onOpenApprovals={onOpenApprovals}
+          onUserUpdated={onUserUpdated}
+          onNotify={onNotify}
         />
       )}
     </main>
@@ -200,13 +236,23 @@ export function DashboardScreen({
 function AgentsList({
   agents,
   error,
+  pendingApprovals,
+  user,
   onCreateAgent,
-  onSelectAgent
+  onSelectAgent,
+  onOpenApprovals,
+  onUserUpdated,
+  onNotify
 }: {
   agents: AgentListItem[];
   error: string;
+  pendingApprovals: Approval[];
+  user: User;
   onCreateAgent: () => void;
   onSelectAgent: (agentId: string) => void;
+  onOpenApprovals: () => void;
+  onUserUpdated: (user: User) => void;
+  onNotify: (notification: ToastNotificationInput) => void;
 }) {
   return (
     <section className="dashboard-page__workspace dashboard-page__workspace--projects">
@@ -219,6 +265,18 @@ function AgentsList({
           </header>
 
           <div className="dashboard-page__projects-grid-shell">
+            {agents.length > 0 ? (
+              <ActivationChecklist
+                agents={agents}
+                pendingApprovals={pendingApprovals}
+                user={user}
+                onCreateAgent={onCreateAgent}
+                onOpenApprovals={onOpenApprovals}
+                onSelectAgent={onSelectAgent}
+                onUserUpdated={onUserUpdated}
+                onNotify={onNotify}
+              />
+            ) : null}
             {error ? (
               <div className="dashboard-page__projects-state">{error}</div>
             ) : agents.length === 0 ? (
@@ -277,6 +335,104 @@ function AgentsList({
         </div>
       </div>
     </section>
+  );
+}
+
+function ActivationChecklist({
+  agents,
+  pendingApprovals,
+  user,
+  onCreateAgent,
+  onOpenApprovals,
+  onSelectAgent,
+  onUserUpdated,
+  onNotify
+}: {
+  agents: AgentListItem[];
+  pendingApprovals: Approval[];
+  user: User;
+  onCreateAgent: () => void;
+  onOpenApprovals: () => void;
+  onSelectAgent: (agentId: string) => void;
+  onUserUpdated: (user: User) => void;
+  onNotify: (notification: ToastNotificationInput) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (user.onboarding.dismissedAt || user.onboarding.completedAt) return null;
+  const firstAgent = agents[0];
+  const stepDone = (step: OnboardingStep) => Boolean(user.onboarding.steps[step]);
+  const pendingEmailApproval = pendingApprovals.find((approval) => approval.kind === "email.send");
+
+  async function dismiss() {
+    const response = await api.updateOnboarding(true);
+    onUserUpdated({ ...user, onboarding: response.onboarding });
+  }
+
+  async function sendTestEmail() {
+    if (!firstAgent) return;
+    setBusy(true);
+    try {
+      const result = await agentsApi.sendEmail(firstAgent.id, {
+        to: user.email,
+        subject: "Barkan first action",
+        text: `Hi ${user.displayName ?? user.email}, this is your agent identity sending its first governed email.`
+      });
+      onNotify({ title: result.ok ? "Test email sent" : "Approval requested" });
+    } catch (error) {
+      onNotify({ kind: "error", title: error instanceof Error ? error.message : "Could not send test email" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rows = [
+    { step: "agent_created" as const, title: "Create your agent", action: onCreateAgent, actionLabel: "Create" },
+    { step: "runtime_connected" as const, title: "Connect a runtime", action: () => firstAgent && onSelectAgent(firstAgent.id), actionLabel: "Copy snippet" },
+    { step: "first_email_sent" as const, title: "Send your first email", action: sendTestEmail, actionLabel: busy ? "Sending" : "Send test email" },
+    { step: "approval_decided" as const, title: "Approve it", action: onOpenApprovals, actionLabel: pendingEmailApproval ? "Review approval" : "Open approvals" }
+  ];
+
+  return (
+    <section className="activation-card" aria-label="Activation checklist">
+      <div className="activation-card__header">
+        <div>
+          <h2>Get to first action</h2>
+          <p>Connect a runtime, send one governed email, approve it, then you are live.</p>
+        </div>
+        <button type="button" aria-label="Dismiss checklist" onClick={() => void dismiss()}>
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="activation-card__rows">
+        {rows.map((row) => (
+          <button className="activation-card__row" type="button" key={row.step} disabled={busy && row.step === "first_email_sent"} onClick={() => void row.action()}>
+            {stepDone(row.step) ? <Check size={17} aria-hidden="true" /> : <Clock size={17} aria-hidden="true" />}
+            <span>{row.title}</span>
+            <small>{stepDone(row.step) ? "Done" : row.actionLabel}</small>
+          </button>
+        ))}
+        <button className="activation-card__row" type="button" onClick={() => firstAgent && onSelectAgent(firstAgent.id)}>
+          <Phone size={17} aria-hidden="true" />
+          <span>Add phone</span>
+          <small>Paid plans</small>
+        </button>
+      </div>
+      <div className="activation-card__snippets">
+        <Snippet label="MCP pair" value="npx @barkan/mcp --pair" />
+        <Snippet label="SDK" value="npm install @barkan/sdk" />
+      </div>
+    </section>
+  );
+}
+
+function Snippet({ label, value }: { label: string; value: string }) {
+  return (
+    <button className="activation-card__snippet" type="button" onClick={() => void navigator.clipboard.writeText(value)}>
+      <Terminal size={15} aria-hidden="true" />
+      <span>{label}</span>
+      <code>{value}</code>
+      <Copy size={14} aria-hidden="true" />
+    </button>
   );
 }
 

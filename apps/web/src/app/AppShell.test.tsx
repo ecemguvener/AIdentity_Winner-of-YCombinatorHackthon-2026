@@ -24,6 +24,7 @@ describe("App shell", () => {
               identityEmails: true,
               securityEmails: true
             },
+            onboarding: onboardingState(),
             createdAt: new Date().toISOString()
           }
         });
@@ -51,4 +52,18 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" }
   });
+}
+
+function onboardingState() {
+  return {
+    dismissedAt: null,
+    completedAt: null,
+    steps: {
+      agent_created: null,
+      runtime_connected: null,
+      first_email_sent: null,
+      approval_decided: null
+    },
+    events: []
+  };
 }

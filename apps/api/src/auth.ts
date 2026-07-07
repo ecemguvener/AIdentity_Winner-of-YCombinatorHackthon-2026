@@ -5,6 +5,7 @@ import type { AppConfig } from "./config.js";
 import type { Collections, UserDocument } from "./db.js";
 import { ensureBillingAccount } from "./billing.js";
 import { ApiError } from "./errors.js";
+import { serializeOnboarding } from "./onboarding.js";
 import { deletedEmailHash, deletedEmailHoldExpiresAt } from "./privacy.js";
 import {
   createSessionExpiry,
@@ -415,6 +416,7 @@ function serializeUser(user: UserDocument) {
       identityEmails: user.notificationPreferences?.identityEmails ?? true,
       securityEmails: user.notificationPreferences?.securityEmails ?? true
     },
+    onboarding: serializeOnboarding(user),
     createdAt: user.createdAt.toISOString()
   };
 }

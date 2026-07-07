@@ -9,6 +9,7 @@ import { issueIdentityToken } from "./agent-auth.js";
 import { recordAudit } from "./audit.js";
 import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
 import { identityTokenMode, reserveAgentSlug } from "./identity.js";
+import { completeOnboardingStep } from "./onboarding.js";
 import {
   CAPABILITY_NAMES,
   capabilityProvisioningSummary,
@@ -111,6 +112,7 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
       status: "allowed",
       detail: `Agent ${agent.name} created.`
     });
+    await completeOnboardingStep(collections, authContext.user._id, "agent_created", { agentId: agent._id.toHexString() });
 
     return reply.code(201).send({
       agent: await serializeAgentWithContacts(collections, agent),
@@ -304,6 +306,9 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
       status: "pending",
       detail: `${capability} capability ${action} requested.`
     });
+    if (action === "enable" && capability === "phone") {
+      await completeOnboardingStep(collections, authContext.user._id, "phone_added", { agentId: agent._id.toHexString() });
+    }
     return reply.code(202).send({ provisioning: { state: "pending", capability } });
   }
 

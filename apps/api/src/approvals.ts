@@ -8,6 +8,7 @@ import { authenticateAgentRequest } from "./agent-auth.js";
 import { requireAuth } from "./auth.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { ApiError } from "./errors.js";
+import { completeOnboardingStep } from "./onboarding.js";
 
 type ApprovalDecision = "approved" | "rejected";
 type WaitDecision = ApprovalDecision | "expired" | "timeout";
@@ -129,6 +130,10 @@ export async function decideApproval(
     resourceType: "approval",
     resourceId: finalApproval._id.toHexString(),
     metadata: { kind: finalApproval.kind }
+  });
+  await completeOnboardingStep(collections, finalApproval.ownerUserId, "approval_decided", {
+    approvalId: finalApproval._id.toHexString(),
+    decision
   });
   emitApproval("approval.decided", finalApproval);
   return finalApproval;

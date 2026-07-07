@@ -17,6 +17,15 @@ export interface UserDocument extends Document {
   loginFirstFailedAt?: Date;
   loginLockedUntil?: Date;
   deletedAt?: Date;
+  onboarding?: {
+    dismissedAt?: Date;
+    completedAt?: Date;
+    events?: Array<{
+      step: "agent_created" | "runtime_connected" | "first_email_sent" | "approval_decided" | "phone_added";
+      at: Date;
+      metadata?: Record<string, unknown>;
+    }>;
+  };
   createdAt: Date;
   updatedAt?: Date;
 }

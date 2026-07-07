@@ -85,6 +85,17 @@ function user(): User {
     displayName: "Owner",
     avatarUrl: null,
     notificationPreferences: { productEmails: true, identityEmails: true, securityEmails: true },
+    onboarding: {
+      dismissedAt: null,
+      completedAt: null,
+      steps: {
+        agent_created: null,
+        runtime_connected: null,
+        first_email_sent: null,
+        approval_decided: null
+      },
+      events: []
+    },
     createdAt: "2026-07-07T00:00:00.000Z"
   };
 }

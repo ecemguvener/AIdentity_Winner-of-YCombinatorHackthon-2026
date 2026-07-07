@@ -1,5 +1,6 @@
 import { Bot, Check, Copy, CreditCard, Mail, Phone, Server, X, Zap } from "lucide-react";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { billingApi } from "../api/billing";
 import { agentsApi } from "../api/agents";
 import type { Agent, CreateAgentResponse } from "../api/types";
 import { Brand, getErrorMessage, requiredFieldMessage, type ToastNotificationInput } from "../legacy/shared";
@@ -30,6 +31,7 @@ export function AgentCreationWizard({
   const [runtime, setRuntime] = useState<RuntimeChoice>("openclaw");
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [phoneEnabled, setPhoneEnabled] = useState(false);
+  const [phoneLocked, setPhoneLocked] = useState(true);
   const [nameError, setNameError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -37,6 +39,18 @@ export function AgentCreationWizard({
   const [isTokenCopied, setIsTokenCopied] = useState(false);
   const normalizedName = name.trim();
   const normalizedDescription = description.trim();
+
+  useEffect(() => {
+    let cancelled = false;
+    void billingApi.getAccount()
+      .then((account) => {
+        if (!cancelled) setPhoneLocked(account.plan === "free");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function goTo(nextStep: WizardStep) {
     if (nextStep !== "identity" && !normalizedName) {
@@ -146,10 +160,11 @@ export function AgentCreationWizard({
             />
             <CapabilityToggle
               checked={phoneEnabled}
-              description="Provision a phone number for calls and SMS."
+              description={phoneLocked ? "Phone unlocks on paid plans. You can add it after upgrading." : "Provision a phone number for calls and SMS."}
+              disabled={phoneLocked}
               icon={<Phone size={20} aria-hidden="true" />}
-              label="Phone"
-              onChange={setPhoneEnabled}
+              label={phoneLocked ? "Phone - upgrade required" : "Phone"}
+              onChange={(checked) => setPhoneEnabled(phoneLocked ? false : checked)}
             />
             <div className="site-onboarding-page__choice site-onboarding-page__choice--disabled" title="Controlled agent spending is on the roadmap">
               <CreditCard size={20} aria-hidden="true" />
@@ -214,19 +229,21 @@ export function AgentCreationWizard({
 function CapabilityToggle({
   checked,
   description,
+  disabled = false,
   icon,
   label,
   onChange
 }: {
   checked: boolean;
   description: string;
+  disabled?: boolean;
   icon: ReactNode;
   label: string;
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className={`site-onboarding-page__choice${checked ? " site-onboarding-page__choice--selected" : ""}`}>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    <label className={`site-onboarding-page__choice${checked ? " site-onboarding-page__choice--selected" : ""}${disabled ? " site-onboarding-page__choice--disabled" : ""}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       {icon}
       <span>{label}</span>
       <small>{description}</small>
@@ -240,12 +257,21 @@ function RuntimeInstructions({ agent, tokenPrefix }: { agent: Agent; tokenPrefix
     () => `BARKAN_API_URL=${window.location.origin.replace(/:4888$/, ":4001")}\nBARKAN_IDENTITY_TOKEN=${tokenPrefix}_...`,
     [tokenPrefix]
   );
+  const pairText = "npx @barkan/mcp --pair";
+  const sdkText = `import { BarkanClient } from "@barkan/sdk";
+
+const barkan = new BarkanClient({
+  apiUrl: process.env.BARKAN_API_URL,
+  token: process.env.BARKAN_IDENTITY_TOKEN
+});`;
 
   return (
     <div className="site-onboarding-page__receipt">
       <strong>{runtimeName} connection</strong>
       <code>{envText}</code>
-      <span>Skill and MCP install links land in the integration setup tasks.</span>
+      <code>{pairText}</code>
+      <code>{sdkText}</code>
+      <span>Use the pair shortcut for MCP, or paste the env lines into OpenClaw, Hermes, or SDK config.</span>
     </div>
   );
 }

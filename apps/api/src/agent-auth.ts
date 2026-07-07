@@ -3,6 +3,7 @@ import type { FastifyRequest, preHandlerHookHandler } from "fastify";
 import { ObjectId } from "mongodb";
 import type { AgentDocument, Collections, IdentityTokenDocument } from "./db.js";
 import { ApiError } from "./errors.js";
+import { completeOnboardingStep } from "./onboarding.js";
 import { hashApiKey } from "./security.js";
 
 // ---------------------------------------------------------------------------
@@ -100,9 +101,16 @@ export async function authenticateAgentRequest(
     return null;
   }
   if (!token.lastUsedAt || now.getTime() - token.lastUsedAt.getTime() >= LAST_USED_UPDATE_INTERVAL_MS) {
+    const isFirstUse = !token.lastUsedAt;
     token.lastUsedAt = now;
     token.lastUsedIp = request.ip;
     await collections.identityTokens.updateOne({ _id: token._id }, { $set: { lastUsedAt: now, lastUsedIp: request.ip } });
+    if (isFirstUse) {
+      await completeOnboardingStep(collections, token.ownerUserId ?? agent.ownerUserId, "runtime_connected", {
+        agentId: agent._id.toHexString(),
+        tokenId: token._id.toHexString()
+      });
+    }
   }
   return { agent, token };
 }

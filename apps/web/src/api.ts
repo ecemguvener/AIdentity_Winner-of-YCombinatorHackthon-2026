@@ -4,7 +4,17 @@ export interface User {
   displayName: string | null;
   avatarUrl: string | null;
   notificationPreferences: UserNotificationPreferences;
+  onboarding: OnboardingState;
   createdAt: string;
+}
+
+export type OnboardingStep = "agent_created" | "runtime_connected" | "first_email_sent" | "approval_decided";
+
+export interface OnboardingState {
+  dismissedAt: string | null;
+  completedAt: string | null;
+  steps: Record<OnboardingStep, string | null>;
+  events: Array<{ step: OnboardingStep | "phone_added"; at: string; metadata: Record<string, unknown> }>;
 }
 
 export interface UserNotificationPreferences {
@@ -177,6 +187,11 @@ export const api = {
     apiRequest<{ ok: boolean }>("/api/auth/me/password", {
       method: "POST",
       body: JSON.stringify({ currentPassword, newPassword })
+    }),
+  updateOnboarding: (dismissed: boolean) =>
+    apiRequest<{ onboarding: OnboardingState }>("/api/v1/onboarding", {
+      method: "PATCH",
+      body: JSON.stringify({ dismissed })
     }),
   checkEmail: (email: string) =>
     apiRequestWithBaseUrlFallback<{ exists: boolean }>(

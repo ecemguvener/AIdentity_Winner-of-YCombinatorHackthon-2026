@@ -30,6 +30,7 @@ import { registerPolicyRoutes } from "./policies.js";
 import { registerPhoneProvisioner } from "./phone-provisioning.js";
 import { registerPhoneApprovalExecutor } from "./phone-service.js";
 import { registerOpenApiRoutes } from "./openapi.js";
+import { registerOnboardingRoutes } from "./onboarding.js";
 import { registerSiteRoutes } from "./sites.js";
 import { registerSmsApprovalExecutor } from "./sms-service.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
@@ -224,6 +225,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerSiteEmailRoutes(app, collections, config, emailProvider);
   registerIdentityRoutes(app, collections, config);
   registerMcpRoutes(app, collections, config, emailProvider);
+  registerOnboardingRoutes(app, collections, config);
   registerPairingRoutes(app, collections, config);
   registerPhoneRoutes(app, collections, config);
   registerPolicyRoutes(app, collections, config);

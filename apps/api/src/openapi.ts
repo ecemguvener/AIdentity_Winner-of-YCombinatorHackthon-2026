@@ -142,6 +142,12 @@ const paths: Record<string, PathItem> = {
   "/api/v1/account": {
     delete: owner("privacy", "Delete account", { schema: objectSchema({ password: { type: "string" }, confirm: { type: "string", enum: ["DELETE"] } }) }, accepted)
   },
+  "/api/v1/onboarding": {
+    patch: owner("onboarding", "Dismiss onboarding checklist", { schema: objectSchema({ dismissed: { type: "boolean" } }, ["dismissed"]) })
+  },
+  "/api/v1/ops/activation": {
+    get: owner("onboarding", "Get activation funnel summary")
+  },
   "/api/v1/waitlist": {
     post: {
       ...operation("waitlist", "Join feature waitlist", [], { schema: objectSchema({ email: { type: "string", format: "email" }, feature: { type: "string", enum: ["card"] } }, ["email", "feature"]) }, accepted, []),
@@ -199,6 +205,7 @@ export function buildOpenApiDocument(config: AppConfig) {
       { name: "privacy", description: "Account export and deletion." },
       { name: "approvals", description: "Owner approval requests for gated agent actions." },
       { name: "billing", description: "Plans, checkout, usage, and billing portal." },
+      { name: "onboarding", description: "First-run activation state and metrics." },
       { name: "waitlist", description: "Public feature waitlists." }
     ],
     paths,

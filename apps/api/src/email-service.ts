@@ -5,6 +5,7 @@ import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { emitOwnerEvent, registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
 import { ApiError } from "./errors.js";
 import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
+import { completeOnboardingStep } from "./onboarding.js";
 import type { EmailAttachmentInput, EmailInboundClient, EmailProvider, ReceivedEmailContent } from "./providers/email-provider.js";
 import { getEmailPolicy, isRecipientAllowedByPatterns } from "./policies.js";
 import { recordUsage } from "./usage.js";
@@ -166,6 +167,10 @@ export async function sendAgentEmail(
       metadata: { providerMessageId: sendResult.providerMessageId }
     });
     await recordEmailUsage(collections, input.agent);
+    await completeOnboardingStep(collections, input.agent.ownerUserId, "first_email_sent", {
+      agentId: input.agent._id.toHexString(),
+      messageId: message._id.toHexString()
+    });
     return { message: updated ?? { ...message, providerMessageId: sendResult.providerMessageId, status: "sent", updatedAt: sentAt }, thread, replayed: false };
   } catch (error) {
     const failedAt = new Date();

@@ -8,6 +8,7 @@ The dashboard supports the current agent identity flow:
 - Choose an existing OpenClaw instance or a managed OpenClaw deployment.
 - Copy a prompt into OpenClaw so it can install the Barkan identity skill and confirm linking through a tokenized endpoint.
 - Manage identity details, OpenClaw link tokens, dashboard chat, phone, email, billing, and card waitlist surfaces.
+- Use the first-run checklist to connect a runtime, send the first governed email, approve it, and inspect activation progress.
 
 The backend still keeps the original `sites` and `site-setups` route names internally for speed during the hackathon. The user-facing product language is agent identities.
 

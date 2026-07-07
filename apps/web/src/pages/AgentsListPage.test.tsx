@@ -18,23 +18,29 @@ describe("Agent creation wizard", () => {
   });
 
   it("reveals the identity token once and masks it after copy", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
-      agent: {
-        id: "agent_1",
-        name: "Maya",
-        slug: "maya",
-        status: "active",
-        description: null,
-        runtime: "openclaw",
-        capabilities: { email: true, phone: false },
-        approvalMode: "always",
-        emailAddress: null,
-        phoneE164: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      identityToken: { secret: "barkan_secret_once", prefix: "barkan" }
-    }, 201));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/billing")) {
+        return jsonResponse({ plan: "free" });
+      }
+      return jsonResponse({
+        agent: {
+          id: "agent_1",
+          name: "Maya",
+          slug: "maya",
+          status: "active",
+          description: null,
+          runtime: "openclaw",
+          capabilities: { email: true, phone: false },
+          approvalMode: "always",
+          emailAddress: null,
+          phoneE164: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        identityToken: { secret: "barkan_secret_once", prefix: "barkan" }
+      }, 201);
+    });
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
 
     render(<AgentCreationWizard onCancel={vi.fn()} onCreated={vi.fn()} onNotify={vi.fn()} />);

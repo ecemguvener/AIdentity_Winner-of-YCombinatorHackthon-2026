@@ -108,6 +108,11 @@ export function AppShell() {
       };
       eventSource.addEventListener("approval.decided", handleTerminal);
       eventSource.addEventListener("approval.expired", handleTerminal);
+      eventSource.addEventListener("onboarding.updated", (event) => {
+        lastEventAt = new Date().toISOString();
+        const onboarding = JSON.parse((event as MessageEvent).data) as User["onboarding"];
+        setUser((current) => current ? { ...current, onboarding } : current);
+      });
       eventSource.onerror = () => {
         eventSource?.close();
         void refreshPendingApprovals().catch(() => undefined);
@@ -149,8 +154,11 @@ export function AppShell() {
     try {
       const response = await api.me();
       setUser(response.user);
-      await refreshAgents();
+      const loadedAgents = await refreshAgents();
       await refreshPendingApprovals();
+      if (shouldStartFirstRun(response.user, loadedAgents, path)) {
+        replacePath(newSitePath);
+      }
     } catch {
       setUser(null);
       if (isProtectedAppRoute(path)) replacePath(signinPath);
@@ -222,6 +230,7 @@ export function AppShell() {
 
   function handleAgentCreated(response: CreateAgentResponse) {
     setAgents((currentAgents) => [{ ...response.agent, provisioning: emptyProvisioning(response.agent) }, ...currentAgents]);
+    void api.me().then(({ user: nextUser }) => setUser(nextUser)).catch(() => undefined);
   }
 
   function handleTokensChanged(tokens: IdentityToken[]) {
@@ -346,8 +355,14 @@ export function AppShell() {
         key={currentLocation}
         onAuthed={(nextUser) => setUser(nextUser)}
         onReady={async () => {
-          await refreshAgents();
-          if (isSigninRoute(currentPath)) replacePath(dashboardPath);
+          const { user: nextUser } = await api.me();
+          setUser(nextUser);
+          const loadedAgents = await refreshAgents();
+          if (shouldStartFirstRun(nextUser, loadedAgents, currentPath)) {
+            replacePath(newSitePath);
+          } else if (isSigninRoute(currentPath)) {
+            replacePath(dashboardPath);
+          }
         }}
       />
     );
@@ -442,4 +457,8 @@ function emptyProvisioning(agent: CreateAgentResponse["agent"]): AgentDetailResp
       detail: agent.capabilities.phone ? "Provisioning phone..." : undefined
     }
   };
+}
+
+function shouldStartFirstRun(user: User, agents: AgentListItem[], path: string): boolean {
+  return isSigninRoute(path) && agents.length === 0 && !user.onboarding.dismissedAt && !user.onboarding.steps.agent_created;
 }
