@@ -368,7 +368,8 @@ export async function replyToAgentEmailThread(
   collections: Collections,
   config: AppConfig,
   provider: EmailProvider,
-  input: { agent: AgentDocument; actor?: "agent" | "owner"; threadId: string; text: string; idempotencyKey?: string }
+  input: { agent: AgentDocument; actor?: "agent" | "owner"; threadId: string; text: string; idempotencyKey?: string },
+  approvalOptions: EmailApprovalOptions = {}
 ) {
   const { thread, messages } = await getAgentEmailThread(collections, input.agent, input.threadId);
   const lastInbound = [...messages].reverse().find((message) => message.direction === "inbound");
@@ -387,7 +388,7 @@ export async function replyToAgentEmailThread(
     threadId: thread._id.toHexString(),
     idempotencyKey: input.idempotencyKey,
     headers
-  });
+  }, approvalOptions);
 }
 
 async function evaluateEmailPolicy(

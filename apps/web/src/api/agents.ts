@@ -70,7 +70,7 @@ export const agentsApi = {
     }),
   replyEmail: (agentId: string, threadId: string, input: { text: string }) =>
     requestJson<AgentEmailSendResponse>(
-      `/api/v1/agents/${encodeURIComponent(agentId)}/email/threads/${encodeURIComponent(threadId)}/reply`,
+      `/api/v1/agents/${encodeURIComponent(agentId)}/email/threads/${encodeURIComponent(threadId)}/reply?mode=async`,
       {
         method: "POST",
         body: JSON.stringify(input)

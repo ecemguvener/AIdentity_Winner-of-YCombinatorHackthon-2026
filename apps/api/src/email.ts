@@ -496,6 +496,19 @@ export function registerEmailRoutes(
     return listAgentEmailThreads(collections, context.agent, query.cursor);
   });
 
+  app.get("/api/v1/agent/email/address", async (request) => {
+    const context = await loadAgentEmailContext(request, collections);
+    const account = await collections.emailAccounts.findOne({ agentId: context.agent._id });
+    if (!account) {
+      throw new ApiError(404, "not_found", "email address not found");
+    }
+    return {
+      address: account.address,
+      displayName: account.displayName,
+      status: account.status
+    };
+  });
+
   app.get("/api/v1/agent/email/threads/:threadId", async (request) => {
     const context = await loadAgentEmailContext(request, collections);
     const { threadId } = request.params as { threadId: string };
@@ -521,7 +534,7 @@ export function registerEmailRoutes(
       threadId,
       text: payload.text,
       idempotencyKey: payload.idempotencyKey ?? readIdempotencyHeader(request)
-    });
+    }, readSendApprovalQuery(request));
     if (result.approvalRequired) {
       return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
     }
@@ -585,7 +598,7 @@ export function registerEmailRoutes(
       threadId,
       text: payload.text,
       idempotencyKey: payload.idempotencyKey ?? readIdempotencyHeader(request)
-    });
+    }, readSendApprovalQuery(request));
     if (result.approvalRequired) {
       return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
     }

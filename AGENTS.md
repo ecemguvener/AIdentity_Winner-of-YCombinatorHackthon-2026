@@ -58,7 +58,7 @@ The Node API exposes:
 - `POST /api/tools/calendar/book`
 - Payment tool routes under `/api/tools/payments/*`
 - Email tool routes under `/api/tools/email/*` and `/api/sites/:siteId/email/*`
-- Agent email routes: `POST /api/v1/agent/email/send`, `GET /api/v1/agent/email/threads`, `GET /api/v1/agent/email/threads/:threadId`, `POST /api/v1/agent/email/threads/:threadId/reply`, `GET /api/v1/agent/email/threads/:threadId/attachments/:attachmentId`
+- Agent email routes: `GET /api/v1/agent/email/address`, `POST /api/v1/agent/email/send`, `GET /api/v1/agent/email/threads`, `GET /api/v1/agent/email/threads/:threadId`, `POST /api/v1/agent/email/threads/:threadId/reply`, `GET /api/v1/agent/email/threads/:threadId/attachments/:attachmentId`
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
 - `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
@@ -85,6 +85,7 @@ The Node API exposes:
 | `apps/api/src/email.ts` | Email routes, drafting helpers, and email activity serializers |
 | `apps/api/src/email-service.ts` | Persistent outbound/inbound email threads, idempotency, and replies |
 | `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |
+| `docs/api/email.md` | Frozen agent-facing email API contract |
 | `apps/api/src/payments.ts` | Payment capability and policy engine |
 | `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |
 | `apps/api/src/webhooks/verify.ts` | Stripe/Svix/Twilio/ElevenLabs signature verifiers |
