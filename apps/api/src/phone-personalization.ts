@@ -5,7 +5,7 @@ import { emitOwnerEvent } from "./approvals.js";
 import type { AgentDocument, CallDocument, Collections, PhoneNumberDocument, PhonePolicy, UserDocument } from "./db.js";
 import { ApiError } from "./errors.js";
 import { normalizeE164PhoneNumber } from "./lib/phone.js";
-import { getPhonePolicy } from "./policies.js";
+import { defaultPhonePolicy, getPhonePolicy } from "./policies.js";
 
 const defaultAgentRole = "personal assistant";
 const notInServiceMessage = "This number is not in service.";
@@ -119,7 +119,7 @@ async function loadCallContext(
 ): Promise<[AgentDocument | null, PhonePolicy, UserDocument | null]> {
   const agent = await collections.agents.findOne({ _id: call.agentId, status: { $ne: "revoked" } });
   if (!agent) {
-    return [null, { inboundEnabled: false, blockedCallers: [], inboundInstructions: "", storeTranscripts: true }, null];
+    return [null, { ...defaultPhonePolicy(), inboundEnabled: false, inboundInstructions: "" }, null];
   }
   const [policy, owner] = await Promise.all([
     getPhonePolicy(collections, agent),

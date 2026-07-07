@@ -42,6 +42,7 @@ The Node API exposes:
 - `DELETE /api/v1/agents/:agentId/tokens/:tokenId`
 - `POST /api/v1/agents/:agentId/capabilities/:capability/enable|disable` (email|phone; card returns 400 "coming soon")
 - `GET/PUT /api/v1/agents/:agentId/policies/email`
+- `GET/PUT /api/v1/agents/:agentId/policies/phone`
 - `GET /api/v1/agents/:agentId/email/threads`
 - `GET /api/v1/agents/:agentId/email/threads/:threadId`
 - `POST /api/v1/agents/:agentId/email/threads/:threadId/reply`
@@ -87,20 +88,22 @@ The Node API exposes:
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
-| `apps/api/src/policies.ts` | Agent policy defaults, email recipient pattern matching, and policy routes |
+| `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |
 | `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
-| `apps/api/src/phone-service.ts` | Per-agent outbound phone call service, call persistence, mock lifecycle, and call serializers |
+| `apps/api/src/phone-service.ts` | Per-agent outbound phone call service, policy/approval gating, call persistence, mock lifecycle, and call serializers |
+| `apps/api/src/phone-policy.ts` | Phone/SMS country allowlist, quiet-hours, and local-day policy helpers |
 | `apps/api/src/phone-post-call.ts` | ElevenLabs post-call webhook finalization, transcript storage, call cost, and usage metering |
 | `apps/api/src/phone-provisioning.ts` | Twilio number purchase + ElevenLabs voice-agent phone capability provisioner |
 | `apps/api/src/phone-personalization.ts` | ElevenLabs inbound-call personalization webhook and call row creation |
 | `apps/api/src/phone-numbers.ts` | Twilio phone number persistence and lifecycle helpers |
 | `apps/api/src/lib/phone.ts` | Shared E.164 phone normalization helper |
+| `apps/api/src/lib/phone-country.ts` | Static E.164 prefix to ISO country mapping for phone policies |
 | `apps/api/src/providers/twilio-numbers.ts` | Twilio/mock number search, purchase, release, and audit listing |
 | `apps/api/src/providers/twilio-sms.ts` | Twilio/mock SMS send provider |
 | `apps/api/src/providers/elevenlabs-phone.ts` | ElevenLabs Conversational AI phone number import/assign/remove provider |
-| `apps/api/src/sms-service.ts` | Agent SMS send/receive, delivery status updates, latest-code extraction, and serializers |
+| `apps/api/src/sms-service.ts` | Agent SMS send/receive, policy/approval gating, delivery status updates, latest-code extraction, and serializers |
 | `apps/api/src/email.ts` | Email routes, drafting helpers, and email activity serializers |
 | `apps/api/src/email-service.ts` | Persistent outbound/inbound email threads, idempotency, and replies |
 | `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |

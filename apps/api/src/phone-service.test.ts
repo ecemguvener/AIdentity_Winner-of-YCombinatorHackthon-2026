@@ -194,7 +194,7 @@ async function insertFixture(input: { withPhone?: boolean } = {}): Promise<{
     _id: new ObjectId(),
     agentId: agent._id,
     email: defaultEmailPolicy(agent.approvalMode),
-    phone: defaultPhonePolicy(),
+    phone: { ...defaultPhonePolicy(), requireApprovalOutboundCall: "never" },
     createdAt: now,
     updatedAt: now
   });

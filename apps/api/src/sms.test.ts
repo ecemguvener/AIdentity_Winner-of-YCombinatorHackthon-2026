@@ -252,7 +252,7 @@ async function insertFixture(): Promise<{ user: UserDocument; agent: AgentDocume
     _id: new ObjectId(),
     agentId: agent._id,
     email: defaultEmailPolicy(agent.approvalMode),
-    phone: defaultPhonePolicy(),
+    phone: { ...defaultPhonePolicy(), requireApprovalSms: "never" },
     createdAt: now,
     updatedAt: now
   });

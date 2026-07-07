@@ -61,6 +61,19 @@ export interface EmailPolicy {
   maxRecipientsPerMessage: number;
 }
 
+export interface PhonePolicy {
+  requireApprovalOutboundCall: "always" | "new_recipients" | "never";
+  requireApprovalSms: "always" | "new_recipients" | "never";
+  allowedCountries: string[];
+  blockedCallers: string[];
+  inboundEnabled: boolean;
+  inboundInstructions: string;
+  dailyCallLimit: number;
+  dailySmsLimit: number;
+  quietHours: { start: string; end: string; timezone: string } | null;
+  storeTranscripts: boolean;
+}
+
 export interface AgentEmailIdentity {
   email_identity_id: string;
   email_address: string;

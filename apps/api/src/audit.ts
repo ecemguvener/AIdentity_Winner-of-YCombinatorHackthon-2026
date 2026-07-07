@@ -21,12 +21,14 @@ export const AUDIT_ACTIONS = {
   phone: {
     outbound: "phone.call.outbound",
     inbound: "phone.call.inbound",
+    blocked: "phone.blocked",
     provisioned: "phone.provisioned",
     released: "phone.released"
   },
   sms: {
     send: "sms.send",
-    receive: "sms.receive"
+    receive: "sms.receive",
+    blocked: "sms.blocked"
   },
   approval: {
     requested: "approval.requested",

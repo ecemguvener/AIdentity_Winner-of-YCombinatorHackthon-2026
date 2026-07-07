@@ -10,6 +10,7 @@ import type {
   CreateAgentResponse,
   CreateTokenResponse,
   EmailPolicy,
+  PhonePolicy,
   UpdateAgentInput
 } from "./types";
 
@@ -54,6 +55,13 @@ export const agentsApi = {
     requestJson<{ policy: EmailPolicy }>(`/api/v1/agents/${encodeURIComponent(agentId)}/policies/email`),
   updateEmailPolicy: (agentId: string, policy: EmailPolicy) =>
     requestJson<{ policy: EmailPolicy }>(`/api/v1/agents/${encodeURIComponent(agentId)}/policies/email`, {
+      method: "PUT",
+      body: JSON.stringify(policy)
+    }),
+  getPhonePolicy: (agentId: string) =>
+    requestJson<{ policy: PhonePolicy }>(`/api/v1/agents/${encodeURIComponent(agentId)}/policies/phone`),
+  updatePhonePolicy: (agentId: string, policy: PhonePolicy) =>
+    requestJson<{ policy: PhonePolicy }>(`/api/v1/agents/${encodeURIComponent(agentId)}/policies/phone`, {
       method: "PUT",
       body: JSON.stringify(policy)
     }),

@@ -83,7 +83,7 @@ describe("identity layer routes (Mongo-backed)", () => {
       headers: { authorization: `Bearer ${init.identity_token}` },
       payload: { to: "+1 555 0100", script: "Hi, can we talk?" }
     });
-    expect(blocked.statusCode).toBe(403);
+    expect(blocked.statusCode).toBe(409);
 
     await database.collections.phoneNumbers.insertOne({
       _id: new ObjectId(),
@@ -98,6 +98,10 @@ describe("identity layer routes (Mongo-backed)", () => {
       createdAt: new Date(),
       updatedAt: new Date()
     });
+    await database.collections.policies.updateOne(
+      { agentId: new ObjectId(init.agent_id) },
+      { $set: { "phone.requireApprovalOutboundCall": "never" } }
+    );
 
     const allowed = await app.inject({
       method: "POST",

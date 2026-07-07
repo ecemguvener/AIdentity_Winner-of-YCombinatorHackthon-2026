@@ -1,18 +1,33 @@
 import { ObjectId } from "mongodb";
 import type { AppConfig } from "./config.js";
-import type { AgentDocument, Collections, PhoneNumberDocument, SmsMessageDocument } from "./db.js";
+import type { AgentDocument, ApprovalDocument, Collections, PhoneNumberDocument, SmsMessageDocument } from "./db.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
-import { emitOwnerEvent } from "./approvals.js";
+import { emitOwnerEvent, registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
 import { ApiError } from "./errors.js";
 import { normalizeE164PhoneNumber } from "./lib/phone.js";
+import { enforcePhoneCountry, startOfPolicyDay } from "./phone-policy.js";
+import { getPhonePolicy } from "./policies.js";
 import { sendSms as sendTwilioSms } from "./providers/twilio-sms.js";
 
 const maxSmsBodyLength = 1600;
 
+export interface SendAgentSmsInput {
+  agent: AgentDocument;
+  actor?: "agent" | "owner";
+  to: string;
+  body: string;
+  idempotencyKey?: string | null;
+}
+
+export interface SmsApprovalOptions {
+  waitMs?: number;
+  async?: boolean;
+}
+
 export async function sendAgentSms(
   collections: Collections,
   config: AppConfig,
-  input: { agent: AgentDocument; to: string; body: string; idempotencyKey?: string | null }
+  input: SendAgentSmsInput
 ): Promise<SmsMessageDocument> {
   const to = normalizeE164OrThrow(input.to, "to");
   const body = input.body.trim();
@@ -49,7 +64,7 @@ export async function sendAgentSms(
   await recordAudit(collections, {
     agentId: input.agent._id,
     ownerUserId: input.agent.ownerUserId,
-    actor: "agent",
+    actor: input.actor ?? "agent",
     action: AUDIT_ACTIONS.sms.send,
     status: "allowed",
     detail: `SMS sent to ${to}.`,
@@ -59,6 +74,72 @@ export async function sendAgentSms(
   });
   await recordSmsUsage(collections, input.agent, new Date());
   return finalMessage;
+}
+
+export async function sendAgentSmsWithPolicy(
+  collections: Collections,
+  config: AppConfig,
+  input: SendAgentSmsInput,
+  approvalOptions: SmsApprovalOptions = {}
+): Promise<SmsMessageDocument | { approvalRequired: true; approval: ApprovalDocument; decision: "pending" | "timeout" | "expired" }> {
+  const to = normalizeE164OrThrow(input.to, "to");
+  const body = input.body.trim();
+  if (!body || body.length > maxSmsBodyLength) {
+    throw new ApiError(400, "validation_failed", "SMS body must be 1-1600 characters");
+  }
+  await activePhoneNumber(collections, input.agent);
+  const policyDecision = await evaluateSmsPolicy(collections, input);
+  if (policyDecision.type === "blocked") {
+    await auditSmsBlocked(collections, input, policyDecision.reason);
+    throw new ApiError(403, "policy_blocked", policyDecision.reason);
+  }
+  if (policyDecision.type === "allowed") {
+    return sendAgentSms(collections, config, input);
+  }
+  if (!input.agent.ownerUserId) {
+    const reason = "SMS approval requires an owner user";
+    await auditSmsBlocked(collections, input, reason);
+    throw new ApiError(403, "policy_blocked", reason);
+  }
+  const approval = await requestApproval(collections, {
+    agentId: input.agent._id,
+    ownerUserId: input.agent.ownerUserId,
+    kind: "sms.send",
+    payloadSummary: `Send SMS to ${to}: ${input.body.trim().slice(0, 80)}`,
+    payload: serializeSmsApprovalPayload(input)
+  });
+  if (approvalOptions.async) {
+    return { approvalRequired: true, approval, decision: "pending" };
+  }
+  const decision = await waitForDecision(collections, approval._id, { timeoutMs: approvalOptions.waitMs ?? 90_000 });
+  const updated = await collections.approvals.findOne({ _id: approval._id }) ?? approval;
+  if (decision === "approved" && updated.executionResult) {
+    const messageId = updated.executionResult.messageId;
+    const message = typeof messageId === "string" && ObjectId.isValid(messageId)
+      ? await collections.smsMessages.findOne({ _id: new ObjectId(messageId), agentId: input.agent._id })
+      : null;
+    if (message) return message;
+  }
+  if (decision === "rejected") {
+    throw new ApiError(403, "approval_required", "SMS send was rejected");
+  }
+  if (decision === "expired") {
+    throw new ApiError(403, "approval_required", "SMS send approval expired");
+  }
+  return { approvalRequired: true, approval: updated, decision: decision === "timeout" ? "timeout" : "pending" };
+}
+
+export function registerSmsApprovalExecutor(collections: Collections, config: AppConfig): void {
+  registerApprovalExecutor("sms.send", async (approval) => {
+    const agent = await collections.agents.findOne({ _id: approval.agentId, status: { $ne: "revoked" } });
+    if (!agent) throw new Error("agent not found");
+    const message = await sendAgentSms(collections, config, parseSmsApprovalPayload(agent, approval.payload));
+    return {
+      messageId: message._id.toHexString(),
+      status: message.status,
+      to: message.counterpartyE164
+    };
+  });
 }
 
 export async function ingestInboundSms(collections: Collections, payload: unknown): Promise<string> {
@@ -211,6 +292,64 @@ async function recordSmsUsage(collections: Collections, agent: AgentDocument, no
     createdAt: now,
     updatedAt: now
   });
+}
+
+async function evaluateSmsPolicy(
+  collections: Collections,
+  input: SendAgentSmsInput
+): Promise<{ type: "allowed" } | { type: "approval_required" } | { type: "blocked"; reason: string }> {
+  const to = normalizeE164PhoneNumber(input.to);
+  if (!to) return { type: "allowed" };
+  const policy = await getPhonePolicy(collections, input.agent);
+  const country = enforcePhoneCountry(policy, to);
+  if (!country.ok) return { type: "blocked", reason: country.reason };
+  const todaySms = await collections.smsMessages.countDocuments({
+    agentId: input.agent._id,
+    direction: "outbound",
+    createdAt: { $gte: startOfPolicyDay(policy) }
+  });
+  if (todaySms >= policy.dailySmsLimit) {
+    return { type: "blocked", reason: `daily SMS limit of ${policy.dailySmsLimit} reached` };
+  }
+  if (policy.requireApprovalSms === "never") return { type: "allowed" };
+  if (policy.requireApprovalSms === "always") return { type: "approval_required" };
+  const knownRecipientCount = await collections.smsMessages.countDocuments({
+    agentId: input.agent._id,
+    direction: "outbound",
+    counterpartyE164: to,
+    status: { $in: ["sent", "delivered"] }
+  });
+  return knownRecipientCount > 0 ? { type: "allowed" } : { type: "approval_required" };
+}
+
+async function auditSmsBlocked(collections: Collections, input: SendAgentSmsInput, reason: string): Promise<void> {
+  await recordAudit(collections, {
+    agentId: input.agent._id,
+    ownerUserId: input.agent.ownerUserId,
+    actor: input.actor ?? "agent",
+    action: AUDIT_ACTIONS.sms.blocked,
+    status: "blocked",
+    detail: reason
+  });
+}
+
+function serializeSmsApprovalPayload(input: SendAgentSmsInput): Record<string, unknown> {
+  return {
+    to: input.to,
+    body: input.body,
+    ...(input.actor ? { actor: input.actor } : {}),
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {})
+  };
+}
+
+function parseSmsApprovalPayload(agent: AgentDocument, payload: Record<string, unknown>): SendAgentSmsInput {
+  return {
+    agent,
+    actor: payload.actor === "owner" ? "owner" : "agent",
+    to: String(payload.to ?? ""),
+    body: String(payload.body ?? ""),
+    idempotencyKey: typeof payload.idempotencyKey === "string" ? payload.idempotencyKey : undefined
+  };
 }
 
 function mapTwilioMessageStatus(status: string): SmsMessageDocument["status"] {

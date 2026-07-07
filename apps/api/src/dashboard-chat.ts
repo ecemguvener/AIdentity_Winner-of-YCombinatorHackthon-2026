@@ -321,7 +321,16 @@ async function runOpenClawTool(
       recipientName,
       context: readNonEmptyString(parsedArguments.context),
       sourceUrl: readNonEmptyString(parsedArguments.source_url)
-    });
+    }, { async: true });
+    if ("approvalRequired" in result) {
+      return {
+        tool: functionCall.name,
+        ok: false,
+        status: "approval_required",
+        approval_id: result.approval._id.toHexString(),
+        approval_summary: result.approval.payloadSummary
+      };
+    }
     emitPhoneCallStarted(result, agent.name, task, recipientName, onCallEvent);
 
     return {

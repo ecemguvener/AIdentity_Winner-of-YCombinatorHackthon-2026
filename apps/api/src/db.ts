@@ -262,9 +262,15 @@ export interface EmailPolicy {
 }
 
 export interface PhonePolicy {
+  requireApprovalOutboundCall: "always" | "new_recipients" | "never";
+  requireApprovalSms: "always" | "new_recipients" | "never";
+  allowedCountries: string[];
   inboundEnabled: boolean;
   blockedCallers: string[];
   inboundInstructions: string;
+  dailyCallLimit: number;
+  dailySmsLimit: number;
+  quietHours: { start: string; end: string; timezone: string } | null;
   storeTranscripts: boolean;
 }
 

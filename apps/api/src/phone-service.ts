@@ -1,10 +1,12 @@
 import { ObjectId } from "mongodb";
 import type { AppConfig } from "./config.js";
-import type { AgentDocument, CallDocument, Collections, PhoneNumberDocument } from "./db.js";
+import type { AgentDocument, ApprovalDocument, CallDocument, Collections, PhoneNumberDocument } from "./db.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
+import { registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
 import { ApiError, type ApiErrorCode } from "./errors.js";
 import { normalizeE164PhoneNumber } from "./lib/phone.js";
 import { getPhonePolicy } from "./policies.js";
+import { enforcePhoneCountry, quietHoursBlockReason, startOfPolicyDay } from "./phone-policy.js";
 
 const callConversationGuidance =
   "Call naturally and keep the conversation moving. Do not repeatedly ask for confirmation; only confirm final details that affect the outcome, like time, price, address, availability, or cancellation policy.";
@@ -13,11 +15,17 @@ const mockCompletionDelayMs = 2000;
 
 export interface PlaceOutboundCallInput {
   agent: AgentDocument;
+  actor?: "agent" | "owner";
   toNumber: string;
   task: string;
   context?: string | null;
   recipientName?: string | null;
   sourceUrl?: string | null;
+}
+
+export interface PhoneApprovalOptions {
+  waitMs?: number;
+  async?: boolean;
 }
 
 export interface OutboundCallResult {
@@ -44,6 +52,67 @@ export class PhoneCallError extends ApiError {
 export async function placeOutboundCall(
   collections: Collections,
   config: AppConfig,
+  input: PlaceOutboundCallInput,
+  approvalOptions: PhoneApprovalOptions = {}
+): Promise<OutboundCallResult | { approvalRequired: true; approval: ApprovalDocument; decision: "pending" | "timeout" | "expired" }> {
+  const toNumber = normalizeE164PhoneNumber(input.toNumber);
+  if (!toNumber) {
+    throw new PhoneCallError("The phone number must be an E.164-style number, for example +14155550198.", 400, "validation_failed");
+  }
+  if (!input.task.trim()) {
+    throw new PhoneCallError("The call task cannot be empty.", 400, "validation_failed");
+  }
+  const phoneNumber = await collections.phoneNumbers.findOne({ agentId: input.agent._id, status: "active" });
+  if (!phoneNumber?.elevenLabsPhoneNumberId) {
+    throw new PhoneCallError("phone capability not provisioned", 409, "policy_blocked");
+  }
+  const policyDecision = await evaluateCallPolicy(collections, input);
+  if (policyDecision.type === "blocked") {
+    await auditPhoneBlocked(collections, input, policyDecision.reason);
+    throw new PhoneCallError(policyDecision.reason, 403, "policy_blocked");
+  }
+  if (policyDecision.type === "allowed") {
+    return placeOutboundCallUnchecked(collections, config, input);
+  }
+  if (!input.agent.ownerUserId) {
+    const reason = "phone call approval requires an owner user";
+    await auditPhoneBlocked(collections, input, reason);
+    throw new PhoneCallError(reason, 403, "policy_blocked");
+  }
+  const approval = await requestApproval(collections, {
+    agentId: input.agent._id,
+    ownerUserId: input.agent.ownerUserId,
+    kind: "phone.call",
+    payloadSummary: `Call ${toNumber} about: ${input.task.trim()}`,
+    payload: serializeCallApprovalPayload(input)
+  });
+  if (approvalOptions.async) {
+    return { approvalRequired: true, approval, decision: "pending" };
+  }
+  const decision = await waitForDecision(collections, approval._id, { timeoutMs: approvalOptions.waitMs ?? 90_000 });
+  const updated = await collections.approvals.findOne({ _id: approval._id }) ?? approval;
+  if (decision === "approved" && updated.executionResult) {
+    const callId = updated.executionResult.callId;
+    const call = typeof callId === "string" && ObjectId.isValid(callId)
+      ? await collections.calls.findOne({ _id: new ObjectId(callId), agentId: input.agent._id })
+      : null;
+    if (call) {
+      const phoneNumber = await collections.phoneNumbers.findOne({ _id: call.phoneNumberId });
+      return { callId: call._id.toHexString(), status: call.status, from: phoneNumber?.e164 ?? "", to: call.counterpartyE164, simulated: Boolean(updated.executionResult.simulated) };
+    }
+  }
+  if (decision === "rejected") {
+    throw new PhoneCallError("phone call was rejected", 403, "approval_required");
+  }
+  if (decision === "expired") {
+    throw new PhoneCallError("phone call approval expired", 403, "approval_required");
+  }
+  return { approvalRequired: true, approval: updated, decision: decision === "timeout" ? "timeout" : "pending" };
+}
+
+async function placeOutboundCallUnchecked(
+  collections: Collections,
+  config: AppConfig,
   input: PlaceOutboundCallInput
 ): Promise<OutboundCallResult> {
   const toNumber = normalizeE164PhoneNumber(input.toNumber);
@@ -65,7 +134,7 @@ export async function placeOutboundCall(
   await recordAudit(collections, {
     agentId: input.agent._id,
     ownerUserId: input.agent.ownerUserId,
-    actor: "agent",
+    actor: input.actor ?? "agent",
     action: AUDIT_ACTIONS.phone.outbound,
     status: "allowed",
     detail: `Outbound call queued to ${toNumber}.`,
@@ -94,6 +163,20 @@ export async function placeOutboundCall(
     }
   );
   return { callId: call._id.toHexString(), status, from: phoneNumber.e164, to: toNumber, simulated: false };
+}
+
+export function registerPhoneApprovalExecutor(collections: Collections, config: AppConfig): void {
+  registerApprovalExecutor("phone.call", async (approval) => {
+    const agent = await collections.agents.findOne({ _id: approval.agentId, status: { $ne: "revoked" } });
+    if (!agent) throw new Error("agent not found");
+    const result = await placeOutboundCallUnchecked(collections, config, parseCallApprovalPayload(agent, approval.payload));
+    return {
+      callId: result.callId,
+      status: result.status,
+      to: result.to,
+      simulated: result.simulated
+    };
+  });
 }
 
 export async function listAgentPhoneCalls(
@@ -251,6 +334,72 @@ function scheduleMockCompletion(collections: Collections, callId: ObjectId, toNu
     );
   }, mockCompletionDelayMs);
   timer.unref?.();
+}
+
+async function evaluateCallPolicy(
+  collections: Collections,
+  input: PlaceOutboundCallInput
+): Promise<{ type: "allowed" } | { type: "approval_required" } | { type: "blocked"; reason: string }> {
+  const toNumber = normalizeE164PhoneNumber(input.toNumber);
+  if (!toNumber) {
+    return { type: "allowed" };
+  }
+  const policy = await getPhonePolicy(collections, input.agent);
+  const country = enforcePhoneCountry(policy, toNumber);
+  if (!country.ok) return { type: "blocked", reason: country.reason };
+  const quietReason = quietHoursBlockReason(policy);
+  if (quietReason) return { type: "blocked", reason: quietReason };
+  const todayCalls = await collections.calls.countDocuments({
+    agentId: input.agent._id,
+    direction: "outbound",
+    createdAt: { $gte: startOfPolicyDay(policy) }
+  });
+  if (todayCalls >= policy.dailyCallLimit) {
+    return { type: "blocked", reason: `daily call limit of ${policy.dailyCallLimit} reached` };
+  }
+  if (policy.requireApprovalOutboundCall === "never") return { type: "allowed" };
+  if (policy.requireApprovalOutboundCall === "always") return { type: "approval_required" };
+  const knownRecipientCount = await collections.calls.countDocuments({
+    agentId: input.agent._id,
+    direction: "outbound",
+    counterpartyE164: toNumber,
+    status: { $in: ["ringing", "in_progress", "completed", "no_answer"] }
+  });
+  return knownRecipientCount > 0 ? { type: "allowed" } : { type: "approval_required" };
+}
+
+async function auditPhoneBlocked(collections: Collections, input: PlaceOutboundCallInput, reason: string): Promise<void> {
+  await recordAudit(collections, {
+    agentId: input.agent._id,
+    ownerUserId: input.agent.ownerUserId,
+    actor: input.actor ?? "agent",
+    action: AUDIT_ACTIONS.phone.blocked,
+    status: "blocked",
+    detail: reason
+  });
+}
+
+function serializeCallApprovalPayload(input: PlaceOutboundCallInput): Record<string, unknown> {
+  return {
+    toNumber: input.toNumber,
+    task: input.task,
+    ...(input.actor ? { actor: input.actor } : {}),
+    ...(input.context ? { context: input.context } : {}),
+    ...(input.recipientName ? { recipientName: input.recipientName } : {}),
+    ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {})
+  };
+}
+
+function parseCallApprovalPayload(agent: AgentDocument, payload: Record<string, unknown>): PlaceOutboundCallInput {
+  return {
+    agent,
+    actor: payload.actor === "owner" ? "owner" : "agent",
+    toNumber: String(payload.toNumber ?? ""),
+    task: String(payload.task ?? ""),
+    context: typeof payload.context === "string" ? payload.context : undefined,
+    recipientName: typeof payload.recipientName === "string" ? payload.recipientName : undefined,
+    sourceUrl: typeof payload.sourceUrl === "string" ? payload.sourceUrl : undefined
+  };
 }
 
 function buildCallContext(context: string | null | undefined): string {

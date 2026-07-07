@@ -22,7 +22,9 @@ import { registerIdentityRoutes } from "./identity.js";
 import { registerPaymentRoutes, registerSitePaymentRoutes } from "./payments.js";
 import { registerPolicyRoutes } from "./policies.js";
 import { registerPhoneProvisioner } from "./phone-provisioning.js";
+import { registerPhoneApprovalExecutor } from "./phone-service.js";
 import { registerSiteRoutes } from "./sites.js";
+import { registerSmsApprovalExecutor } from "./sms-service.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
 import { registerWebhookRoutes } from "./webhooks/routes.js";
 import { ensureAgentDomain, getDomainStatus } from "./providers/resend-domain.js";
@@ -155,6 +157,8 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerPhoneProvisioner(collections, config);
   const emailProvider = createEmailProvider(config);
   registerEmailApprovalExecutor(collections, config, emailProvider);
+  registerPhoneApprovalExecutor(collections, config);
+  registerSmsApprovalExecutor(collections, config);
   app.get("/api/v1/ops/email-domain", async (request, reply) => {
     await requireAuth(request, reply, collections, config);
     const status = config.PROVIDER_MODE_EMAIL === "live"

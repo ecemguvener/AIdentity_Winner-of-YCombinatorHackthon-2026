@@ -276,6 +276,7 @@ function createCollections({
       )
     },
     calls: {
+      countDocuments: vi.fn().mockResolvedValue(0),
       insertOne: vi.fn().mockImplementation((call: Record<string, unknown>) => {
         calls.push(call);
         return Promise.resolve({ insertedId: call._id });
@@ -292,6 +293,7 @@ function createCollections({
     policies: {
       findOne: vi.fn().mockResolvedValue({
         phone: {
+          requireApprovalOutboundCall: "never",
           inboundEnabled: true,
           blockedCallers: [],
           inboundInstructions: "Answer naturally."

@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
-import type { AgentDocument, Collections, PolicyDocument } from "./db.js";
+import type { AgentDocument, ApprovalDocument, Collections, PolicyDocument } from "./db.js";
 import {
   authenticateAgentRequest,
   issueIdentityToken,
@@ -25,7 +25,7 @@ import {
 import {
   findLatestSmsCode,
   listAgentSmsConversation,
-  sendAgentSms,
+  sendAgentSmsWithPolicy,
   serializeSmsMessage
 } from "./sms-service.js";
 
@@ -99,6 +99,11 @@ const phoneCallSchema = z.object({
 
 const phoneCallsQuerySchema = z.object({
   cursor: z.string().optional()
+});
+
+const approvalQuerySchema = z.object({
+  wait: z.coerce.number().int().min(1).max(300).optional(),
+  mode: z.enum(["async"]).optional()
 });
 
 const smsSendSchema = z.object({
@@ -233,21 +238,8 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
     if (!agentContext) {
       throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
-    const identity = agentIdentityView(agentContext.agent);
-
     const payload = phoneCallSchema.parse(request.body ?? {});
-    const block = checkAction(identity, "phone.call", payload.approved);
-    if (block) {
-      await recordAudit(collections, {
-        agentId: agentContext.agent._id,
-        ownerUserId: agentContext.agent.ownerUserId,
-        actor: "agent",
-        action: AUDIT_ACTIONS.phone.outbound,
-        status: "blocked",
-        detail: block
-      });
-      throw new ApiError(403, block === "human approval is required for this action" ? "approval_required" : "forbidden", block);
-    }
+    const query = approvalQuerySchema.parse(request.query ?? {});
 
     const result = await placeOutboundCall(collections, config, {
       agent: agentContext.agent,
@@ -255,7 +247,10 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       task: payload.task ?? payload.script ?? "",
       context: payload.context,
       recipientName: payload.recipientName
-    });
+    }, { async: query.mode === "async", waitMs: query.wait ? query.wait * 1000 : undefined });
+    if ("approvalRequired" in result) {
+      return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
+    }
     return {
       ok: true,
       call_id: result.callId,
@@ -270,20 +265,8 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
     if (!agentContext) {
       throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
-    const identity = agentIdentityView(agentContext.agent);
     const payload = phoneCallSchema.parse(request.body ?? {});
-    const block = checkAction(identity, "phone.call", payload.approved);
-    if (block) {
-      await recordAudit(collections, {
-        agentId: agentContext.agent._id,
-        ownerUserId: agentContext.agent.ownerUserId,
-        actor: "agent",
-        action: AUDIT_ACTIONS.phone.outbound,
-        status: "blocked",
-        detail: block
-      });
-      throw new ApiError(403, block === "human approval is required for this action" ? "approval_required" : "forbidden", block);
-    }
+    const query = approvalQuerySchema.parse(request.query ?? {});
 
     const result = await placeOutboundCall(collections, config, {
       agent: agentContext.agent,
@@ -291,7 +274,10 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       task: payload.task ?? payload.script ?? "",
       context: payload.context,
       recipientName: payload.recipientName
-    });
+    }, { async: query.mode === "async", waitMs: query.wait ? query.wait * 1000 : undefined });
+    if ("approvalRequired" in result) {
+      return serializeApprovalPending(result.approval, result.decision);
+    }
     return {
       call_id: result.callId,
       status: result.status,
@@ -328,13 +314,17 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
     const payload = smsSendSchema.parse(request.body ?? {});
-    const message = await sendAgentSms(collections, config, {
+    const query = approvalQuerySchema.parse(request.query ?? {});
+    const result = await sendAgentSmsWithPolicy(collections, config, {
       agent: agentContext.agent,
       to: payload.to,
       body: payload.body,
       idempotencyKey: payload.idempotencyKey
-    });
-    return { message: serializeSmsMessage(message) };
+    }, { async: query.mode === "async", waitMs: query.wait ? query.wait * 1000 : undefined });
+    if ("approvalRequired" in result) {
+      return serializeApprovalPending(result.approval, result.decision);
+    }
+    return { message: serializeSmsMessage(result) };
   });
 
   app.get("/api/v1/agent/phone/sms", async (request) => {
@@ -509,6 +499,22 @@ function checkAction(identity: AgentIdentity, permission: PermissionName, approv
   }
 
   return null;
+}
+
+function serializeApprovalPending(approval: ApprovalDocument, decision: "pending" | "timeout" | "expired") {
+  return {
+    ok: false,
+    status: "approval_required",
+    decision,
+    approval_id: approval._id.toHexString(),
+    approval: {
+      id: approval._id.toHexString(),
+      status: approval.status,
+      payloadSummary: approval.payloadSummary,
+      executionResult: approval.executionResult ?? null,
+      executionError: approval.executionError ?? null
+    }
+  };
 }
 
 export async function reserveAgentSlug(

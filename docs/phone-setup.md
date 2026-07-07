@@ -114,6 +114,14 @@ Agents use bearer-token phone SMS APIs:
 
 `latest-code` scans recent inbound SMS bodies for 4-8 digit verification codes and returns the newest match.
 
+Owner-managed phone policy lives at `GET/PUT /api/v1/agents/:agentId/policies/phone`. It controls:
+
+- Approval gates for outbound calls and SMS: `always`, `new_recipients`, or `never`.
+- Country allowlists using E.164 prefix detection (`US`, `FR`, `GB`, common EU and global codes); unknown countries are denied when an allowlist is set.
+- Daily call/SMS caps.
+- Quiet hours evaluated in the configured policy timezone.
+- Inbound enablement, caller blocklist, inbound instructions, and transcript storage.
+
 Useful Twilio test numbers:
 
 - `+15005550006`: valid test recipient
