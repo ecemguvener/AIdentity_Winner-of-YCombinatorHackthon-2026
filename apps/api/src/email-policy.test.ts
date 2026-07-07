@@ -27,6 +27,7 @@ let mongoServer: MongoMemoryServer;
 let database: Database;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let ownerCookie: string;
+let otherCookie: string;
 
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
@@ -34,6 +35,7 @@ beforeAll(async () => {
   database = await connectDatabase(config);
   app = await buildApp(config, database.collections);
   ownerCookie = await signup("email-policy-owner@example.com");
+  otherCookie = await signup("email-policy-other@example.com");
 }, 60_000);
 
 afterAll(async () => {
@@ -182,6 +184,107 @@ describe("email policy enforcement", () => {
     expect(approve.statusCode).toBe(200);
     expect(approve.json().approval.executionResult).toMatchObject({ status: "sent", to: "async@example.com" });
     expect(await database.collections.emailMessages.countDocuments({ agentId: new ObjectId(created.agent.id), toEmail: "async@example.com" })).toBe(1);
+  });
+});
+
+describe("owner email routes", () => {
+  it("lets the owner send as the agent and audits the owner actor", async () => {
+    const created = await createAgent("Owner Send");
+    await putPolicy(created.agent.id, {
+      requireApproval: "never",
+      allowedRecipients: [],
+      blockedRecipients: [],
+      dailySendLimit: 50,
+      maxRecipientsPerMessage: 5
+    });
+
+    const sent = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${created.agent.id}/email/send`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie },
+      payload: { to: "owner-send@example.com", subject: "Owner hello", text: "Hello from dashboard" }
+    });
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json()).toMatchObject({ ok: true, to: "owner-send@example.com", status: "sent" });
+
+    const audit = await database.collections.auditLogs.findOne({
+      agentId: new ObjectId(created.agent.id),
+      action: "email.send",
+      resourceId: sent.json().message_id
+    });
+    expect(audit?.actor).toBe("owner");
+  });
+
+  it("lists owner threads with send counts and loads thread messages", async () => {
+    const created = await createAgent("Owner Inbox");
+    await putPolicy(created.agent.id, {
+      requireApproval: "never",
+      allowedRecipients: [],
+      blockedRecipients: [],
+      dailySendLimit: 7,
+      maxRecipientsPerMessage: 5
+    });
+    const send = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${created.agent.id}/email/send`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie },
+      payload: { to: "thread@example.com", subject: "Thread", text: "First message" }
+    });
+    expect(send.statusCode).toBe(201);
+
+    const list = await app.inject({
+      method: "GET",
+      url: `/api/v1/agents/${created.agent.id}/email/threads`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie }
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toMatchObject({
+      todaySent: 1,
+      policy: { dailySendLimit: 7 },
+      threads: [{ counterparty: "thread@example.com", subject: "Thread", snippet: "First message", lastDirection: "outbound" }]
+    });
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/v1/agents/${created.agent.id}/email/threads/${send.json().thread_id}`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie }
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().messages[0]).toMatchObject({ direction: "outbound", body: "First message" });
+  });
+
+  it("replies to an owner thread and denies other owners", async () => {
+    const created = await createAgent("Owner Reply");
+    await putPolicy(created.agent.id, {
+      requireApproval: "never",
+      allowedRecipients: [],
+      blockedRecipients: [],
+      dailySendLimit: 50,
+      maxRecipientsPerMessage: 5
+    });
+    const send = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${created.agent.id}/email/send`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie },
+      payload: { to: "reply@example.com", subject: "Replyable", text: "Opening" }
+    });
+    expect(send.statusCode).toBe(201);
+    const otherOwnerList = await app.inject({
+      method: "GET",
+      url: `/api/v1/agents/${created.agent.id}/email/threads`,
+      cookies: { [config.SESSION_COOKIE_NAME]: otherCookie }
+    });
+    expect(otherOwnerList.statusCode).toBe(404);
+
+    const reply = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${created.agent.id}/email/threads/${send.json().thread_id}/reply`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie },
+      payload: { text: "Follow up" }
+    });
+    expect(reply.statusCode).toBe(201);
+    expect(reply.json()).toMatchObject({ to: "reply@example.com", subject: "Re: Replyable" });
+    expect(await database.collections.emailMessages.countDocuments({ agentId: new ObjectId(created.agent.id), threadId: new ObjectId(send.json().thread_id) })).toBe(2);
   });
 });
 

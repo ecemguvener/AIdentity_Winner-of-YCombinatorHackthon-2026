@@ -9,6 +9,7 @@ import { getEmailPolicy, isRecipientAllowedByPatterns } from "./policies.js";
 
 export interface SendAgentEmailInput {
   agent: AgentDocument;
+  actor?: "agent" | "owner";
   to: string;
   cc?: string[];
   subject: string;
@@ -151,7 +152,7 @@ export async function sendAgentEmail(
     await recordAudit(collections, {
       agentId: input.agent._id,
       ownerUserId: input.agent.ownerUserId,
-      actor: "agent",
+      actor: input.actor ?? "agent",
       action: AUDIT_ACTIONS.email.send,
       status: "allowed",
       detail: `Email sent to ${to}: ${input.subject}`,
@@ -182,7 +183,7 @@ export async function sendAgentEmailWithPolicy(
 ): Promise<PolicySendAgentEmailResult> {
   const policyDecision = await evaluateEmailPolicy(collections, input);
   if (policyDecision.type === "blocked") {
-    await auditEmailBlocked(collections, input.agent, policyDecision.reason);
+    await auditEmailBlocked(collections, input, policyDecision.reason);
     throw new ApiError(403, "policy_blocked", policyDecision.reason);
   }
   if (policyDecision.type === "allowed") {
@@ -190,7 +191,7 @@ export async function sendAgentEmailWithPolicy(
   }
   if (!input.agent.ownerUserId) {
     const reason = "email approval requires an owner user";
-    await auditEmailBlocked(collections, input.agent, reason);
+    await auditEmailBlocked(collections, input, reason);
     throw new ApiError(403, "policy_blocked", reason);
   }
 
@@ -367,7 +368,7 @@ export async function replyToAgentEmailThread(
   collections: Collections,
   config: AppConfig,
   provider: EmailProvider,
-  input: { agent: AgentDocument; threadId: string; text: string; idempotencyKey?: string }
+  input: { agent: AgentDocument; actor?: "agent" | "owner"; threadId: string; text: string; idempotencyKey?: string }
 ) {
   const { thread, messages } = await getAgentEmailThread(collections, input.agent, input.threadId);
   const lastInbound = [...messages].reverse().find((message) => message.direction === "inbound");
@@ -379,6 +380,7 @@ export async function replyToAgentEmailThread(
   }
   return sendAgentEmailWithPolicy(collections, config, provider, {
     agent: input.agent,
+    actor: input.actor ?? "agent",
     to: thread.counterpartyEmail,
     subject: thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`,
     text: input.text,
@@ -431,15 +433,19 @@ async function evaluateEmailPolicy(
   return knownRecipientCount > 0 ? { type: "allowed" } : { type: "approval_required" };
 }
 
-async function auditEmailBlocked(collections: Collections, agent: AgentDocument, reason: string): Promise<void> {
+async function auditEmailBlocked(collections: Collections, input: SendAgentEmailInput, reason: string): Promise<void> {
   await recordAudit(collections, {
-    agentId: agent._id,
-    ownerUserId: agent.ownerUserId,
-    actor: "agent",
+    agentId: input.agent._id,
+    ownerUserId: input.agent.ownerUserId,
+    actor: input.actor ?? "agent",
     action: AUDIT_ACTIONS.email.blocked,
     status: "blocked",
     detail: reason
   });
+}
+
+export function startOfUtcDay(value: Date): Date {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
 
 function serializeSendPayload(input: SendAgentEmailInput): Record<string, unknown> {
@@ -448,6 +454,7 @@ function serializeSendPayload(input: SendAgentEmailInput): Record<string, unknow
     cc: input.cc ?? [],
     subject: input.subject,
     text: input.text,
+    ...(input.actor ? { actor: input.actor } : {}),
     ...(input.html ? { html: input.html } : {}),
     ...(input.threadId ? { threadId: input.threadId } : {}),
     ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
@@ -464,6 +471,7 @@ function parseApprovalSendPayload(agent: AgentDocument, payload: Record<string, 
   }
   return {
     agent,
+    actor: payload.actor === "owner" ? "owner" : "agent",
     to,
     cc: Array.isArray(payload.cc) ? payload.cc.map(String) : undefined,
     subject,
@@ -628,10 +636,6 @@ function formatFrom(name: string, address: string): string {
 
 function normalizeEmailAddress(value: string): string {
   return value.trim().toLowerCase();
-}
-
-function startOfUtcDay(value: Date): Date {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
 
 function readAttachmentSize(attachment: EmailAttachmentInput): number {

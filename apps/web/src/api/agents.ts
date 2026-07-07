@@ -2,6 +2,9 @@ import { requestJson } from "./client";
 import type {
   Agent,
   AgentDetailResponse,
+  AgentEmailSendResponse,
+  AgentEmailThreadDetailResponse,
+  AgentEmailThreadsResponse,
   AgentsListResponse,
   CreateAgentInput,
   CreateAgentResponse,
@@ -53,5 +56,28 @@ export const agentsApi = {
     requestJson<{ policy: EmailPolicy }>(`/api/v1/agents/${encodeURIComponent(agentId)}/policies/email`, {
       method: "PUT",
       body: JSON.stringify(policy)
-    })
+    }),
+  getEmailThreads: (agentId: string) =>
+    requestJson<AgentEmailThreadsResponse>(`/api/v1/agents/${encodeURIComponent(agentId)}/email/threads`),
+  getEmailThread: (agentId: string, threadId: string) =>
+    requestJson<AgentEmailThreadDetailResponse>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/email/threads/${encodeURIComponent(threadId)}`
+    ),
+  sendEmail: (agentId: string, input: { to: string; cc?: string[]; subject: string; text: string }) =>
+    requestJson<AgentEmailSendResponse>(`/api/v1/agents/${encodeURIComponent(agentId)}/email/send?mode=async`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  replyEmail: (agentId: string, threadId: string, input: { text: string }) =>
+    requestJson<AgentEmailSendResponse>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/email/threads/${encodeURIComponent(threadId)}/reply`,
+      {
+        method: "POST",
+        body: JSON.stringify(input)
+      }
+    ),
+  pauseEmail: (agentId: string) =>
+    requestJson(`/api/v1/agents/${encodeURIComponent(agentId)}/email/pause`, { method: "POST" }),
+  resumeEmail: (agentId: string) =>
+    requestJson(`/api/v1/agents/${encodeURIComponent(agentId)}/email/resume`, { method: "POST" })
 };

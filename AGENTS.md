@@ -42,6 +42,12 @@ The Node API exposes:
 - `DELETE /api/v1/agents/:agentId/tokens/:tokenId`
 - `POST /api/v1/agents/:agentId/capabilities/:capability/enable|disable` (email|phone; card returns 400 "coming soon")
 - `GET/PUT /api/v1/agents/:agentId/policies/email`
+- `GET /api/v1/agents/:agentId/email/threads`
+- `GET /api/v1/agents/:agentId/email/threads/:threadId`
+- `POST /api/v1/agents/:agentId/email/threads/:threadId/reply`
+- `GET /api/v1/agents/:agentId/email/threads/:threadId/attachments/:attachmentId`
+- `POST /api/v1/agents/:agentId/email/send`
+- `POST /api/v1/agents/:agentId/email/pause|resume`
 - Deprecated legacy adapters over `agents` (respond with `deprecation: true` header): `GET/POST /api/sites`, `POST /api/site-setups`, `GET /api/site-setups/:projectId`, `POST /api/site-setups/:projectId/complete`, `GET/PATCH/DELETE /api/sites/:siteId`, `POST /api/sites/:siteId/api-keys`, `DELETE /api/sites/:siteId/api-keys/:apiKeyId`
 - `POST /api/dashboard/chat`
 - `POST /api/identity/init`
@@ -65,7 +71,7 @@ The Node API exposes:
 | `apps/web/src/App.tsx` | Dashboard, auth, identity onboarding, and settings UI |
 | `apps/web/src/api.ts` | Browser API client |
 | `apps/web/src/components/PhonePanel.tsx` | Phone capability UI |
-| `apps/web/src/components/EmailPanel.tsx` | Email capability UI |
+| `apps/web/src/components/EmailPanel.tsx` | Real email inbox, threads, compose, and policy UI |
 | `apps/web/src/components/PaymentsPanel.tsx` | Payment capability UI |
 | `apps/api/src/app.ts` | Fastify app wiring |
 | `apps/api/src/auth.ts` | Auth routes and session helpers |

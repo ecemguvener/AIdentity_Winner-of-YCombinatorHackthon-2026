@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
-import type { AgentDocument, ApprovalDocument, Collections, EmailMessageDocument } from "./db.js";
+import type { AgentDocument, ApprovalDocument, Collections, EmailMessageDocument, EmailThreadDocument } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { authenticateAgentRequest } from "./agent-auth.js";
 import { ApiError, codeForStatus, type ApiErrorCode } from "./errors.js";
@@ -11,8 +11,10 @@ import {
   getAgentEmailThread,
   listAgentEmailThreads,
   replyToAgentEmailThread,
-  sendAgentEmailWithPolicy
+  sendAgentEmailWithPolicy,
+  startOfUtcDay
 } from "./email-service.js";
+import { getEmailPolicy } from "./policies.js";
 import { createEmailInboundClient, createEmailProvider, type EmailProvider } from "./providers/email-provider.js";
 
 // ---------------------------------------------------------------------------
@@ -529,22 +531,84 @@ export function registerEmailRoutes(
   app.get("/api/v1/agent/email/threads/:threadId/attachments/:attachmentId", async (request, reply) => {
     const context = await loadAgentEmailContext(request, collections);
     const { threadId, attachmentId } = request.params as { threadId: string; attachmentId: string };
-    const { messages } = await getAgentEmailThread(collections, context.agent, threadId);
-    const message = messages.find((candidate) =>
-      candidate.attachments?.some((attachment) => attachment.providerAttachmentId === attachmentId)
-    );
-    const attachment = message?.attachments?.find((candidate) => candidate.providerAttachmentId === attachmentId);
-    if (!message || !attachment || !message.providerMessageId) {
-      throw new ApiError(404, "not_found", "attachment not found");
+    return streamAgentEmailAttachment(collections, config, reply, context.agent, threadId, attachmentId);
+  });
+
+  app.get("/api/v1/agents/:agentId/email/threads", async (request, reply) => {
+    const agent = await loadOwnedEmailAgent(request, reply, collections, config);
+    if (!agent) return;
+    const query = request.query as { cursor?: string };
+    return serializeOwnerEmailThreads(collections, config, agent, query.cursor);
+  });
+
+  app.get("/api/v1/agents/:agentId/email/threads/:threadId", async (request, reply) => {
+    const agent = await loadOwnedEmailAgent(request, reply, collections, config);
+    if (!agent) return;
+    const { threadId } = request.params as { threadId: string };
+    const { thread, messages } = await getAgentEmailThread(collections, agent, threadId);
+    return serializeThreadDetail(thread, messages);
+  });
+
+  app.post("/api/v1/agents/:agentId/email/send", async (request, reply) => {
+    const agent = await loadOwnedEmailAgent(request, reply, collections, config);
+    if (!agent) return;
+    const payload = sendSchema.parse(request.body ?? {});
+    const query = readSendApprovalQuery(request);
+    const messageText = payload.text ?? payload.body!;
+    return runEmail(reply, async () => {
+      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
+        agent,
+        actor: "owner",
+        to: payload.to,
+        cc: payload.cc,
+        subject: payload.subject,
+        text: messageText,
+        html: payload.html,
+        threadId: payload.threadId,
+        idempotencyKey: payload.idempotencyKey ?? readIdempotencyHeader(request)
+      }, query);
+      if (result.approvalRequired) {
+        return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
+      }
+      return reply.code(result.replayed ? 200 : 201).send(serializePersistentSend(result.message));
+    });
+  });
+
+  app.post("/api/v1/agents/:agentId/email/threads/:threadId/reply", async (request, reply) => {
+    const agent = await loadOwnedEmailAgent(request, reply, collections, config);
+    if (!agent) return;
+    const { threadId } = request.params as { threadId: string };
+    const payload = replySchema.parse(request.body ?? {});
+    const result = await replyToAgentEmailThread(collections, config, provider, {
+      agent,
+      actor: "owner",
+      threadId,
+      text: payload.text,
+      idempotencyKey: payload.idempotencyKey ?? readIdempotencyHeader(request)
+    });
+    if (result.approvalRequired) {
+      return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
     }
-    if (attachment.sizeBytes > 25 * 1024 * 1024) {
-      throw new ApiError(400, "validation_failed", "attachment exceeds 25MB limit");
-    }
-    const inboundClient = createEmailInboundClient(config);
-    const file = await inboundClient.getAttachment(message.providerMessageId, attachmentId);
-    reply.header("content-type", file.contentType);
-    reply.header("content-disposition", `attachment; filename="${file.filename.replace(/"/g, "")}"`);
-    return Buffer.from(file.data);
+    return reply.code(result.replayed ? 200 : 201).send(serializePersistentSend(result.message));
+  });
+
+  app.get("/api/v1/agents/:agentId/email/threads/:threadId/attachments/:attachmentId", async (request, reply) => {
+    const agent = await loadOwnedEmailAgent(request, reply, collections, config);
+    if (!agent) return;
+    const { threadId, attachmentId } = request.params as { threadId: string; attachmentId: string };
+    return streamAgentEmailAttachment(collections, config, reply, agent, threadId, attachmentId);
+  });
+
+  app.post("/api/v1/agents/:agentId/email/pause", async (request, reply) => {
+    const agent = await loadOwnedEmailAgent(request, reply, collections, config);
+    if (!agent) return;
+    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, agent, "paused"), config));
+  });
+
+  app.post("/api/v1/agents/:agentId/email/resume", async (request, reply) => {
+    const agent = await loadOwnedEmailAgent(request, reply, collections, config);
+    if (!agent) return;
+    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, agent, "active"), config));
   });
 
   app.post("/api/tools/email/pause", async (request, reply) => {
@@ -613,6 +677,7 @@ export function registerSiteEmailRoutes(
       }
       const result = await sendAgentEmailWithPolicy(collections, config, provider, {
         agent,
+        actor: "owner",
         to,
         subject: generated.subject,
         text: generated.body,
@@ -632,6 +697,7 @@ export function registerSiteEmailRoutes(
     return runEmail(reply, async () => {
       const result = await sendAgentEmailWithPolicy(collections, config, provider, {
         agent,
+        actor: "owner",
         to: payload.to,
         cc: payload.cc,
         subject: payload.subject,
@@ -684,6 +750,124 @@ async function loadAgentEmailContext(
     throw new ApiError(401, "unauthorized", "missing or invalid identity token");
   }
   return { agent: context.agent };
+}
+
+async function loadOwnedEmailAgent(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  collections: Collections,
+  config: AppConfig
+): Promise<AgentDocument | null> {
+  const authContext = await requireAuth(request, reply, collections, config);
+  if (!authContext) return null;
+  const { agentId } = request.params as { agentId: string };
+  const parsedAgentId = parseObjectId(agentId);
+  if (!parsedAgentId) {
+    throw new ApiError(404, "not_found", "agent identity not found");
+  }
+  const agent = await collections.agents.findOne({
+    _id: parsedAgentId,
+    ownerUserId: authContext.user._id,
+    status: { $ne: "revoked" }
+  });
+  if (!agent) {
+    throw new ApiError(404, "not_found", "agent identity not found");
+  }
+  return agent;
+}
+
+async function serializeOwnerEmailThreads(
+  collections: Collections,
+  config: AppConfig,
+  agent: AgentDocument,
+  cursor?: string
+) {
+  const query = {
+    agentId: agent._id,
+    ...(cursor && ObjectId.isValid(cursor) ? { _id: { $lt: new ObjectId(cursor) } } : {})
+  };
+  const threads = await collections.emailThreads.find(query).sort({ lastMessageAt: -1, _id: -1 }).limit(25).toArray();
+  const threadIds = threads.map((thread) => thread._id);
+  const [account, policy, todaySent, unreadCounts, latestMessages] = await Promise.all([
+    collections.emailAccounts.findOne({ agentId: agent._id }),
+    getEmailPolicy(collections, agent),
+    collections.emailMessages.countDocuments({
+      agentId: agent._id,
+      direction: "outbound",
+      status: { $in: ["sent", "delivered"] },
+      createdAt: { $gte: startOfUtcDay(new Date()) }
+    }),
+    collections.emailMessages.aggregate<{ _id: ObjectId; count: number }>([
+      { $match: { agentId: agent._id, threadId: { $in: threadIds }, direction: "inbound", readAt: { $exists: false } } },
+      { $group: { _id: "$threadId", count: { $sum: 1 } } }
+    ]).toArray(),
+    collections.emailMessages.aggregate<EmailMessageDocument>([
+      { $match: { agentId: agent._id, threadId: { $in: threadIds } } },
+      { $sort: { createdAt: -1, _id: -1 } },
+      { $group: { _id: "$threadId", message: { $first: "$$ROOT" } } },
+      { $replaceRoot: { newRoot: "$message" } }
+    ]).toArray()
+  ]);
+  const unreadByThread = Object.fromEntries(unreadCounts.map((entry) => [entry._id.toHexString(), entry.count]));
+  const latestByThread = Object.fromEntries(latestMessages.map((message) => [message.threadId.toHexString(), message]));
+  return {
+    emailIdentity: account ? serializeEmailAccount(account, config) : null,
+    todaySent,
+    policy,
+    threads: threads.map((thread) => {
+      const latest = latestByThread[thread._id.toHexString()];
+      return {
+        id: thread._id.toHexString(),
+        counterparty: thread.counterpartyEmail,
+        subject: thread.subject,
+        snippet: latest ? (latest.summary ?? latest.textBody).slice(0, 180) : "",
+        lastDirection: latest?.direction ?? "inbound",
+        lastMessageAt: thread.lastMessageAt.toISOString(),
+        unreadCount: unreadByThread[thread._id.toHexString()] ?? 0,
+        messageCount: thread.messageCount
+      };
+    }),
+    nextCursor: threads.length === 25 ? threads[threads.length - 1]!._id.toHexString() : null
+  };
+}
+
+function serializeThreadDetail(thread: EmailThreadDocument, messages: EmailMessageDocument[]) {
+  return {
+    thread: {
+      id: thread._id.toHexString(),
+      counterparty: thread.counterpartyEmail,
+      subject: thread.subject,
+      lastMessageAt: thread.lastMessageAt.toISOString(),
+      messageCount: thread.messageCount
+    },
+    messages: messages.map(serializePersistentMessage)
+  };
+}
+
+async function streamAgentEmailAttachment(
+  collections: Collections,
+  config: AppConfig,
+  reply: FastifyReply,
+  agent: AgentDocument,
+  threadId: string,
+  attachmentId: string
+) {
+  const { messages } = await getAgentEmailThread(collections, agent, threadId);
+  const message = messages.find((candidate) =>
+    candidate.attachments?.some((attachment) => attachment.providerAttachmentId === attachmentId)
+  );
+  const attachment = message?.attachments?.find((candidate) => candidate.providerAttachmentId === attachmentId);
+  if (!message || !attachment || !message.providerMessageId) {
+    throw new ApiError(404, "not_found", "attachment not found");
+  }
+  if (attachment.sizeBytes > 25 * 1024 * 1024) {
+    throw new ApiError(400, "validation_failed", "attachment exceeds 25MB limit");
+  }
+  const inboundClient = createEmailInboundClient(config);
+  const file = await inboundClient.getAttachment(message.providerMessageId, attachmentId);
+  reply.header("content-type", file.contentType);
+  reply.header("content-disposition", `attachment; filename="${file.filename.replace(/"/g, "")}"`);
+  return Buffer.from(file.data);
 }
 
 async function getPersistentEmailActivity(collections: Collections, agent: AgentDocument, config: AppConfig) {

@@ -1,7 +1,8 @@
-import { Copy, KeyRound, Loader2, Mail, Phone, Save, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Copy, KeyRound, Loader2, Mail, Phone, Trash2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { agentsApi } from "../api/agents";
-import type { AgentDetailResponse, EmailPolicy, IdentityToken } from "../api/types";
+import type { AgentDetailResponse, IdentityToken } from "../api/types";
+import { EmailPanel } from "../components/EmailPanel";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
 import { Brand, getErrorMessage, type SiteDetailTab } from "../legacy/shared";
 import { BackChevronIcon, SiteSettingsCategoryIcon } from "./SettingsPage";
@@ -32,9 +33,6 @@ export function AgentDetailPage({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [newTokenSecret, setNewTokenSecret] = useState<string | null>(null);
   const [tokenName, setTokenName] = useState("runtime token");
-  const [emailPolicy, setEmailPolicy] = useState<EmailPolicy | null>(null);
-  const [emailPolicyDraft, setEmailPolicyDraft] = useState<EmailPolicy | null>(null);
-  const [emailPolicyError, setEmailPolicyError] = useState("");
   const isProvisioning = provisioning.email.state === "pending" || provisioning.phone.state === "pending";
 
   useEffect(() => {
@@ -123,34 +121,6 @@ export function AgentDetailPage({
   }
 
   const visibleTab = activeTab === "email" || activeTab === "phone" ? activeTab : "credentials";
-
-  useEffect(() => {
-    if (visibleTab !== "email") return;
-    let cancelled = false;
-    setEmailPolicyError("");
-    void agentsApi.getEmailPolicy(agent.id)
-      .then((response) => {
-        if (cancelled) return;
-        setEmailPolicy(response.policy);
-        setEmailPolicyDraft(response.policy);
-      })
-      .catch((policyError) => {
-        if (!cancelled) setEmailPolicyError(getErrorMessage(policyError, "Could not load email policy"));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [agent.id, visibleTab]);
-
-  async function saveEmailPolicy() {
-    if (!emailPolicyDraft) return;
-    await runAction("email-policy-save", async () => {
-      const response = await agentsApi.updateEmailPolicy(agent.id, emailPolicyDraft);
-      setEmailPolicy(response.policy);
-      setEmailPolicyDraft(response.policy);
-      onNotify({ title: "Email policy saved" });
-    });
-  }
 
   return (
     <section className="site-detail-page" aria-labelledby="agentDetailTitle">
@@ -257,24 +227,7 @@ export function AgentDetailPage({
             </section>
           </>
         ) : visibleTab === "email" ? (
-          <section className="site-detail-page__section">
-            <div className="site-detail-page__section-heading">
-              <h2>Email policy</h2>
-              <Mail size={17} aria-hidden="true" />
-            </div>
-            {emailPolicyError ? <p className="field-error" role="alert">{emailPolicyError}</p> : null}
-            {emailPolicyDraft ? (
-              <EmailPolicyEditor
-                policy={emailPolicyDraft}
-                savedPolicy={emailPolicy}
-                isSaving={busyAction === "email-policy-save"}
-                onChange={setEmailPolicyDraft}
-                onSave={saveEmailPolicy}
-              />
-            ) : (
-              <div className="site-detail-page__info-row"><span>Email policy</span><strong>Loading</strong></div>
-            )}
-          </section>
+          <EmailPanel agent={agent} onNotify={onNotify} />
         ) : (
           <section className="site-detail-page__section">
             <h2>Phone</h2>
@@ -284,111 +237,6 @@ export function AgentDetailPage({
       </div>
     </section>
   );
-}
-
-function EmailPolicyEditor({
-  policy,
-  savedPolicy,
-  isSaving,
-  onChange,
-  onSave
-}: {
-  policy: EmailPolicy;
-  savedPolicy: EmailPolicy | null;
-  isSaving: boolean;
-  onChange: (policy: EmailPolicy) => void;
-  onSave: () => Promise<void>;
-}) {
-  const isDirty = JSON.stringify(policy) !== JSON.stringify(savedPolicy);
-  return (
-    <div className="agent-email-policy">
-      <div className="agent-email-policy__modes" role="radiogroup" aria-label="Email approval mode">
-        {[
-          ["always", "Always"],
-          ["new_recipients", "New"],
-          ["never", "Never"]
-        ].map(([value, label]) => (
-          <label key={value} className="agent-email-policy__mode">
-            <input
-              type="radio"
-              name="email-approval-mode"
-              value={value}
-              checked={policy.requireApproval === value}
-              onChange={() => onChange({ ...policy, requireApproval: value as EmailPolicy["requireApproval"] })}
-            />
-            <span>{label}</span>
-          </label>
-        ))}
-      </div>
-
-      <label className="site-detail-page__field">
-        <span>Allowed recipients</span>
-        <input
-          value={formatPatterns(policy.allowedRecipients)}
-          onChange={(event) => onChange({ ...policy, allowedRecipients: parsePatterns(event.target.value) })}
-          placeholder="alice@example.com, @example.com"
-        />
-      </label>
-      <PolicyChips values={policy.allowedRecipients} />
-
-      <label className="site-detail-page__field">
-        <span>Blocked recipients</span>
-        <input
-          value={formatPatterns(policy.blockedRecipients)}
-          onChange={(event) => onChange({ ...policy, blockedRecipients: parsePatterns(event.target.value) })}
-          placeholder="blocked@example.com, @competitor.com"
-        />
-      </label>
-      <PolicyChips values={policy.blockedRecipients} tone="danger" />
-
-      <div className="agent-email-policy__numbers">
-        <label className="site-detail-page__field">
-          <span>Daily limit</span>
-          <input
-            type="number"
-            min={0}
-            max={10000}
-            value={policy.dailySendLimit}
-            onChange={(event) => onChange({ ...policy, dailySendLimit: Number(event.target.value) })}
-          />
-        </label>
-        <label className="site-detail-page__field">
-          <span>Recipients per message</span>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={policy.maxRecipientsPerMessage}
-            onChange={(event) => onChange({ ...policy, maxRecipientsPerMessage: Number(event.target.value) })}
-          />
-        </label>
-      </div>
-
-      <button className="site-detail-page__save" type="button" disabled={!isDirty || isSaving} onClick={() => void onSave()}>
-        {isSaving ? <Loader2 size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
-        <span>Save policy</span>
-      </button>
-    </div>
-  );
-}
-
-function PolicyChips({ values, tone }: { values: string[]; tone?: "danger" }) {
-  if (!values.length) return null;
-  return (
-    <div className="agent-email-policy__chips">
-      {values.map((value) => (
-        <span className={tone === "danger" ? "agent-email-policy__chip agent-email-policy__chip--danger" : "agent-email-policy__chip"} key={value}>{value}</span>
-      ))}
-    </div>
-  );
-}
-
-function parsePatterns(value: string): string[] {
-  return [...new Set(value.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean))];
-}
-
-function formatPatterns(values: string[]): string {
-  return values.join(", ");
 }
 
 function DetailTab({ active, icon, label }: { active: boolean; icon: "general" | "email" | "phone"; label: string }) {

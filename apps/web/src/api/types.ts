@@ -61,6 +61,96 @@ export interface EmailPolicy {
   maxRecipientsPerMessage: number;
 }
 
+export interface AgentEmailIdentity {
+  email_identity_id: string;
+  email_address: string;
+  display_name: string;
+  provider: string;
+  status: "active" | "paused";
+  created_at: string;
+}
+
+export interface AgentEmailThreadListItem {
+  id: string;
+  counterparty: string;
+  subject: string;
+  snippet: string;
+  lastDirection: "inbound" | "outbound";
+  lastMessageAt: string;
+  unreadCount: number;
+  messageCount: number;
+}
+
+export interface AgentEmailThreadsResponse {
+  emailIdentity: AgentEmailIdentity | null;
+  todaySent: number;
+  policy: EmailPolicy;
+  threads: AgentEmailThreadListItem[];
+  nextCursor: string | null;
+}
+
+export interface AgentEmailAttachment {
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  id: string | null;
+}
+
+export interface AgentEmailMessage {
+  id: string;
+  thread_id: string;
+  direction: "inbound" | "outbound";
+  from_email: string;
+  to_email: string;
+  cc: string[];
+  subject: string;
+  body: string;
+  html: string | null;
+  provider_message_id: string | null;
+  status: "queued" | "sent" | "delivered" | "failed" | "received";
+  parsed_by: "openai" | "heuristic" | null;
+  summary: string | null;
+  suggested_reply: string | null;
+  attachments: AgentEmailAttachment[];
+  created_at: string;
+}
+
+export interface AgentEmailThreadDetailResponse {
+  thread: {
+    id: string;
+    counterparty: string;
+    subject: string;
+    lastMessageAt: string;
+    messageCount: number;
+  };
+  messages: AgentEmailMessage[];
+}
+
+export type AgentEmailSendResponse =
+  | {
+      ok: true;
+      message_id: string;
+      thread_id: string;
+      provider_message_id: string | null;
+      from: string;
+      to: string;
+      subject: string;
+      status: string;
+    }
+  | {
+      ok: false;
+      status: "approval_required";
+      decision: "pending" | "timeout" | "expired";
+      approval_id: string;
+      approval: {
+        id: string;
+        status: string;
+        payloadSummary: string;
+        executionResult: unknown;
+        executionError: string | null;
+      };
+    };
+
 export type AgentListItem = Agent & { provisioning: AgentProvisioningSummary };
 
 export interface AgentsListResponse {
