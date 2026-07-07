@@ -75,6 +75,7 @@ The Node API exposes:
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
 - `GET /api/v1/ops/status` (session-authed provider mode + billing/phone/email readiness)
+- `GET /api/v1/openapi.json`
 - `GET /api/v1/billing`
 - `GET /api/v1/billing/plans`
 - `GET /api/v1/billing/usage`
@@ -87,6 +88,7 @@ The Node API exposes:
 - `POST /webhooks/elevenlabs/post-call` (ElevenLabs signed post-call transcript/status/cost finalization)
 - `POST /webhooks/twilio/sms` (Twilio inbound SMS webhook; TwiML empty response)
 - `POST /webhooks/twilio/status` (Twilio SMS delivery status webhook)
+- `GET /docs` (hosted API reference)
 - Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
 
 ## Key Files
@@ -104,6 +106,7 @@ The Node API exposes:
 | `apps/api/src/billing.ts` | Stripe Billing account, checkout, portal, plan limits, and subscription webhook sync |
 | `apps/api/src/usage.ts` | Usage ledger, summaries, Stripe meter reporting, and active-number sampling |
 | `apps/api/src/entitlements.ts` | Plan entitlement checks for agent creation, capabilities, usage, and phone numbers |
+| `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |

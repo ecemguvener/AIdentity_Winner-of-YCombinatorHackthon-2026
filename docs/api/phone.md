@@ -1,5 +1,7 @@
 # Agent Phone API
 
+Live reference: `/docs`. Machine-readable spec: `/api/v1/openapi.json` or `docs/api/openapi.json`.
+
 All routes require `Authorization: Bearer <identity token>` and return the shared API error envelope on failure.
 
 ## Number

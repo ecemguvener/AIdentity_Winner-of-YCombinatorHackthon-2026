@@ -25,6 +25,7 @@ import { registerPhoneRoutes } from "./phone.js";
 import { registerPolicyRoutes } from "./policies.js";
 import { registerPhoneProvisioner } from "./phone-provisioning.js";
 import { registerPhoneApprovalExecutor } from "./phone-service.js";
+import { registerOpenApiRoutes } from "./openapi.js";
 import { registerSiteRoutes } from "./sites.js";
 import { registerSmsApprovalExecutor } from "./sms-service.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
@@ -162,6 +163,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerPhoneApprovalExecutor(collections, config);
   registerSmsApprovalExecutor(collections, config);
   registerBillingStripeHandlers(collections);
+  registerOpenApiRoutes(app, config);
   app.get("/api/v1/ops/email-domain", async (request, reply) => {
     await requireAuth(request, reply, collections, config);
     const status = config.PROVIDER_MODE_EMAIL === "live"

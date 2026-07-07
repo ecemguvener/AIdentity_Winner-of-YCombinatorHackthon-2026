@@ -1,5 +1,7 @@
 # Email Agent API Contract
 
+Live reference: `/docs`. Machine-readable spec: `/api/v1/openapi.json` or `docs/api/openapi.json`.
+
 Bearer auth: `Authorization: Bearer <identity_token>`.
 
 All errors use:

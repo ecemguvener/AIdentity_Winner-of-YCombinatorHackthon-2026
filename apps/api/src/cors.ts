@@ -59,7 +59,7 @@ export function isTrustedDashboardOrigin(origin: string, config: AppConfig): boo
 
 export function isPublicCorsPath(requestUrl: string): boolean {
   const pathname = requestUrl.split("?", 1)[0] || "/";
-  return pathname === "/webhooks/resend";
+  return pathname === "/webhooks/resend" || pathname === "/api/v1/openapi.json" || pathname === "/docs";
 }
 
 export function getTrustedDashboardOrigins(config: AppConfig): Set<string> {

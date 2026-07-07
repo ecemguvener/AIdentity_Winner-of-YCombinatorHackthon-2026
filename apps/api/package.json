@@ -12,6 +12,7 @@
     "stripe:listen": "stripe listen --forward-to localhost:4001/webhooks/stripe",
     "twilio:audit": "tsx src/scripts/twilio-audit.ts",
     "usage:report": "tsx src/scripts/usage-report.ts",
+    "openapi:export": "tsx src/scripts/openapi-export.ts",
     "migrate": "tsx src/migrations/run.ts",
     "test": "vitest run"
   },
