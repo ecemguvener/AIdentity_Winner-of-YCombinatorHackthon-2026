@@ -32,6 +32,7 @@ const rawEnvironmentSchema = z.object({
   TWILIO_AUTH_TOKEN: optionalNonEmptyStringSchema,
   TWILIO_NUMBER_COUNTRY: z.string().min(1).default("US"),
   TWILIO_ADDRESS_SID: optionalNonEmptyStringSchema,
+  TWILIO_BUNDLE_SID: optionalNonEmptyStringSchema,
   ELEVENLABS_API_KEY: optionalNonEmptyStringSchema,
   ELEVENLABS_AGENT_ID: optionalNonEmptyStringSchema,
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: optionalNonEmptyStringSchema,

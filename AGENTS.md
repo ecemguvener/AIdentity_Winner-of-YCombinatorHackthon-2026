@@ -82,6 +82,8 @@ The Node API exposes:
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
 | `apps/api/src/phone.ts` | Phone call integration/mock fallback |
+| `apps/api/src/phone-numbers.ts` | Twilio phone number persistence and lifecycle helpers |
+| `apps/api/src/providers/twilio-numbers.ts` | Twilio/mock number search, purchase, release, and audit listing |
 | `apps/api/src/email.ts` | Email routes, drafting helpers, and email activity serializers |
 | `apps/api/src/email-service.ts` | Persistent outbound/inbound email threads, idempotency, and replies |
 | `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |

@@ -203,12 +203,13 @@ export interface PhoneNumberDocument extends Document {
   agentId: ObjectId;
   e164: string;
   country: string;
-  twilioSid: string;
+  twilioSid?: string;
   elevenLabsPhoneNumberId?: string;
   capabilitiesVoice: boolean;
   capabilitiesSms: boolean;
   status: "provisioning" | "active" | "releasing" | "released";
   monthlyPriceCents?: number;
+  releaseDetail?: string;
   createdAt: Date;
   updatedAt: Date;
 }
