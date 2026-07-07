@@ -13,16 +13,30 @@ const config: AppConfig = {
   MONGODB_URI: "mongodb://127.0.0.1:27017/barkan-test",
   SESSION_COOKIE_NAME: "barkan_session",
   SESSION_SECRET: "test-barkan-session-secret",
+  PROVIDER_MODE_EMAIL: "mock",
+  PROVIDER_MODE_PHONE: "mock",
+  STRIPE_SECRET_KEY: undefined,
+  STRIPE_WEBHOOK_SECRET: undefined,
+  TWILIO_ACCOUNT_SID: undefined,
+  TWILIO_AUTH_TOKEN: undefined,
+  TWILIO_NUMBER_COUNTRY: "US",
+  TWILIO_ADDRESS_SID: undefined,
   ELEVENLABS_API_KEY: undefined,
   ELEVENLABS_AGENT_ID: undefined,
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: undefined,
   ELEVENLABS_VOICE_ID: "voice",
+  ELEVENLABS_WORKSPACE_WEBHOOK_SECRET: undefined,
   OPENAI_API_KEY: undefined,
   OPENAI_DASHBOARD_CHAT_MODEL: "gpt-5.4-2026-03-05",
   RESEND_API_KEY: undefined,
-  EMAIL_FROM_DOMAIN: "example.test",
+  EMAIL_AGENT_DOMAIN: "example.test",
+  EMAIL_FROM_DOMAIN: undefined,
+  EMAIL_PLATFORM_FROM: "Barkan <no-reply@barkan.dev>",
+  RESEND_WEBHOOK_SECRET: undefined,
   EMAIL_WEBHOOK_SECRET: undefined,
-  EMAIL_SANDBOX_REDIRECT_TO: undefined
+  EMAIL_SANDBOX_REDIRECT_TO: undefined,
+  SENTRY_DSN: undefined,
+  API_RATE_LIMIT_MAX: 300
 };
 
 describe("site identity routes", () => {

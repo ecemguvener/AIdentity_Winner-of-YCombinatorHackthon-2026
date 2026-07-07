@@ -21,9 +21,7 @@ import { getAgentIdentityByToken, recordIdentityAudit, type AgentIdentity } from
 //   - dashboard routes, authenticated with the owner's session, scoped per
 //     agent identity (account = the site id the dashboard manages)
 //
-// Provider: Resend when RESEND_API_KEY is set, otherwise a mock sender (logs +
-// synthetic id) so the whole request -> send -> reply flow is demoable without
-// a verified sending domain.
+// Provider mode is explicit. Live uses Resend; mock logs and returns synthetic ids.
 // ---------------------------------------------------------------------------
 
 type Provider = "resend" | "mock";
@@ -125,7 +123,7 @@ export function provisionEmailIdentity(accountId: string, emailAddress: string, 
     accountId,
     emailAddress,
     displayName,
-    provider: config.RESEND_API_KEY ? "resend" : "mock",
+    provider: config.PROVIDER_MODE_EMAIL === "live" ? "resend" : "mock",
     status: "active",
     createdAt: new Date()
   };
@@ -141,7 +139,7 @@ export function ensureSiteEmailIdentity(accountId: string, displayName: string, 
   if (existing) {
     return existing;
   }
-  const address = `${slugify(displayName)}-${randomId(4)}@${config.EMAIL_FROM_DOMAIN}`;
+  const address = `${slugify(displayName)}-${randomId(4)}@${config.EMAIL_AGENT_DOMAIN}`;
   return provisionEmailIdentity(accountId, address, displayName, config);
 }
 
@@ -344,7 +342,7 @@ export async function ingestInboundReply(normalized: NormalizedInbound, config: 
 }
 
 // ---------------------------------------------------------------------------
-// Provider — Resend with a mock fallback
+// Provider — explicit live/mock mode
 // ---------------------------------------------------------------------------
 
 interface OutboundPayload {
@@ -355,7 +353,7 @@ interface OutboundPayload {
 }
 
 async function dispatchSend(config: AppConfig, payload: OutboundPayload): Promise<{ providerMessageId: string; provider: Provider }> {
-  if (config.RESEND_API_KEY) {
+  if (config.PROVIDER_MODE_EMAIL === "live" && config.RESEND_API_KEY) {
     return sendViaResend(config.RESEND_API_KEY, payload);
   }
   return sendViaMock(payload);
@@ -666,7 +664,7 @@ function asString(value: unknown): string | null {
 
 // ---------------------------------------------------------------------------
 // Resend webhook signature verification (Svix). The signing secret looks like
-// `whsec_<base64>`. When EMAIL_WEBHOOK_SECRET is a plain string instead, a
+// `whsec_<base64>`. When RESEND_WEBHOOK_SECRET is a plain string instead, a
 // simple X-Webhook-Secret header check is used (handy for local testing).
 // ---------------------------------------------------------------------------
 
@@ -749,10 +747,10 @@ export function registerEmailRoutes(app: FastifyInstance, config: AppConfig) {
   });
 
   // Inbound provider webhook (Resend). No Bearer token — verified by the Svix
-  // signature when EMAIL_WEBHOOK_SECRET is configured. Always 200 so the
+  // signature when RESEND_WEBHOOK_SECRET is configured. Always 200 so the
   // provider does not retry on unmatched recipients.
   app.post("/api/webhooks/email/inbound", async (request, reply) => {
-    const secret = config.EMAIL_WEBHOOK_SECRET;
+    const secret = config.RESEND_WEBHOOK_SECRET;
     if (secret) {
       const rawBody = (request as { rawBody?: string }).rawBody ?? JSON.stringify(request.body ?? {});
       const ok = secret.startsWith("whsec_")

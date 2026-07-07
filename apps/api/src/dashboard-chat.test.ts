@@ -13,8 +13,11 @@ const baseConfig: AppConfig = {
   MONGODB_URI: "mongodb://127.0.0.1:27017/barkan-web-test",
   SESSION_COOKIE_NAME: "barkan_session",
   SESSION_SECRET: "test-barkan-session-secret",
+  PROVIDER_MODE_EMAIL: "mock",
+  PROVIDER_MODE_PHONE: "mock",
   ELEVENLABS_VOICE_ID: "voice_test",
   OPENAI_API_KEY: "openai",
+  EMAIL_AGENT_DOMAIN: "agents.barkan.dev",
 };
 
 describe("dashboard chat", () => {

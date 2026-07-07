@@ -60,7 +60,7 @@ export async function placeAgentPhoneCall(request: PhoneCallRequest, config: App
     throw new PhoneCallError("The call task cannot be empty.");
   }
 
-  if (!config.ELEVENLABS_API_KEY || !config.ELEVENLABS_AGENT_ID || !config.ELEVENLABS_AGENT_PHONE_NUMBER_ID) {
+  if (config.PROVIDER_MODE_PHONE === "mock") {
     return {
       ok: true,
       provider: "mock-elevenlabs",
@@ -70,17 +70,17 @@ export async function placeAgentPhoneCall(request: PhoneCallRequest, config: App
       agentIdentityName: request.agentIdentityName,
       task,
       status: "queued",
-      detail:
-        "Mock call queued. Set ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID, and ELEVENLABS_AGENT_PHONE_NUMBER_ID to place a real outbound ElevenLabs call."
+      detail: "Mock call queued. Set PROVIDER_MODE_PHONE=live to place a real outbound ElevenLabs call."
     };
   }
 
+  const elevenLabsApiKey = config.ELEVENLABS_API_KEY ?? "";
   const callBrief = buildPersonalAssistantCallBrief(request, task);
   const upstreamResponse = await fetch("https://api.elevenlabs.io/v1/convai/twilio/outbound-call", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "xi-api-key": config.ELEVENLABS_API_KEY
+      "xi-api-key": elevenLabsApiKey
     },
     body: JSON.stringify({
       agent_id: config.ELEVENLABS_AGENT_ID,
@@ -136,7 +136,7 @@ export async function waitForPhoneCallCompletion(
   config: AppConfig,
   options: PhoneCallCompletionOptions = {}
 ): Promise<PhoneCallCompletion> {
-  if (call.simulated || !config.ELEVENLABS_API_KEY || call.provider !== "elevenlabs") {
+  if (call.simulated || config.PROVIDER_MODE_PHONE !== "live" || call.provider !== "elevenlabs") {
     return {
       status: "completed",
       durationSecs: 0,

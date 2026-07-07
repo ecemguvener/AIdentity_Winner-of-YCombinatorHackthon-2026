@@ -9,7 +9,8 @@ import { registerIdentityRoutes } from "./identity.js";
 // runs in mock-send mode with heuristic drafting — fully offline.
 const config = {
   PUBLIC_API_URL: "http://localhost:4001",
-  EMAIL_FROM_DOMAIN: "agents.barkan.dev"
+  PROVIDER_MODE_EMAIL: "mock",
+  EMAIL_AGENT_DOMAIN: "agents.barkan.dev"
 } as unknown as AppConfig;
 
 async function buildTestApp() {

@@ -91,7 +91,7 @@ export function registerIdentityRoutes(app: FastifyInstance, config: AppConfig) 
       status: "active",
       tools,
       permissions,
-      email: tools.includes("email") ? `${slug}-${randomId(4)}@${config.EMAIL_FROM_DOMAIN}` : null,
+      email: tools.includes("email") ? `${slug}-${randomId(4)}@${config.EMAIL_AGENT_DOMAIN}` : null,
       phone: tools.includes("phone") ? `+1 415 555 ${randomDigits(4)}` : null,
       calendarUrl: tools.includes("calendar") ? `${config.PUBLIC_API_URL}/calendar/${id}` : null,
       createdAt: new Date()

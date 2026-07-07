@@ -3,6 +3,7 @@ import { PhoneCallError, placeAgentPhoneCall, waitForPhoneCallCompletion } from 
 import type { AppConfig } from "./config.js";
 
 const baseConfig = {
+  PROVIDER_MODE_PHONE: "mock",
   ELEVENLABS_API_KEY: undefined,
   ELEVENLABS_AGENT_ID: undefined,
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: undefined
@@ -57,6 +58,7 @@ describe("placeAgentPhoneCall", () => {
       sourceUrl: ""
     }, {
       ...baseConfig,
+      PROVIDER_MODE_PHONE: "live",
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_AGENT_ID: "agent_test",
       ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_test"
@@ -96,6 +98,7 @@ describe("placeAgentPhoneCall", () => {
       agentIdentityName: "Maxence AI Caller"
     }, {
       ...baseConfig,
+      PROVIDER_MODE_PHONE: "live",
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_AGENT_ID: "agent_test",
       ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_test"
@@ -125,6 +128,7 @@ describe("placeAgentPhoneCall", () => {
       recipientName: "Alex"
     }, {
       ...baseConfig,
+      PROVIDER_MODE_PHONE: "live",
       ELEVENLABS_API_KEY: "test-key",
       ELEVENLABS_AGENT_ID: "agent_test",
       ELEVENLABS_AGENT_PHONE_NUMBER_ID: "phnum_test"
@@ -177,6 +181,7 @@ describe("placeAgentPhoneCall", () => {
       },
       {
         ...baseConfig,
+        PROVIDER_MODE_PHONE: "live",
         ELEVENLABS_API_KEY: "test-key"
       },
       {

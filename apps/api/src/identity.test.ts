@@ -5,7 +5,9 @@ import type { AppConfig } from "./config.js";
 
 const config = {
   PUBLIC_API_URL: "http://localhost:4001",
-  EMAIL_FROM_DOMAIN: "agents.barkan.dev"
+  PROVIDER_MODE_EMAIL: "mock",
+  PROVIDER_MODE_PHONE: "mock",
+  EMAIL_AGENT_DOMAIN: "agents.barkan.dev"
 } as AppConfig;
 
 describe("identity layer routes", () => {
