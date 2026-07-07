@@ -9,6 +9,7 @@ import type { Collections } from "./db.js";
 import { buildCorsOptionsForRequest, isPublicCorsPath, isTrustedDashboardOrigin } from "./cors.js";
 import { ApiError, buildErrorPayload, codeForStatus, validationApiError } from "./errors.js";
 import { registerAgentRoutes } from "./agents-routes.js";
+import { registerApprovalRoutes } from "./approvals.js";
 import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
@@ -145,6 +146,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   app.get("/api/health", async () => ({ ok: true }));
 
   registerAgentRoutes(app, collections, config);
+  registerApprovalRoutes(app, collections, config);
   registerAuditRoutes(app, collections, config);
   registerAuthRoutes(app, collections, config);
   registerDashboardChatRoutes(app, collections, config);
