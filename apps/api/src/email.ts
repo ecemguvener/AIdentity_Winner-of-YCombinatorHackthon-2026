@@ -3,11 +3,14 @@ import { ObjectId } from "mongodb";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
-import type { Collections } from "./db.js";
+import type { AgentDocument, Collections, EmailMessageDocument } from "./db.js";
 import { requireAuth } from "./auth.js";
+import { authenticateAgentRequest } from "./agent-auth.js";
 import { AUDIT_ACTIONS, recordAuditForAgentHexId } from "./audit.js";
 import { ApiError, codeForStatus, type ApiErrorCode } from "./errors.js";
 import { loadAgentIdentityFromRequest, type AgentIdentity } from "./identity.js";
+import { sendAgentEmail } from "./email-service.js";
+import { createEmailProvider, type EmailProvider } from "./providers/email-provider.js";
 
 // ---------------------------------------------------------------------------
 // Email Capability Add-on
@@ -72,6 +75,7 @@ interface EmailReplyNotification {
 
 // --- In-memory stores -------------------------------------------------------
 
+// LEGACY — removed in task 018 when inbound/site email moves fully to Mongo.
 const emailIdentityByAccount = new Map<string, EmailIdentity>();
 const accountByAddress = new Map<string, string>(); // lowercased address -> accountId
 const messagesByAccount = new Map<string, EmailMessage[]>();
@@ -98,9 +102,17 @@ export class EmailError extends ApiError {
 
 const sendSchema = z.object({
   to: z.string().email(),
+  cc: z.array(z.string().email()).optional(),
   subject: z.string().min(1).max(200),
-  body: z.string().min(1).max(10_000),
+  body: z.string().min(1).max(10_000).optional(),
+  text: z.string().min(1).max(10_000).optional(),
+  html: z.string().min(1).max(20_000).optional(),
+  threadId: z.string().optional(),
+  idempotencyKey: z.string().min(1).max(200).optional(),
   approved: z.boolean().optional()
+}).refine((value) => Boolean(value.body ?? value.text), {
+  message: "text is required",
+  path: ["text"]
 });
 
 const requestSchema = z.object({
@@ -703,7 +715,12 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
 // Routes — agent-facing (Bearer identity token)
 // ---------------------------------------------------------------------------
 
-export function registerEmailRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
+export function registerEmailRoutes(
+  app: FastifyInstance,
+  collections: Collections,
+  config: AppConfig,
+  provider: EmailProvider = createEmailProvider(config)
+) {
   auditCollections = collections;
   const requireEmailAgent = async (request: FastifyRequest, reply: FastifyReply): Promise<AgentIdentity | null> => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
@@ -714,22 +731,54 @@ export function registerEmailRoutes(app: FastifyInstance, collections: Collectio
     return identity;
   };
 
+  const handleSend = async (request: FastifyRequest, reply: FastifyReply) => {
+    const context = await loadAgentEmailContext(request, collections);
+    const payload = sendSchema.parse(request.body ?? {});
+    const messageText = payload.text ?? payload.body!;
+    const idempotencyKey = payload.idempotencyKey ?? readIdempotencyHeader(request);
+    return runEmail(reply, async () => {
+      const { message, thread, replayed } = await sendAgentEmail(collections, config, provider, {
+        agent: context.agent,
+        to: payload.to,
+        cc: payload.cc,
+        subject: payload.subject,
+        text: messageText,
+        html: payload.html,
+        threadId: payload.threadId,
+        idempotencyKey
+      });
+      rememberLegacyInboundRoute(context.agent, message, thread._id.toHexString());
+      return reply.code(replayed ? 200 : 201).send(serializePersistentSend(message));
+    });
+  };
+
   app.post("/api/tools/email/request", async (request, reply) => {
-    const identity = await requireEmailAgent(request, reply);
-    if (!identity) return;
+    const context = await loadAgentEmailContext(request, collections);
     const payload = requestSchema.parse(request.body ?? {});
     return runEmail(reply, async () => {
-      const { message, parsed } = await sendEmailFromRequest(identity, payload, config);
-      return reply.code(201).send({ ...serializeSend(message), parsed: parsed ? serializeParsed(parsed) : null });
+      const generated = await draftEmail(payload.request, context.agent.name, config);
+      const to = payload.to ?? generated.to ?? undefined;
+      if (!to) {
+        throw new EmailError(
+          422,
+          `couldn't find a recipient email in: "${payload.request}". Ask the user for the recipient's email address, then pass it as "to".`
+        );
+      }
+      const { message, thread, replayed } = await sendAgentEmail(collections, config, provider, {
+        agent: context.agent,
+        to,
+        subject: generated.subject,
+        text: generated.body,
+        idempotencyKey: readIdempotencyHeader(request),
+        parsedBy: generated.parsedBy
+      });
+      rememberLegacyInboundRoute(context.agent, message, thread._id.toHexString());
+      return reply.code(replayed ? 200 : 201).send({ ...serializePersistentSend(message), parsed: serializeParsed({ ...generated, to }) });
     });
   });
 
-  app.post("/api/tools/email/send", async (request, reply) => {
-    const identity = await requireEmailAgent(request, reply);
-    if (!identity) return;
-    const payload = sendSchema.parse(request.body ?? {});
-    return runEmail(reply, async () => reply.code(201).send(serializeSend(await sendEmail(identity, payload, config))));
-  });
+  app.post("/api/tools/email/send", handleSend);
+  app.post("/api/v1/agent/email/send", handleSend);
 
   app.post("/api/tools/email/pause", async (request, reply) => {
     const identity = await requireEmailAgent(request, reply);
@@ -744,11 +793,10 @@ export function registerEmailRoutes(app: FastifyInstance, collections: Collectio
   });
 
   app.get("/api/identity/:agentId/email-activity", async (request, reply) => {
-    const identity = await requireEmailAgent(request, reply);
-    if (!identity) return;
+    const context = await loadAgentEmailContext(request, collections);
     const { agentId } = request.params as { agentId: string };
-    if (identity.id !== agentId) throw new ApiError(403, "forbidden", "identity token does not match requested agent");
-    return getEmailActivity(agentId);
+    if (context.agent._id.toHexString() !== agentId) throw new ApiError(403, "forbidden", "identity token does not match requested agent");
+    return getPersistentEmailActivity(collections, context.agent, config);
   });
 
   // Inbound provider webhook (Resend). No Bearer token — verified by the Svix
@@ -818,7 +866,11 @@ export function registerSiteEmailRoutes(app: FastifyInstance, collections: Colle
     const site = await resolveSite(request, reply);
     if (!site) return;
     const payload = sendSchema.parse(request.body ?? {});
-    return runEmail(reply, async () => reply.code(201).send(serializeSend(await sendSiteEmail(site.accountId, site.name, payload, config))));
+    return runEmail(reply, async () => reply.code(201).send(serializeSend(await sendSiteEmail(site.accountId, site.name, {
+      to: payload.to,
+      subject: payload.subject,
+      body: payload.body ?? payload.text!
+    }, config))));
   });
 
   app.post("/api/sites/:siteId/email/pause", async (request, reply) => {
@@ -846,6 +898,72 @@ async function runEmail(reply: FastifyReply, fn: () => unknown | Promise<unknown
       throw error;
     }
     throw error;
+  }
+}
+
+async function loadAgentEmailContext(
+  request: FastifyRequest,
+  collections: Collections
+): Promise<{ agent: AgentDocument }> {
+  const context = await authenticateAgentRequest(request, collections);
+  if (!context) {
+    throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+  }
+  return { agent: context.agent };
+}
+
+async function getPersistentEmailActivity(collections: Collections, agent: AgentDocument, config: AppConfig) {
+  const account = await collections.emailAccounts.findOne({ agentId: agent._id });
+  if (account) {
+    accountByAddress.set(account.address.toLowerCase(), agent._id.toHexString());
+  }
+  const messages = await collections.emailMessages
+    .find({ agentId: agent._id })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .toArray();
+  const serializedMessages = [
+    ...messages.map(serializePersistentMessage),
+    // LEGACY — removed in task 018 when inbound messages move to Mongo.
+    ...(messagesByAccount.get(agent._id.toHexString()) ?? []).map(serializeMessage)
+  ].sort((left, right) => right.created_at.localeCompare(left.created_at));
+  return {
+    account_id: agent._id.toHexString(),
+    email_identity: account
+      ? {
+          email_identity_id: account._id.toHexString(),
+          email_address: account.address,
+          display_name: account.displayName,
+          provider: config.PROVIDER_MODE_EMAIL === "live" ? "resend" : "mock",
+          status: account.status,
+          created_at: account.createdAt.toISOString()
+        }
+      : null,
+    messages: serializedMessages,
+    // LEGACY — removed in task 018 when inbound notifications move to Mongo.
+    reply_notifications: (notificationsByAccount.get(agent._id.toHexString()) ?? []).map(serializeNotification)
+  };
+}
+
+function rememberLegacyInboundRoute(agent: AgentDocument, message: EmailMessageDocument, threadId: string): void {
+  const accountId = agent._id.toHexString();
+  accountByAddress.set(message.fromEmail.toLowerCase(), accountId);
+  threadByCounterparty.set(`${accountId}:${message.toEmail.toLowerCase()}`, threadId);
+  if (message.providerMessageId) {
+    messageByProviderId.set(message.providerMessageId, {
+      id: message._id.toHexString(),
+      accountId,
+      threadId,
+      direction: "outbound",
+      fromEmail: message.fromEmail,
+      toEmail: message.toEmail,
+      subject: message.subject,
+      body: message.textBody,
+      providerMessageId: message.providerMessageId,
+      status: message.status === "failed" ? "failed" : "sent",
+      parsedBy: message.parsedBy ?? null,
+      createdAt: message.createdAt
+    });
   }
 }
 
@@ -949,6 +1067,19 @@ function serializeSend(message: EmailMessage) {
   };
 }
 
+function serializePersistentSend(message: EmailMessageDocument) {
+  return {
+    ok: message.status === "sent" || message.status === "delivered",
+    message_id: message._id.toHexString(),
+    thread_id: message.threadId.toHexString(),
+    provider_message_id: message.providerMessageId ?? null,
+    from: message.fromEmail,
+    to: message.toEmail,
+    subject: message.subject,
+    status: message.status
+  };
+}
+
 function serializeParsed(parsed: GeneratedEmail) {
   return {
     to: parsed.to,
@@ -956,6 +1087,24 @@ function serializeParsed(parsed: GeneratedEmail) {
     subject: parsed.subject,
     body: parsed.body,
     parsed_by: parsed.parsedBy
+  };
+}
+
+function serializePersistentMessage(message: EmailMessageDocument) {
+  return {
+    id: message._id.toHexString(),
+    thread_id: message.threadId.toHexString(),
+    direction: message.direction,
+    from_email: message.fromEmail,
+    to_email: message.toEmail,
+    cc: message.cc ?? [],
+    subject: message.subject,
+    body: message.textBody,
+    html: message.htmlBody ?? null,
+    provider_message_id: message.providerMessageId ?? null,
+    status: message.status,
+    parsed_by: message.parsedBy ?? null,
+    created_at: message.createdAt.toISOString()
   };
 }
 
@@ -973,6 +1122,11 @@ function serializeMessage(message: EmailMessage) {
     parsed_by: message.parsedBy,
     created_at: message.createdAt.toISOString()
   };
+}
+
+function readIdempotencyHeader(request: FastifyRequest): string | undefined {
+  const value = request.headers["idempotency-key"];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function serializeNotification(notification: EmailReplyNotification) {

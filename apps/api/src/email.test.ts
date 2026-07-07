@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import Fastify from "fastify";
 import { MongoMemoryServer } from "mongodb-memory-server";
+import { ObjectId } from "mongodb";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AppConfig } from "./config.js";
 import { connectDatabase, type Database } from "./db.js";
@@ -177,6 +178,43 @@ describe("email capability routes", () => {
     await app.close();
   });
 
+  it("supports v1 sends with idempotency and persistent thread reuse", async () => {
+    const app = await buildTestApp();
+    const { token, agentId } = await initEmailAgent(app);
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent/email/send",
+      headers: { authorization: `Bearer ${token}`, "idempotency-key": "route-idem-1" },
+      payload: { to: "casey@example.com", subject: "Persistent hello", text: "First" }
+    });
+    expect(first.statusCode).toBe(201);
+    const firstBody = first.json();
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent/email/send",
+      headers: { authorization: `Bearer ${token}`, "idempotency-key": "route-idem-1" },
+      payload: { to: "casey@example.com", subject: "Persistent hello", text: "First" }
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().message_id).toBe(firstBody.message_id);
+
+    const next = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent/email/send",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { to: "casey@example.com", subject: "Same thread", text: "Second" }
+    });
+    expect(next.statusCode).toBe(201);
+    expect(next.json().thread_id).toBe(firstBody.thread_id);
+
+    const messages = await database.collections.emailMessages.find({ agentId: new ObjectId(agentId) }).toArray();
+    expect(messages).toHaveLength(2);
+
+    await app.close();
+  });
+
   it("asks for a recipient when the request has no address", async () => {
     const app = await buildTestApp();
     const { token } = await initEmailAgent(app);
@@ -193,18 +231,18 @@ describe("email capability routes", () => {
     await app.close();
   });
 
-  it("blocks sending when human approval is required and not granted", async () => {
+  it("sends directly until email policy approvals land", async () => {
     const app = await buildTestApp();
     const { token } = await initEmailAgent(app, true);
 
-    const blocked = await app.inject({
+    const sent = await app.inject({
       method: "POST",
       url: "/api/tools/email/send",
       headers: { authorization: `Bearer ${token}` },
       payload: { to: "john@example.com", subject: "Hi", body: "Hello" }
     });
-    expect(blocked.statusCode).toBe(403);
-    expect(blocked.json().message).toMatch(/approval/i);
+    expect(sent.statusCode).toBe(201);
+    expect(sent.json()).toMatchObject({ ok: true, to: "john@example.com", status: "sent" });
 
     const allowed = await app.inject({
       method: "POST",

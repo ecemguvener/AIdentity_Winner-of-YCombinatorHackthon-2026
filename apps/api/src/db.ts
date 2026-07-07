@@ -177,6 +177,9 @@ export interface EmailMessageDocument extends Document {
   textBody: string;
   htmlBody?: string;
   providerMessageId?: string;
+  idempotencyKey?: string;
+  parsedBy?: "openai" | "heuristic" | null;
+  providerError?: string;
   status: "queued" | "sent" | "delivered" | "bounced" | "received" | "failed";
   attachments?: Array<{
     filename: string;
@@ -387,6 +390,14 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.emailMessages.createIndex({ threadId: 1, createdAt: 1 }),
     collections.emailMessages.createIndex({ agentId: 1, createdAt: -1 }),
     collections.emailMessages.createIndex({ providerMessageId: 1 }, { sparse: true }),
+    collections.emailMessages.createIndex(
+      { agentId: 1, idempotencyKey: 1 },
+      {
+        unique: true,
+        name: "email_agent_idempotency_unique",
+        partialFilterExpression: { idempotencyKey: { $exists: true } }
+      }
+    ),
     collections.phoneNumbers.createIndex({ e164: 1 }, { unique: true }),
     collections.phoneNumbers.createIndex({ agentId: 1 }),
     collections.calls.createIndex({ agentId: 1, createdAt: -1 }),

@@ -178,6 +178,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       tool_endpoints: {
         email_request: `${config.PUBLIC_API_URL}/api/tools/email/request`,
         email_send: `${config.PUBLIC_API_URL}/api/tools/email/send`,
+        email_send_v1: `${config.PUBLIC_API_URL}/api/v1/agent/email/send`,
         email_pause: `${config.PUBLIC_API_URL}/api/tools/email/pause`,
         email_resume: `${config.PUBLIC_API_URL}/api/tools/email/resume`,
         email_activity: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/email-activity`,
