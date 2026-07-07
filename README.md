@@ -58,7 +58,7 @@ The dashboard runs on `http://localhost:4888` and the API runs on `http://localh
 
 ## Demo Account
 
-Seed a polished local demo account with fake agent identities, OpenClaw links, API tokens, and recent activity:
+Seed a polished local demo account on the current agent model with three coherent agents, email/phone history, approvals, billing usage, and audit logs:
 
 ```powershell
 npm run seed:demo
@@ -67,7 +67,7 @@ npm run seed:demo
 Login:
 
 ```text
-Email: demo@barkan.test
+Email: demo@barkan.dev
 Password: demo-password
 ```
 

@@ -135,6 +135,7 @@ The Node API exposes:
 | `apps/api/src/waitlist.ts` | Public card waitlist endpoint with dedupe and IP rate limiting |
 | `apps/api/src/retention.ts` | Daily data retention sweep for transcripts, email bodies, webhooks, usage, approvals, pairing, audit, and tombstones |
 | `apps/api/src/backup-retention.ts` | Pure backup archive pruning helper used by tests/runbooks |
+| `apps/api/src/seed-demo.ts` | Idempotent current-model demo account seeder for agents, approvals, email, phone, usage, and audits |
 | `apps/web/src/sentry.ts` | Web Sentry initialization and event scrubber |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
 | `apps/api/src/mcp/server.ts` | MCP Streamable HTTP server, agent-token auth, capability-scoped tools, and resources |
