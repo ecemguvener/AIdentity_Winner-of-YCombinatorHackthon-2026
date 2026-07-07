@@ -12,7 +12,9 @@ export const AUDIT_ACTIONS = {
     receive: "email.receive",
     blocked: "email.blocked",
     provision: "email.provision",
+    provisioned: "email.provisioned",
     pause: "email.pause",
+    paused: "email.paused",
     resume: "email.resume"
   },
   phone: {

@@ -705,15 +705,12 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
 
 export function registerEmailRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
   auditCollections = collections;
-  // The email store is still in-memory (real persistence lands in a later
-  // task), so agent-facing routes lazily mint the address on first use — the
-  // identity init response no longer pre-provisions one.
   const requireEmailAgent = async (request: FastifyRequest, reply: FastifyReply): Promise<AgentIdentity | null> => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
     if (!identity) {
       throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
-    ensureSiteEmailIdentity(identity.id, identity.name, config);
+    await ensureAgentEmailIdentity(collections, identity, config);
     return identity;
   };
 
@@ -737,13 +734,13 @@ export function registerEmailRoutes(app: FastifyInstance, collections: Collectio
   app.post("/api/tools/email/pause", async (request, reply) => {
     const identity = await requireEmailAgent(request, reply);
     if (!identity) return;
-    return runEmail(reply, () => serializeIdentity(setEmailIdentityStatus(identity.id, "paused")));
+    return runEmail(reply, async () => serializeIdentity(await setAgentEmailIdentityStatus(collections, identity, "paused")));
   });
 
   app.post("/api/tools/email/resume", async (request, reply) => {
     const identity = await requireEmailAgent(request, reply);
     if (!identity) return;
-    return runEmail(reply, () => serializeIdentity(setEmailIdentityStatus(identity.id, "active")));
+    return runEmail(reply, async () => serializeIdentity(await setAgentEmailIdentityStatus(collections, identity, "active")));
   });
 
   app.get("/api/identity/:agentId/email-activity", async (request, reply) => {
@@ -850,6 +847,42 @@ async function runEmail(reply: FastifyReply, fn: () => unknown | Promise<unknown
     }
     throw error;
   }
+}
+
+async function ensureAgentEmailIdentity(collections: Collections, identity: AgentIdentity, config: AppConfig): Promise<EmailIdentity> {
+  const agentObjectId = ObjectId.isValid(identity.id) ? new ObjectId(identity.id) : null;
+  const persisted = agentObjectId
+    ? await collections.emailAccounts.findOne({ agentId: agentObjectId }, { sort: { createdAt: -1 } })
+    : null;
+  if (!persisted) {
+    return ensureSiteEmailIdentity(identity.id, identity.name, config);
+  }
+  const emailIdentity = provisionEmailIdentity(identity.id, persisted.address, identity.name, config);
+  emailIdentity.status = persisted.status === "paused" ? "paused" : "active";
+  accountByAddress.set(persisted.address.toLowerCase(), identity.id);
+  return emailIdentity;
+}
+
+async function setAgentEmailIdentityStatus(
+  collections: Collections,
+  identity: AgentIdentity,
+  status: EmailIdentityStatus
+): Promise<EmailIdentity> {
+  const agentObjectId = ObjectId.isValid(identity.id) ? new ObjectId(identity.id) : null;
+  if (agentObjectId) {
+    await Promise.all([
+      collections.emailAccounts.updateOne(
+        { agentId: agentObjectId },
+        { $set: { status, updatedAt: new Date() } }
+      ),
+      collections.agents.updateOne(
+        { _id: agentObjectId },
+        { $set: { "capabilities.email": status === "active", updatedAt: new Date() } }
+      )
+    ]);
+    identity.permissions["email.send"] = status === "active";
+  }
+  return setEmailIdentityStatus(identity.id, status);
 }
 
 /** Mirrors identity.checkAction, plus the email-identity pause state. */

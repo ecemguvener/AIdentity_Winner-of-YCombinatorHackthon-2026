@@ -12,7 +12,7 @@ export type CapabilityName = "email" | "phone";
 export const CAPABILITY_NAMES: readonly CapabilityName[] = ["email", "phone"];
 
 export interface ProvisioningStatus {
-  state: "not_provisioned" | "pending" | "provisioned" | "failed";
+  state: "not_provisioned" | "pending" | "provisioned" | "active" | "paused" | "failed";
   detail?: string;
 }
 

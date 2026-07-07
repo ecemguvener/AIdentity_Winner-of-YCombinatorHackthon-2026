@@ -34,7 +34,7 @@ async function initAgent(app: ReturnType<typeof buildApp>) {
     }
   });
   expect(response.statusCode).toBe(201);
-  return response.json<{ agent_id: string; identity_token: string; email: null; phone: null }>();
+  return response.json<{ agent_id: string; identity_token: string; email: string; phone: null }>();
 }
 
 beforeAll(async () => {
@@ -48,13 +48,13 @@ afterAll(async () => {
 });
 
 describe("identity layer routes (Mongo-backed)", () => {
-  it("initializes a persisted agent with a hashed token and no fake provisioning", async () => {
+  it("initializes a persisted agent with a hashed token and provisioned email", async () => {
     const app = buildApp();
     const init = await initAgent(app);
 
     expect(ObjectId.isValid(init.agent_id)).toBe(true);
     expect(init.identity_token).toMatch(/^brk_test_[A-Za-z0-9_-]{43}$/);
-    expect(init.email).toBeNull();
+    expect(init.email).toBe("maya@agents.barkan.dev");
     expect(init.phone).toBeNull();
     expect(init).not.toHaveProperty("calendar_url");
 

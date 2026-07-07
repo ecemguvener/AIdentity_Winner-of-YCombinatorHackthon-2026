@@ -13,6 +13,8 @@ import { AUDIT_ACTIONS, listAuditEntries, recordAudit, serializeAuditEntry } fro
 import { ApiError } from "./errors.js";
 import { slugify } from "./lib/slug.js";
 import { normalizeEmail } from "./security.js";
+import { getProvisioner } from "./provisioning.js";
+import { registerEmailProvisioner } from "./email-provisioning.js";
 
 type ToolName = "email" | "phone" | "calendar" | "payment";
 type PermissionName = "email.send" | "phone.call" | "calendar.create" | "payment.purchase";
@@ -87,6 +89,8 @@ const calendarBookSchema = z.object({
 });
 
 export function registerIdentityRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
+  registerEmailProvisioner(collections, config);
+
   app.post("/api/identity/init", async (request, reply) => {
     const payload = initIdentitySchema.parse(request.body ?? {});
     const tools = [...new Set(payload.tools)] as ToolName[];
@@ -126,6 +130,20 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       updatedAt: now
     };
     await collections.policies.insertOne(policy);
+    let emailAddress: string | null = null;
+    if (agent.capabilities.email) {
+      try {
+        await getProvisioner("email").provision(agent);
+        emailAddress = (await collections.emailAccounts.findOne({ agentId: agent._id, status: "active" }))?.address ?? null;
+      } catch (error) {
+        await Promise.all([
+          collections.agents.deleteOne({ _id: agent._id }),
+          collections.policies.deleteMany({ agentId: agent._id }),
+          collections.emailAccounts.deleteMany({ agentId: agent._id })
+        ]);
+        throw error;
+      }
+    }
 
     const { plaintext } = await issueIdentityToken(collections, agent._id, "default", {
       mode: identityTokenMode(config)
@@ -147,8 +165,8 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       status: agent.status,
       runtime: agent.runtime,
       use_case: agent.description,
-      // Real email/phone provisioning lands in later tasks; card is deferred.
-      email: null,
+      // Real phone provisioning lands in a later task; card is deferred.
+      email: emailAddress,
       phone: null,
       payment: null,
       tools,

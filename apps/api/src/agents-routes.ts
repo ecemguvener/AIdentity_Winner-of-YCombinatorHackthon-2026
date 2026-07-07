@@ -82,6 +82,16 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
       createdAt: now,
       updatedAt: now
     });
+    try {
+      await provisionInitialCapabilities(agent);
+    } catch (error) {
+      await Promise.all([
+        collections.agents.deleteOne({ _id: agent._id }),
+        collections.policies.deleteMany({ agentId: agent._id }),
+        collections.emailAccounts.deleteMany({ agentId: agent._id })
+      ]);
+      throw error;
+    }
 
     const { plaintext, tokenDoc } = await issueIdentityToken(collections, agent._id, "default", {
       mode: identityTokenMode(config)
@@ -265,6 +275,14 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
       detail: `${capability} capability ${action} requested.`
     });
     return reply.code(202).send({ provisioning: { state: "pending", capability } });
+  }
+
+  async function provisionInitialCapabilities(agent: AgentDocument): Promise<void> {
+    for (const capability of CAPABILITY_NAMES) {
+      if (agent.capabilities[capability]) {
+        await getProvisioner(capability).provision(agent);
+      }
+    }
   }
 }
 

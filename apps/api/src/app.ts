@@ -15,6 +15,7 @@ import { registerAuthRoutes } from "./auth.js";
 import { requireAuth } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
 import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
+import { registerEmailProvisioner } from "./email-provisioning.js";
 import { registerIdentityRoutes } from "./identity.js";
 import { registerPaymentRoutes, registerSitePaymentRoutes } from "./payments.js";
 import { registerSiteRoutes } from "./sites.js";
@@ -146,6 +147,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   });
 
   app.get("/api/health", async () => ({ ok: true }));
+  registerEmailProvisioner(collections, config);
   app.get("/api/v1/ops/email-domain", async (request, reply) => {
     await requireAuth(request, reply, collections, config);
     const status = config.PROVIDER_MODE_EMAIL === "live"

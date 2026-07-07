@@ -106,7 +106,7 @@ describe("POST /api/v1/agents", () => {
       status: "active",
       capabilities: { email: true, phone: false },
       approvalMode: "policy",
-      emailAddress: null,
+      emailAddress: "maya@agents.barkan.dev",
       phoneE164: null
     });
     expect(created.identityToken.secret).toMatch(/^brk_test_[A-Za-z0-9_-]{43}$/);

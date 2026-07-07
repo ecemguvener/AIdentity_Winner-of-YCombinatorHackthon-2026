@@ -29,7 +29,7 @@ export interface Agent {
 
 export interface ProvisioningStatus {
   enabled: boolean;
-  state: "not_provisioned" | "pending" | "provisioned" | "failed";
+  state: "not_provisioned" | "pending" | "provisioned" | "active" | "paused" | "failed";
   detail?: string;
 }
 

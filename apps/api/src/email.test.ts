@@ -48,9 +48,7 @@ async function initEmailAgent(app: Awaited<ReturnType<typeof buildTestApp>>, req
   });
   expect(response.statusCode).toBe(201);
   const body = response.json();
-  // Init no longer pre-provisions an address (email is null until the real
-  // provisioning task lands); the email routes mint one lazily on first use.
-  expect(body.email).toBeNull();
+  expect(body.email).toMatch(/^ava(?:-\d+)?@agents\.barkan\.dev$/);
   const activity = await app.inject({
     method: "GET",
     url: `/api/identity/${body.agent_id}/email-activity`,
@@ -58,6 +56,7 @@ async function initEmailAgent(app: Awaited<ReturnType<typeof buildTestApp>>, req
   });
   expect(activity.statusCode).toBe(200);
   const email = activity.json().email_identity.email_address as string;
+  expect(email).toBe(body.email);
   return { token: body.identity_token as string, agentId: body.agent_id as string, email };
 }
 
