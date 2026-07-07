@@ -76,6 +76,7 @@ The Node API exposes:
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
 - `GET /api/v1/ops/status` (session-authed provider mode + billing/phone/email readiness)
 - `GET /api/v1/openapi.json`
+- `POST/GET /mcp` (agent-token MCP Streamable HTTP server with capability-scoped tools/resources)
 - `GET /api/v1/billing`
 - `GET /api/v1/billing/plans`
 - `GET /api/v1/billing/usage`
@@ -107,6 +108,7 @@ The Node API exposes:
 | `apps/api/src/usage.ts` | Usage ledger, summaries, Stripe meter reporting, and active-number sampling |
 | `apps/api/src/entitlements.ts` | Plan entitlement checks for agent creation, capabilities, usage, and phone numbers |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
+| `apps/api/src/mcp/server.ts` | MCP Streamable HTTP server, agent-token auth, capability-scoped tools, and resources |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |
@@ -131,6 +133,7 @@ The Node API exposes:
 | `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |
 | `docs/api/email.md` | Frozen agent-facing email API contract |
 | `docs/api/phone.md` | Frozen agent-facing phone/SMS API contract |
+| `docs/integrations/mcp.md` | MCP Streamable HTTP integration guide |
 | `docs/phone-setup.md` | Live phone provisioning and ElevenLabs setup guide |
 | `apps/api/src/providers/stripe-client.ts` | Stripe Billing SDK singleton |
 | `apps/api/src/stripe-webhooks.ts` | Stripe Billing webhook dispatcher |

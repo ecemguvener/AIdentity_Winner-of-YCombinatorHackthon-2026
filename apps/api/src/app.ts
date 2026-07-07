@@ -21,6 +21,7 @@ import { registerEmailApprovalExecutor } from "./email-service.js";
 import { createEmailProvider } from "./providers/email-provider.js";
 import { registerEmailProvisioner } from "./email-provisioning.js";
 import { registerIdentityRoutes } from "./identity.js";
+import { registerMcpRoutes } from "./mcp/server.js";
 import { registerPhoneRoutes } from "./phone.js";
 import { registerPolicyRoutes } from "./policies.js";
 import { registerPhoneProvisioner } from "./phone-provisioning.js";
@@ -201,6 +202,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerEmailRoutes(app, collections, config, emailProvider);
   registerSiteEmailRoutes(app, collections, config, emailProvider);
   registerIdentityRoutes(app, collections, config);
+  registerMcpRoutes(app, collections, config, emailProvider);
   registerPhoneRoutes(app, collections, config);
   registerPolicyRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);
@@ -238,7 +240,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAgentTokenRoute(url: string): boolean {
-  return url.startsWith("/api/tools/") || url.startsWith("/api/identity/") || url.startsWith("/api/v1/agent/");
+  return url === "/mcp" || url.startsWith("/api/tools/") || url.startsWith("/api/identity/") || url.startsWith("/api/v1/agent/");
 }
 
 function isAuthRateLimitedRoute(url: string): boolean {
