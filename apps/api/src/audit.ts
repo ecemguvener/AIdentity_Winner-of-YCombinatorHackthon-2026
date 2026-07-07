@@ -10,6 +10,7 @@ export const AUDIT_ACTIONS = {
   email: {
     send: "email.send",
     receive: "email.receive",
+    receiveUnrouted: "email.receive.unrouted",
     blocked: "email.blocked",
     provision: "email.provision",
     provisioned: "email.provisioned",

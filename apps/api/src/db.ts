@@ -180,6 +180,10 @@ export interface EmailMessageDocument extends Document {
   idempotencyKey?: string;
   parsedBy?: "openai" | "heuristic" | null;
   providerError?: string;
+  headers?: Record<string, string>;
+  summary?: string;
+  suggestedReply?: string;
+  readAt?: Date;
   status: "queued" | "sent" | "delivered" | "bounced" | "received" | "failed";
   attachments?: Array<{
     filename: string;

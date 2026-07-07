@@ -4,6 +4,8 @@ import type { AppConfig } from "../config.js";
 import type { Collections, WebhookEventDocument } from "../db.js";
 import { requireAuth } from "../auth.js";
 import { AUDIT_ACTIONS, recordAudit } from "../audit.js";
+import { ingestResendReceivedEmail } from "../email-service.js";
+import { createEmailInboundClient } from "../providers/email-provider.js";
 import {
   WEBHOOK_PROVIDERS,
   mockSignatureAllowed,
@@ -18,13 +20,14 @@ const webhookEventsQuerySchema = z.object({
 });
 
 export function registerWebhookRoutes(app: FastifyInstance, collections: Collections, config: AppConfig): void {
+  const inboundClient = config.RESEND_API_KEY ? createEmailInboundClient(config) : null;
   registerWebhookRoute(app, collections, config, {
     path: "/webhooks/resend",
     provider: "resend",
     verify: providerVerifier("resend"),
     extractEventId: (payload) => (isRecord(payload) && typeof payload.id === "string" ? payload.id : null),
     extractEventType: (payload) => (isRecord(payload) && typeof payload.type === "string" ? payload.type : "unknown"),
-    handle: (payload) => handleResendLifecycle(payload, collections)
+    handle: (payload) => handleResendWebhook(payload, collections, config, inboundClient)
   });
 
   // Ops visibility into the dead-letter queue (e.g. ?status=failed). Session
@@ -58,6 +61,22 @@ export function registerWebhookRoutes(app: FastifyInstance, collections: Collect
       handle: () => {}
     });
   }
+}
+
+async function handleResendWebhook(
+  payload: unknown,
+  collections: Collections,
+  config: AppConfig,
+  inboundClient: ReturnType<typeof createEmailInboundClient> | null
+): Promise<void> {
+  if (isRecord(payload) && payload.type === "email.received") {
+    if (!inboundClient) {
+      throw new Error("RESEND_API_KEY is required to fetch inbound email content");
+    }
+    await ingestResendReceivedEmail(collections, config, inboundClient, payload);
+    return;
+  }
+  await handleResendLifecycle(payload, collections);
 }
 
 async function handleResendLifecycle(payload: unknown, collections: Collections): Promise<void> {

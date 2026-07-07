@@ -51,9 +51,10 @@ The Node API exposes:
 - `POST /api/tools/calendar/book`
 - Payment tool routes under `/api/tools/payments/*`
 - Email tool routes under `/api/tools/email/*` and `/api/sites/:siteId/email/*`
+- Agent email routes: `POST /api/v1/agent/email/send`, `GET /api/v1/agent/email/threads`, `GET /api/v1/agent/email/threads/:threadId`, `POST /api/v1/agent/email/threads/:threadId/reply`, `GET /api/v1/agent/email/threads/:threadId/attachments/:attachmentId`
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
-- `POST /webhooks/resend` (Resend Svix-signed email lifecycle webhook)
+- `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
 - Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
 
 ## Key Files
@@ -73,7 +74,9 @@ The Node API exposes:
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
 | `apps/api/src/phone.ts` | Phone call integration/mock fallback |
-| `apps/api/src/email.ts` | Email capability integration/mock fallback |
+| `apps/api/src/email.ts` | Email routes, drafting helpers, and email activity serializers |
+| `apps/api/src/email-service.ts` | Persistent outbound/inbound email threads, idempotency, and replies |
+| `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |
 | `apps/api/src/payments.ts` | Payment capability and policy engine |
 | `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |
 | `apps/api/src/webhooks/verify.ts` | Stripe/Svix/Twilio/ElevenLabs signature verifiers |

@@ -12,6 +12,7 @@ import { ApiError } from "./errors.js";
 type ApprovalDecision = "approved" | "rejected";
 type WaitDecision = ApprovalDecision | "expired" | "timeout";
 type ApprovalEventName = "approval.requested" | "approval.decided" | "approval.expired";
+type OwnerEvent = { ownerUserId: ObjectId; name: string; payload: unknown };
 
 export interface RequestApprovalInput {
   agentId: ObjectId | string;
@@ -235,11 +236,17 @@ export function registerApprovalRoutes(app: FastifyInstance, collections: Collec
       if (!event.approval.ownerUserId.equals(ownerUserId)) return;
       writeSse(reply, event.name, serializeApproval(event.approval));
     };
+    const ownerListener = (event: OwnerEvent) => {
+      if (!event.ownerUserId.equals(ownerUserId)) return;
+      writeSse(reply, event.name, event.payload);
+    };
     const heartbeat = setInterval(() => reply.raw.write(": heartbeat\n\n"), 25_000);
     bus.on("approval-event", listener);
+    bus.on("owner-event", ownerListener);
     request.raw.on("close", () => {
       clearInterval(heartbeat);
       bus.off("approval-event", listener);
+      bus.off("owner-event", ownerListener);
       reply.raw.end();
     });
   });
@@ -330,6 +337,10 @@ function serializeApproval(approval: ApprovalDocument) {
 function emitApproval(name: ApprovalEventName, approval: ApprovalDocument) {
   bus.emit(eventKey(approval._id), approval);
   bus.emit("approval-event", { name, approval });
+}
+
+export function emitOwnerEvent(ownerUserId: ObjectId, name: string, payload: unknown): void {
+  bus.emit("owner-event", { ownerUserId, name, payload });
 }
 
 function eventKey(approvalId: ObjectId): string {

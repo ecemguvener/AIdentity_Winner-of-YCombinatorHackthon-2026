@@ -8,6 +8,7 @@ import { buildTrustedDashboardCorsHeaders } from "./cors.js";
 import { ApiError } from "./errors.js";
 import { createPurchaseFromPrompt, formatPurchaseAmount, PaymentError, provisionPaymentIdentity } from "./payments.js";
 import { EmailError, sendSiteEmailFromText } from "./email.js";
+import { createEmailProvider } from "./providers/email-provider.js";
 import { PhoneCallError, placeAgentPhoneCall, waitForPhoneCallCompletion, type PhoneCallResult, type PhoneCallTranscriptTurn } from "./phone.js";
 
 const dashboardChatMessageSchema = z.object({
@@ -84,7 +85,7 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
     // If the latest message is an email instruction, drive the email tool and
     // stream a confirmation instead of a normal chat reply.
     if (latestUserMessage && isEmailIntent(latestUserMessage.content)) {
-      const message = await runChatEmail(latestUserMessage.content, sites, config);
+      const message = await runChatEmail(latestUserMessage.content, sites, collections, config);
       streamChatMessage(request, reply, config, message);
       return;
     }
@@ -515,17 +516,20 @@ function isEmailIntent(text: string): boolean {
   return /\be-?mail\b/i.test(text) && /\b(ask|tell|send|reply|write|invite|follow up|let .* know|about|to)\b/i.test(text);
 }
 
-async function runChatEmail(text: string, sites: ChatAgentIdentity[], config: AppConfig): Promise<string> {
+async function runChatEmail(text: string, sites: ChatAgentIdentity[], collections: Collections, config: AppConfig): Promise<string> {
   const site = resolvePurchaseSite(text, sites);
   if (!site) {
     return "You don't have an agent identity yet. Create one first, then I can send email on its behalf.";
   }
 
-  const accountId = site._id.toHexString();
   try {
-    const { message, parsed } = await sendSiteEmailFromText(accountId, site.name, text, config);
+    const agent = await collections.agents.findOne({ _id: site._id });
+    if (!agent) {
+      return "I couldn't find that agent identity anymore.";
+    }
+    const { message, parsed } = await sendSiteEmailFromText(collections, config, createEmailProvider(config), agent, text);
     const draftedBy = parsed?.parsedBy === "openai" ? "" : " _(templated draft)_";
-    const quotedBody = message.body.split("\n").join("\n> ");
+    const quotedBody = message.textBody.split("\n").join("\n> ");
     const header = `✉️ **Email ${message.status === "sent" ? "sent" : "failed"}** from **${site.name}** (\`${message.fromEmail}\`)`;
     return `${header}\n\n**To:** ${message.toEmail}\n**Subject:** ${message.subject}${draftedBy}\n\n> ${quotedBody}\n\nSee the **Email** tab on **${site.name}** for the full activity log.`;
   } catch (error) {

@@ -6,11 +6,14 @@ import type { AppConfig } from "./config.js";
 import type { AgentDocument, Collections, EmailMessageDocument } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { authenticateAgentRequest } from "./agent-auth.js";
-import { AUDIT_ACTIONS, recordAuditForAgentHexId } from "./audit.js";
 import { ApiError, codeForStatus, type ApiErrorCode } from "./errors.js";
-import { loadAgentIdentityFromRequest, type AgentIdentity } from "./identity.js";
-import { sendAgentEmail } from "./email-service.js";
-import { createEmailProvider, type EmailProvider } from "./providers/email-provider.js";
+import {
+  getAgentEmailThread,
+  listAgentEmailThreads,
+  replyToAgentEmailThread,
+  sendAgentEmail
+} from "./email-service.js";
+import { createEmailInboundClient, createEmailProvider, type EmailProvider } from "./providers/email-provider.js";
 
 // ---------------------------------------------------------------------------
 // Email Capability Add-on
@@ -29,60 +32,7 @@ import { createEmailProvider, type EmailProvider } from "./providers/email-provi
 // Provider mode is explicit. Live uses Resend; mock logs and returns synthetic ids.
 // ---------------------------------------------------------------------------
 
-type Provider = "resend" | "mock";
 type EmailIdentityStatus = "active" | "paused";
-type Direction = "outbound" | "inbound";
-type MessageStatus = "sent" | "failed" | "received";
-type NotificationStatus = "unread" | "read";
-
-interface EmailIdentity {
-  id: string;
-  accountId: string;
-  emailAddress: string;
-  displayName: string;
-  provider: Provider;
-  status: EmailIdentityStatus;
-  createdAt: Date;
-}
-
-interface EmailMessage {
-  id: string;
-  accountId: string;
-  threadId: string;
-  direction: Direction;
-  fromEmail: string;
-  toEmail: string;
-  subject: string;
-  body: string;
-  providerMessageId: string | null;
-  status: MessageStatus;
-  parsedBy: "openai" | "heuristic" | null;
-  createdAt: Date;
-}
-
-interface EmailReplyNotification {
-  id: string;
-  accountId: string;
-  emailMessageId: string;
-  threadId: string;
-  fromEmail: string;
-  subject: string;
-  summary: string;
-  suggestedReply: string;
-  status: NotificationStatus;
-  createdAt: Date;
-}
-
-// --- In-memory stores -------------------------------------------------------
-
-// LEGACY — removed in task 018 when inbound/site email moves fully to Mongo.
-const emailIdentityByAccount = new Map<string, EmailIdentity>();
-const accountByAddress = new Map<string, string>(); // lowercased address -> accountId
-const messagesByAccount = new Map<string, EmailMessage[]>();
-const messageByProviderId = new Map<string, EmailMessage>();
-const notificationsByAccount = new Map<string, EmailReplyNotification[]>();
-const threadByCounterparty = new Map<string, string>(); // `${accountId}:${counterparty}` -> threadId
-let auditCollections: Collections | null = null;
 
 /** Error carrying an HTTP status so route handlers can translate cleanly. */
 export class EmailError extends ApiError {
@@ -121,275 +71,10 @@ const requestSchema = z.object({
   approved: z.boolean().optional()
 });
 
-// ---------------------------------------------------------------------------
-// Provisioning + lookups
-// ---------------------------------------------------------------------------
-
-/**
- * Attach an email identity to an account. The identity layer passes the address
- * it already minted; the dashboard path mints one via ensureSiteEmailIdentity.
- */
-export function provisionEmailIdentity(accountId: string, emailAddress: string, displayName: string, config: AppConfig): EmailIdentity {
-  const existing = emailIdentityByAccount.get(accountId);
-  if (existing) {
-    return existing;
-  }
-  const identity: EmailIdentity = {
-    id: `emailid_${randomId(8)}`,
-    accountId,
-    emailAddress,
-    displayName,
-    provider: config.PROVIDER_MODE_EMAIL === "live" ? "resend" : "mock",
-    status: "active",
-    createdAt: new Date()
-  };
-  emailIdentityByAccount.set(accountId, identity);
-  accountByAddress.set(emailAddress.toLowerCase(), accountId);
-  recordAccountAudit(accountId, AUDIT_ACTIONS.email.provision, "allowed", `Email identity ${emailAddress} provisioned (${identity.provider}).`);
-  return identity;
-}
-
-/** Lazy provisioning for dashboard-scoped accounts (mints an address). */
-export function ensureSiteEmailIdentity(accountId: string, displayName: string, config: AppConfig): EmailIdentity {
-  const existing = emailIdentityByAccount.get(accountId);
-  if (existing) {
-    return existing;
-  }
-  const address = `${slugify(displayName)}-${randomId(4)}@${config.EMAIL_AGENT_DOMAIN}`;
-  return provisionEmailIdentity(accountId, address, displayName, config);
-}
-
-export function getEmailIdentity(accountId: string): EmailIdentity | null {
-  return emailIdentityByAccount.get(accountId) ?? null;
-}
-
-export function setEmailIdentityStatus(accountId: string, status: EmailIdentityStatus): EmailIdentity {
-  const identity = emailIdentityByAccount.get(accountId);
-  if (!identity) {
-    throw new EmailError(404, "no email identity for this agent");
-  }
-  identity.status = status;
-  recordAccountAudit(accountId, status === "paused" ? AUDIT_ACTIONS.email.pause : AUDIT_ACTIONS.email.resume, "allowed", `Email identity ${status === "paused" ? "paused" : "resumed"}.`);
-  return identity;
-}
-
-// ---------------------------------------------------------------------------
-// Core send (shared by every front door) — no permission gating here; callers
-// gate as appropriate (bearer routes via requireSendableIdentity, dashboard
-// routes implicitly via the owner's session).
-// ---------------------------------------------------------------------------
-
-export interface SendResult {
-  message: EmailMessage;
-  parsed?: GeneratedEmail;
-}
-
-async function performSend(
-  emailIdentity: EmailIdentity,
-  input: { to: string; subject: string; body: string },
-  config: AppConfig,
-  parsed?: GeneratedEmail
-): Promise<EmailMessage> {
-  const accountId = emailIdentity.accountId;
-  const threadId = threadFor(accountId, input.to);
-  const from = formatFrom(emailIdentity);
-
-  const wire = { from, to: input.to, subject: input.subject, text: input.body };
-
-  try {
-    const result = await dispatchSend(config, wire);
-    const message = storeMessage({
-      accountId,
-      threadId,
-      direction: "outbound",
-      fromEmail: emailIdentity.emailAddress,
-      toEmail: input.to,
-      subject: input.subject,
-      body: input.body,
-      providerMessageId: result.providerMessageId,
-      status: "sent",
-      parsedBy: parsed?.parsedBy ?? null
-    });
-    recordAccountAudit(accountId, AUDIT_ACTIONS.email.send, "allowed", `Email sent to ${input.to}: ${input.subject}`);
-    return message;
-  } catch (error) {
-    storeMessage({
-      accountId,
-      threadId,
-      direction: "outbound",
-      fromEmail: emailIdentity.emailAddress,
-      toEmail: input.to,
-      subject: input.subject,
-      body: input.body,
-      providerMessageId: null,
-      status: "failed",
-      parsedBy: parsed?.parsedBy ?? null
-    });
-    recordAccountAudit(accountId, AUDIT_ACTIONS.email.blocked, "blocked", `Send to ${input.to} failed: ${(error as Error).message}`);
-    throw error instanceof EmailError ? error : new EmailError(502, `email provider error: ${(error as Error).message}`);
-  }
-}
-
-// --- Agent-facing (Bearer identity token) ----------------------------------
-
-export async function sendEmail(
-  identity: AgentIdentity,
-  input: { to: string; subject: string; body: string; approved?: boolean },
-  config: AppConfig
-): Promise<EmailMessage> {
-  const emailIdentity = requireSendableIdentity(identity, input.approved);
-  return performSend(emailIdentity, input, config);
-}
-
-export async function sendEmailFromRequest(
-  identity: AgentIdentity,
-  input: { request: string; to?: string; approved?: boolean },
-  config: AppConfig
-): Promise<SendResult> {
-  const emailIdentity = requireSendableIdentity(identity, input.approved);
-  const generated = await draftEmail(input.request, emailIdentity.displayName, config);
-  const to = input.to ?? generated.to ?? undefined;
-  if (!to) {
-    throw new EmailError(
-      422,
-      `couldn't find a recipient email in: "${input.request}". Ask the user for the recipient's email address, then pass it as "to".`
-    );
-  }
-  const message = await performSend(emailIdentity, { to, subject: generated.subject, body: generated.body }, config, generated);
-  return { message, parsed: { ...generated, to } };
-}
-
-// --- Dashboard-facing (session, owner is the human approver) ----------------
-
-export async function sendSiteEmailFromText(accountId: string, displayName: string, prompt: string, config: AppConfig, to?: string): Promise<SendResult> {
-  const emailIdentity = ensureSiteEmailIdentity(accountId, displayName, config);
-  if (emailIdentity.status !== "active") {
-    throw new EmailError(403, "email identity is paused");
-  }
-  const generated = await draftEmail(prompt, emailIdentity.displayName, config);
-  const recipient = to ?? generated.to ?? undefined;
-  if (!recipient) {
-    throw new EmailError(422, `couldn't find a recipient email in: "${prompt}". Add the recipient's email address.`);
-  }
-  const message = await performSend(emailIdentity, { to: recipient, subject: generated.subject, body: generated.body }, config, generated);
-  return { message, parsed: { ...generated, to: recipient } };
-}
-
-export async function sendSiteEmail(accountId: string, displayName: string, input: { to: string; subject: string; body: string }, config: AppConfig): Promise<EmailMessage> {
-  const emailIdentity = ensureSiteEmailIdentity(accountId, displayName, config);
-  if (emailIdentity.status !== "active") {
-    throw new EmailError(403, "email identity is paused");
-  }
-  return performSend(emailIdentity, input, config);
-}
-
-export function getEmailActivity(accountId: string) {
-  const identity = emailIdentityByAccount.get(accountId);
-  return {
-    account_id: accountId,
-    email_identity: identity ? serializeIdentity(identity) : null,
-    messages: (messagesByAccount.get(accountId) ?? []).map(serializeMessage),
-    reply_notifications: (notificationsByAccount.get(accountId) ?? []).map(serializeNotification)
-  };
-}
-
-/**
- * Ingest an inbound reply: match it to the right agent + thread, store it,
- * summarize it, and raise a reply notification the hub can surface.
- */
-export async function ingestInboundReply(normalized: NormalizedInbound, config: AppConfig): Promise<EmailReplyNotification | null> {
-  const accountId = normalized.toCandidates.map((address) => accountByAddress.get(address.toLowerCase())).find(Boolean);
-  if (!accountId) {
-    return null; // not addressed to any known agent identity
-  }
-  const sender = normalized.from;
-  const subject = normalized.subject || "(no subject)";
-  const body = normalized.text.trim();
-
-  const parent = normalized.inReplyTo ? messageByProviderId.get(normalized.inReplyTo) : undefined;
-  const threadId = parent?.threadId ?? threadByCounterparty.get(`${accountId}:${sender.toLowerCase()}`) ?? newThread();
-  threadByCounterparty.set(`${accountId}:${sender.toLowerCase()}`, threadId);
-
-  const recipient = normalized.toCandidates.find((address) => accountByAddress.get(address.toLowerCase()) === accountId) ?? normalized.toCandidates[0]!;
-  const message = storeMessage({
-    accountId,
-    threadId,
-    direction: "inbound",
-    fromEmail: sender,
-    toEmail: recipient,
-    subject,
-    body,
-    providerMessageId: normalized.messageId,
-    status: "received",
-    parsedBy: null
-  });
-
-  const { summary, suggestedReply } = await summarizeReply(subject, body, config);
-  const notification: EmailReplyNotification = {
-    id: `emailnotif_${randomId(8)}`,
-    accountId,
-    emailMessageId: message.id,
-    threadId,
-    fromEmail: sender,
-    subject,
-    summary,
-    suggestedReply,
-    status: "unread",
-    createdAt: new Date()
-  };
-  const list = notificationsByAccount.get(accountId) ?? [];
-  list.unshift(notification);
-  notificationsByAccount.set(accountId, list.slice(0, 200));
-
-  // Notify the hub: audit + a structured log line a hub listener can pick up.
-  recordAccountAudit(accountId, AUDIT_ACTIONS.email.receive, "allowed", `Reply from ${sender}: ${summary}`);
-  // eslint-disable-next-line no-console
-  console.info(`[email:reply] agent=${accountId} thread=${threadId} from=${sender} :: ${summary}`);
-  return notification;
-}
-
-// ---------------------------------------------------------------------------
-// Provider — explicit live/mock mode
-// ---------------------------------------------------------------------------
-
-interface OutboundPayload {
-  from: string;
-  to: string;
-  subject: string;
-  text: string;
-}
-
-async function dispatchSend(config: AppConfig, payload: OutboundPayload): Promise<{ providerMessageId: string; provider: Provider }> {
-  if (config.PROVIDER_MODE_EMAIL === "live" && config.RESEND_API_KEY) {
-    return sendViaResend(config.RESEND_API_KEY, payload);
-  }
-  return sendViaMock(payload);
-}
-
-async function sendViaResend(apiKey: string, payload: OutboundPayload): Promise<{ providerMessageId: string; provider: "resend" }> {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ from: payload.from, to: payload.to, subject: payload.subject, text: payload.text })
-  });
-  const responseText = await response.text();
-  if (!response.ok) {
-    throw new EmailError(502, `Resend ${response.status}: ${responseText.slice(0, 300)}`);
-  }
-  let id: string | undefined;
-  try {
-    id = (JSON.parse(responseText) as { id?: string }).id;
-  } catch {
-    id = undefined;
-  }
-  return { providerMessageId: id ?? `resend_${randomId(8)}`, provider: "resend" };
-}
-
-function sendViaMock(payload: OutboundPayload): { providerMessageId: string; provider: "mock" } {
-  // eslint-disable-next-line no-console
-  console.info(`[email:mock] ${payload.from} -> ${payload.to} :: ${payload.subject}`);
-  return { providerMessageId: `mock_${randomId(10)}`, provider: "mock" };
-}
+const replySchema = z.object({
+  text: z.string().min(1).max(10_000),
+  idempotencyKey: z.string().min(1).max(200).optional()
+});
 
 // ---------------------------------------------------------------------------
 // Natural-language drafting + reply summaries: OpenAI Responses API → heuristic
@@ -401,6 +86,29 @@ export interface GeneratedEmail {
   subject: string;
   body: string;
   parsedBy: "openai" | "heuristic";
+}
+
+export async function sendSiteEmailFromText(
+  collections: Collections,
+  config: AppConfig,
+  provider: EmailProvider,
+  agent: AgentDocument,
+  prompt: string,
+  to?: string
+) {
+  const generated = await draftEmail(prompt, agent.name, config);
+  const recipient = to ?? generated.to ?? undefined;
+  if (!recipient) {
+    throw new EmailError(422, `couldn't find a recipient email in: "${prompt}". Add the recipient's email address.`);
+  }
+  const result = await sendAgentEmail(collections, config, provider, {
+    agent,
+    to: recipient,
+    subject: generated.subject,
+    text: generated.body,
+    parsedBy: generated.parsedBy
+  });
+  return { ...result, parsed: { ...generated, to: recipient } };
 }
 
 const DRAFT_SCHEMA = {
@@ -721,23 +429,13 @@ export function registerEmailRoutes(
   config: AppConfig,
   provider: EmailProvider = createEmailProvider(config)
 ) {
-  auditCollections = collections;
-  const requireEmailAgent = async (request: FastifyRequest, reply: FastifyReply): Promise<AgentIdentity | null> => {
-    const identity = await loadAgentIdentityFromRequest(request, collections);
-    if (!identity) {
-      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
-    }
-    await ensureAgentEmailIdentity(collections, identity, config);
-    return identity;
-  };
-
   const handleSend = async (request: FastifyRequest, reply: FastifyReply) => {
     const context = await loadAgentEmailContext(request, collections);
     const payload = sendSchema.parse(request.body ?? {});
     const messageText = payload.text ?? payload.body!;
     const idempotencyKey = payload.idempotencyKey ?? readIdempotencyHeader(request);
     return runEmail(reply, async () => {
-      const { message, thread, replayed } = await sendAgentEmail(collections, config, provider, {
+      const { message, replayed } = await sendAgentEmail(collections, config, provider, {
         agent: context.agent,
         to: payload.to,
         cc: payload.cc,
@@ -747,7 +445,6 @@ export function registerEmailRoutes(
         threadId: payload.threadId,
         idempotencyKey
       });
-      rememberLegacyInboundRoute(context.agent, message, thread._id.toHexString());
       return reply.code(replayed ? 200 : 201).send(serializePersistentSend(message));
     });
   };
@@ -764,7 +461,7 @@ export function registerEmailRoutes(
           `couldn't find a recipient email in: "${payload.request}". Ask the user for the recipient's email address, then pass it as "to".`
         );
       }
-      const { message, thread, replayed } = await sendAgentEmail(collections, config, provider, {
+      const { message, replayed } = await sendAgentEmail(collections, config, provider, {
         agent: context.agent,
         to,
         subject: generated.subject,
@@ -772,7 +469,6 @@ export function registerEmailRoutes(
         idempotencyKey: readIdempotencyHeader(request),
         parsedBy: generated.parsedBy
       });
-      rememberLegacyInboundRoute(context.agent, message, thread._id.toHexString());
       return reply.code(replayed ? 200 : 201).send({ ...serializePersistentSend(message), parsed: serializeParsed({ ...generated, to }) });
     });
   });
@@ -780,16 +476,70 @@ export function registerEmailRoutes(
   app.post("/api/tools/email/send", handleSend);
   app.post("/api/v1/agent/email/send", handleSend);
 
+  app.get("/api/v1/agent/email/threads", async (request) => {
+    const context = await loadAgentEmailContext(request, collections);
+    const query = request.query as { cursor?: string };
+    return listAgentEmailThreads(collections, context.agent, query.cursor);
+  });
+
+  app.get("/api/v1/agent/email/threads/:threadId", async (request) => {
+    const context = await loadAgentEmailContext(request, collections);
+    const { threadId } = request.params as { threadId: string };
+    const { thread, messages } = await getAgentEmailThread(collections, context.agent, threadId);
+    return {
+      thread: {
+        id: thread._id.toHexString(),
+        counterparty: thread.counterpartyEmail,
+        subject: thread.subject,
+        lastMessageAt: thread.lastMessageAt.toISOString(),
+        messageCount: thread.messageCount
+      },
+      messages: messages.map(serializePersistentMessage)
+    };
+  });
+
+  app.post("/api/v1/agent/email/threads/:threadId/reply", async (request, reply) => {
+    const context = await loadAgentEmailContext(request, collections);
+    const { threadId } = request.params as { threadId: string };
+    const payload = replySchema.parse(request.body ?? {});
+    const { message, replayed } = await replyToAgentEmailThread(collections, config, provider, {
+      agent: context.agent,
+      threadId,
+      text: payload.text,
+      idempotencyKey: payload.idempotencyKey ?? readIdempotencyHeader(request)
+    });
+    return reply.code(replayed ? 200 : 201).send(serializePersistentSend(message));
+  });
+
+  app.get("/api/v1/agent/email/threads/:threadId/attachments/:attachmentId", async (request, reply) => {
+    const context = await loadAgentEmailContext(request, collections);
+    const { threadId, attachmentId } = request.params as { threadId: string; attachmentId: string };
+    const { messages } = await getAgentEmailThread(collections, context.agent, threadId);
+    const message = messages.find((candidate) =>
+      candidate.attachments?.some((attachment) => attachment.providerAttachmentId === attachmentId)
+    );
+    const attachment = message?.attachments?.find((candidate) => candidate.providerAttachmentId === attachmentId);
+    if (!message || !attachment || !message.providerMessageId) {
+      throw new ApiError(404, "not_found", "attachment not found");
+    }
+    if (attachment.sizeBytes > 25 * 1024 * 1024) {
+      throw new ApiError(400, "validation_failed", "attachment exceeds 25MB limit");
+    }
+    const inboundClient = createEmailInboundClient(config);
+    const file = await inboundClient.getAttachment(message.providerMessageId, attachmentId);
+    reply.header("content-type", file.contentType);
+    reply.header("content-disposition", `attachment; filename="${file.filename.replace(/"/g, "")}"`);
+    return Buffer.from(file.data);
+  });
+
   app.post("/api/tools/email/pause", async (request, reply) => {
-    const identity = await requireEmailAgent(request, reply);
-    if (!identity) return;
-    return runEmail(reply, async () => serializeIdentity(await setAgentEmailIdentityStatus(collections, identity, "paused")));
+    const context = await loadAgentEmailContext(request, collections);
+    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, context.agent, "paused"), config));
   });
 
   app.post("/api/tools/email/resume", async (request, reply) => {
-    const identity = await requireEmailAgent(request, reply);
-    if (!identity) return;
-    return runEmail(reply, async () => serializeIdentity(await setAgentEmailIdentityStatus(collections, identity, "active")));
+    const context = await loadAgentEmailContext(request, collections);
+    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, context.agent, "active"), config));
   });
 
   app.get("/api/identity/:agentId/email-activity", async (request, reply) => {
@@ -798,33 +548,19 @@ export function registerEmailRoutes(
     if (context.agent._id.toHexString() !== agentId) throw new ApiError(403, "forbidden", "identity token does not match requested agent");
     return getPersistentEmailActivity(collections, context.agent, config);
   });
-
-  // Inbound provider webhook (Resend). No Bearer token — verified by the Svix
-  // signature when RESEND_WEBHOOK_SECRET is configured. Always 200 so the
-  // provider does not retry on unmatched recipients.
-  app.post("/api/webhooks/email/inbound", async (request, reply) => {
-    const secret = config.RESEND_WEBHOOK_SECRET;
-    if (secret) {
-      const rawBody = (request as { rawBody?: string }).rawBody ?? JSON.stringify(request.body ?? {});
-      const ok = secret.startsWith("whsec_")
-        ? verifyResendSignature(secret, request.headers as Record<string, unknown>, rawBody)
-        : request.headers["x-webhook-secret"] === secret;
-      if (!ok) {
-        throw new ApiError(401, "unauthorized", "invalid webhook signature");
-      }
-    }
-    const notification = await ingestInboundReply(normalizeInbound(request.body), config);
-    return reply.code(200).send({ ok: true, matched: Boolean(notification), notification: notification ? serializeNotification(notification) : null });
-  });
 }
 
 // ---------------------------------------------------------------------------
 // Routes — dashboard, per agent identity (session + ownership), scoped by site
 // ---------------------------------------------------------------------------
 
-export function registerSiteEmailRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
-  auditCollections = collections;
-  const resolveSite = async (request: FastifyRequest, reply: FastifyReply): Promise<{ accountId: string; name: string } | null> => {
+export function registerSiteEmailRoutes(
+  app: FastifyInstance,
+  collections: Collections,
+  config: AppConfig,
+  provider: EmailProvider = createEmailProvider(config)
+) {
+  const resolveSite = async (request: FastifyRequest, reply: FastifyReply): Promise<AgentDocument | null> => {
     const authContext = await requireAuth(request, reply, collections, config);
     if (!authContext) return null;
     const siteId = parseObjectId((request.params as { siteId: string }).siteId);
@@ -841,48 +577,65 @@ export function registerSiteEmailRoutes(app: FastifyInstance, collections: Colle
     if (!agent) {
       throw new ApiError(404, "not_found", "agent identity not found");
     }
-    const accountId = agent._id.toHexString();
-    ensureSiteEmailIdentity(accountId, agent.name || "Assistant", config); // lazy provision on first touch
-    return { accountId, name: agent.name || "Assistant" };
+    return agent;
   };
 
   app.get("/api/sites/:siteId/email-activity", async (request, reply) => {
-    const site = await resolveSite(request, reply);
-    if (!site) return;
-    return getEmailActivity(site.accountId);
+    const agent = await resolveSite(request, reply);
+    if (!agent) return;
+    return getPersistentEmailActivity(collections, agent, config);
   });
 
   app.post("/api/sites/:siteId/email/request", async (request, reply) => {
-    const site = await resolveSite(request, reply);
-    if (!site) return;
+    const agent = await resolveSite(request, reply);
+    if (!agent) return;
     const payload = requestSchema.parse(request.body ?? {});
     return runEmail(reply, async () => {
-      const { message, parsed } = await sendSiteEmailFromText(site.accountId, site.name, payload.request, config, payload.to);
-      return reply.code(201).send({ ...serializeSend(message), parsed: parsed ? serializeParsed(parsed) : null });
+      const generated = await draftEmail(payload.request, agent.name, config);
+      const to = payload.to ?? generated.to ?? undefined;
+      if (!to) {
+        throw new EmailError(422, `couldn't find a recipient email in: "${payload.request}". Add the recipient's email address.`);
+      }
+      const { message } = await sendAgentEmail(collections, config, provider, {
+        agent,
+        to,
+        subject: generated.subject,
+        text: generated.body,
+        parsedBy: generated.parsedBy
+      });
+      return reply.code(201).send({ ...serializePersistentSend(message), parsed: serializeParsed({ ...generated, to }) });
     });
   });
 
   app.post("/api/sites/:siteId/email/send", async (request, reply) => {
-    const site = await resolveSite(request, reply);
-    if (!site) return;
+    const agent = await resolveSite(request, reply);
+    if (!agent) return;
     const payload = sendSchema.parse(request.body ?? {});
-    return runEmail(reply, async () => reply.code(201).send(serializeSend(await sendSiteEmail(site.accountId, site.name, {
-      to: payload.to,
-      subject: payload.subject,
-      body: payload.body ?? payload.text!
-    }, config))));
+    return runEmail(reply, async () => {
+      const { message } = await sendAgentEmail(collections, config, provider, {
+        agent,
+        to: payload.to,
+        cc: payload.cc,
+        subject: payload.subject,
+        text: payload.text ?? payload.body!,
+        html: payload.html,
+        threadId: payload.threadId,
+        idempotencyKey: payload.idempotencyKey
+      });
+      return reply.code(201).send(serializePersistentSend(message));
+    });
   });
 
   app.post("/api/sites/:siteId/email/pause", async (request, reply) => {
-    const site = await resolveSite(request, reply);
-    if (!site) return;
-    return runEmail(reply, () => serializeIdentity(setEmailIdentityStatus(site.accountId, "paused")));
+    const agent = await resolveSite(request, reply);
+    if (!agent) return;
+    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, agent, "paused"), config));
   });
 
   app.post("/api/sites/:siteId/email/resume", async (request, reply) => {
-    const site = await resolveSite(request, reply);
-    if (!site) return;
-    return runEmail(reply, () => serializeIdentity(setEmailIdentityStatus(site.accountId, "active")));
+    const agent = await resolveSite(request, reply);
+    if (!agent) return;
+    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, agent, "active"), config));
   });
 }
 
@@ -914,19 +667,11 @@ async function loadAgentEmailContext(
 
 async function getPersistentEmailActivity(collections: Collections, agent: AgentDocument, config: AppConfig) {
   const account = await collections.emailAccounts.findOne({ agentId: agent._id });
-  if (account) {
-    accountByAddress.set(account.address.toLowerCase(), agent._id.toHexString());
-  }
   const messages = await collections.emailMessages
     .find({ agentId: agent._id })
     .sort({ createdAt: -1 })
     .limit(200)
     .toArray();
-  const serializedMessages = [
-    ...messages.map(serializePersistentMessage),
-    // LEGACY — removed in task 018 when inbound messages move to Mongo.
-    ...(messagesByAccount.get(agent._id.toHexString()) ?? []).map(serializeMessage)
-  ].sort((left, right) => right.created_at.localeCompare(left.created_at));
   return {
     account_id: agent._id.toHexString(),
     email_identity: account
@@ -939,132 +684,42 @@ async function getPersistentEmailActivity(collections: Collections, agent: Agent
           created_at: account.createdAt.toISOString()
         }
       : null,
-    messages: serializedMessages,
-    // LEGACY — removed in task 018 when inbound notifications move to Mongo.
-    reply_notifications: (notificationsByAccount.get(agent._id.toHexString()) ?? []).map(serializeNotification)
+    messages: messages.map(serializePersistentMessage),
+    reply_notifications: messages
+      .filter((message) => message.direction === "inbound" && message.summary)
+      .map((message) => ({
+        id: message._id.toHexString(),
+        email_message_id: message._id.toHexString(),
+        thread_id: message.threadId.toHexString(),
+        from_email: message.fromEmail,
+        subject: message.subject,
+        summary: message.summary,
+        suggested_reply: message.suggestedReply ?? "",
+        status: message.readAt ? "read" : "unread",
+        created_at: message.createdAt.toISOString()
+      }))
   };
 }
 
-function rememberLegacyInboundRoute(agent: AgentDocument, message: EmailMessageDocument, threadId: string): void {
-  const accountId = agent._id.toHexString();
-  accountByAddress.set(message.fromEmail.toLowerCase(), accountId);
-  threadByCounterparty.set(`${accountId}:${message.toEmail.toLowerCase()}`, threadId);
-  if (message.providerMessageId) {
-    messageByProviderId.set(message.providerMessageId, {
-      id: message._id.toHexString(),
-      accountId,
-      threadId,
-      direction: "outbound",
-      fromEmail: message.fromEmail,
-      toEmail: message.toEmail,
-      subject: message.subject,
-      body: message.textBody,
-      providerMessageId: message.providerMessageId,
-      status: message.status === "failed" ? "failed" : "sent",
-      parsedBy: message.parsedBy ?? null,
-      createdAt: message.createdAt
-    });
-  }
-}
-
-async function ensureAgentEmailIdentity(collections: Collections, identity: AgentIdentity, config: AppConfig): Promise<EmailIdentity> {
-  const agentObjectId = ObjectId.isValid(identity.id) ? new ObjectId(identity.id) : null;
-  const persisted = agentObjectId
-    ? await collections.emailAccounts.findOne({ agentId: agentObjectId }, { sort: { createdAt: -1 } })
-    : null;
-  if (!persisted) {
-    return ensureSiteEmailIdentity(identity.id, identity.name, config);
-  }
-  const emailIdentity = provisionEmailIdentity(identity.id, persisted.address, identity.name, config);
-  emailIdentity.status = persisted.status === "paused" ? "paused" : "active";
-  accountByAddress.set(persisted.address.toLowerCase(), identity.id);
-  return emailIdentity;
-}
-
-async function setAgentEmailIdentityStatus(
+async function setAgentEmailAccountStatus(
   collections: Collections,
-  identity: AgentIdentity,
+  agent: AgentDocument,
   status: EmailIdentityStatus
-): Promise<EmailIdentity> {
-  const agentObjectId = ObjectId.isValid(identity.id) ? new ObjectId(identity.id) : null;
-  if (agentObjectId) {
-    await Promise.all([
-      collections.emailAccounts.updateOne(
-        { agentId: agentObjectId },
-        { $set: { status, updatedAt: new Date() } }
-      ),
-      collections.agents.updateOne(
-        { _id: agentObjectId },
-        { $set: { "capabilities.email": status === "active", updatedAt: new Date() } }
-      )
-    ]);
-    identity.permissions["email.send"] = status === "active";
+){
+  const now = new Date();
+  const account = await collections.emailAccounts.findOneAndUpdate(
+    { agentId: agent._id },
+    { $set: { status, updatedAt: now } },
+    { returnDocument: "after" }
+  );
+  if (!account) {
+    throw new EmailError(404, "no email identity for this agent");
   }
-  return setEmailIdentityStatus(identity.id, status);
-}
-
-/** Mirrors identity.checkAction, plus the email-identity pause state. */
-function requireSendableIdentity(identity: AgentIdentity, approved: boolean | undefined): EmailIdentity {
-  if (identity.status !== "active") {
-    throw new EmailError(403, "identity is revoked");
-  }
-  const emailIdentity = emailIdentityByAccount.get(identity.id);
-  if (!emailIdentity) {
-    throw new EmailError(409, "no email identity for this agent");
-  }
-  if (emailIdentity.status !== "active") {
-    throw new EmailError(403, "email identity is paused");
-  }
-  if (!identity.permissions["email.send"]) {
-    throw new EmailError(403, "permission denied: email.send");
-  }
-  if (identity.permissions.requiresHumanApproval && approved !== true) {
-    throw new EmailError(403, "human approval is required for this action");
-  }
-  return emailIdentity;
-}
-
-function storeMessage(input: Omit<EmailMessage, "id" | "createdAt">): EmailMessage {
-  const message: EmailMessage = { id: `emailmsg_${randomId(8)}`, createdAt: new Date(), ...input };
-  const list = messagesByAccount.get(message.accountId) ?? [];
-  list.unshift(message);
-  messagesByAccount.set(message.accountId, list.slice(0, 200));
-  if (message.providerMessageId) {
-    messageByProviderId.set(message.providerMessageId, message);
-  }
-  return message;
-}
-
-function threadFor(accountId: string, counterparty: string): string {
-  const key = `${accountId}:${counterparty.toLowerCase()}`;
-  const existing = threadByCounterparty.get(key);
-  if (existing) {
-    return existing;
-  }
-  const threadId = newThread();
-  threadByCounterparty.set(key, threadId);
-  return threadId;
-}
-
-function newThread(): string {
-  return `thread_${randomId(8)}`;
-}
-
-function formatFrom(identity: EmailIdentity): string {
-  return `${identity.displayName} <${identity.emailAddress}>`;
-}
-
-function serializeSend(message: EmailMessage) {
-  return {
-    ok: message.status === "sent",
-    message_id: message.id,
-    thread_id: message.threadId,
-    provider_message_id: message.providerMessageId,
-    from: message.fromEmail,
-    to: message.toEmail,
-    subject: message.subject,
-    status: message.status
-  };
+  await collections.agents.updateOne(
+    { _id: agent._id },
+    { $set: { "capabilities.email": status === "active", updatedAt: now } }
+  );
+  return account;
 }
 
 function serializePersistentSend(message: EmailMessageDocument) {
@@ -1104,22 +759,14 @@ function serializePersistentMessage(message: EmailMessageDocument) {
     provider_message_id: message.providerMessageId ?? null,
     status: message.status,
     parsed_by: message.parsedBy ?? null,
-    created_at: message.createdAt.toISOString()
-  };
-}
-
-function serializeMessage(message: EmailMessage) {
-  return {
-    id: message.id,
-    thread_id: message.threadId,
-    direction: message.direction,
-    from_email: message.fromEmail,
-    to_email: message.toEmail,
-    subject: message.subject,
-    body: message.body,
-    provider_message_id: message.providerMessageId,
-    status: message.status,
-    parsed_by: message.parsedBy,
+    summary: message.summary ?? null,
+    suggested_reply: message.suggestedReply ?? null,
+    attachments: (message.attachments ?? []).map((attachment) => ({
+      filename: attachment.filename,
+      content_type: attachment.contentType,
+      size_bytes: attachment.sizeBytes,
+      id: attachment.providerAttachmentId ?? null
+    })),
     created_at: message.createdAt.toISOString()
   };
 }
@@ -1129,26 +776,15 @@ function readIdempotencyHeader(request: FastifyRequest): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function serializeNotification(notification: EmailReplyNotification) {
+function serializeEmailAccount(
+  identity: { _id: ObjectId; address: string; displayName: string; status: EmailIdentityStatus; createdAt: Date },
+  config: AppConfig
+) {
   return {
-    id: notification.id,
-    email_message_id: notification.emailMessageId,
-    thread_id: notification.threadId,
-    from_email: notification.fromEmail,
-    subject: notification.subject,
-    summary: notification.summary,
-    suggested_reply: notification.suggestedReply,
-    status: notification.status,
-    created_at: notification.createdAt.toISOString()
-  };
-}
-
-function serializeIdentity(identity: EmailIdentity) {
-  return {
-    email_identity_id: identity.id,
-    email_address: identity.emailAddress,
+    email_identity_id: identity._id.toHexString(),
+    email_address: identity.address,
     display_name: identity.displayName,
-    provider: identity.provider,
+    provider: config.PROVIDER_MODE_EMAIL === "live" ? "resend" : "mock",
     status: identity.status,
     created_at: identity.createdAt.toISOString()
   };
@@ -1156,31 +792,4 @@ function serializeIdentity(identity: EmailIdentity) {
 
 function parseObjectId(value: string): ObjectId | null {
   return ObjectId.isValid(value) ? new ObjectId(value) : null;
-}
-
-function recordAccountAudit(
-  accountId: string,
-  action: string,
-  status: "allowed" | "blocked" | "pending" | "error",
-  detail: string
-): void {
-  const collections = auditCollections;
-  if (!collections) {
-    return;
-  }
-  void recordAuditForAgentHexId(collections, accountId, {
-    actor: "agent",
-    action,
-    status,
-    detail
-  });
-}
-
-function slugify(value: string): string {
-  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return slug || "assistant";
-}
-
-function randomId(byteLength: number): string {
-  return crypto.randomBytes(byteLength).toString("base64url");
 }

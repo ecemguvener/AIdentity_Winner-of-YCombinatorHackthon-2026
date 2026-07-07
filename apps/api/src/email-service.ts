@@ -2,8 +2,9 @@ import { MongoServerError, ObjectId } from "mongodb";
 import type { AppConfig } from "./config.js";
 import type { AgentDocument, Collections, EmailMessageDocument, EmailThreadDocument } from "./db.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
+import { emitOwnerEvent } from "./approvals.js";
 import { ApiError } from "./errors.js";
-import type { EmailAttachmentInput, EmailProvider } from "./providers/email-provider.js";
+import type { EmailAttachmentInput, EmailInboundClient, EmailProvider, ReceivedEmailContent } from "./providers/email-provider.js";
 
 export interface SendAgentEmailInput {
   agent: AgentDocument;
@@ -23,6 +24,12 @@ export interface SendAgentEmailResult {
   message: EmailMessageDocument;
   thread: EmailThreadDocument;
   replayed: boolean;
+}
+
+export interface IngestResendEmailResult {
+  status: "received" | "skipped";
+  message?: EmailMessageDocument;
+  reason?: string;
 }
 
 export async function sendAgentEmail(
@@ -60,8 +67,13 @@ export async function sendAgentEmail(
     now
   });
 
+  const messageId = new ObjectId();
+  const outboundHeaders = normalizeHeaders({
+    ...(input.headers ?? {}),
+    "Message-ID": input.headers?.["Message-ID"] ?? input.headers?.["message-id"] ?? `<${messageId.toHexString()}@${config.EMAIL_AGENT_DOMAIN}>`
+  });
   const message: EmailMessageDocument = {
-    _id: new ObjectId(),
+    _id: messageId,
     agentId: input.agent._id,
     threadId: thread._id,
     direction: "outbound",
@@ -73,6 +85,7 @@ export async function sendAgentEmail(
     ...(input.html ? { htmlBody: input.html } : {}),
     ...(idempotencyKey ? { idempotencyKey } : {}),
     parsedBy: input.parsedBy ?? null,
+    headers: outboundHeaders,
     status: "queued",
     attachments: input.attachments?.map((attachment) => ({
       filename: typeof attachment.filename === "string" ? attachment.filename : "attachment",
@@ -108,7 +121,7 @@ export async function sendAgentEmail(
       html: input.html,
       attachments: input.attachments,
       headers: {
-        ...(input.headers ?? {}),
+        ...outboundHeaders,
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {})
       }
     });
@@ -150,6 +163,146 @@ export async function sendAgentEmail(
   }
 }
 
+export async function ingestResendReceivedEmail(
+  collections: Collections,
+  config: AppConfig,
+  inboundClient: EmailInboundClient,
+  payload: unknown
+): Promise<IngestResendEmailResult> {
+  const emailId = readInboundEmailId(payload);
+  if (!emailId) {
+    return { status: "skipped", reason: "missing email_id" };
+  }
+  const content = await inboundClient.getReceivedEmail(emailId);
+  const account = await resolveInboundAccount(collections, content);
+  if (!account) {
+    await recordAudit(collections, {
+      agentId: new ObjectId(),
+      actor: "system",
+      action: AUDIT_ACTIONS.email.receiveUnrouted,
+      status: "blocked",
+      detail: `Inbound email ${emailId} was not addressed to an active agent.`,
+      metadata: { emailId, recipients: recipientCandidates(content) }
+    });
+    return { status: "skipped", reason: "no active recipient" };
+  }
+  const agent = await collections.agents.findOne({ _id: account.agentId });
+  if (!agent) {
+    return { status: "skipped", reason: "agent not found" };
+  }
+  const from = extractEmailAddress(content.from).toLowerCase();
+  const now = new Date();
+  const thread = await resolveInboundThread(collections, agent, content, from, now);
+  const summary = summarizeHeuristic(content.text || content.html || "");
+  const message: EmailMessageDocument = {
+    _id: new ObjectId(),
+    agentId: agent._id,
+    threadId: thread._id,
+    direction: "inbound",
+    fromEmail: from,
+    toEmail: account.address,
+    cc: content.cc.map(extractEmailAddress).map((value) => value.toLowerCase()),
+    subject: content.subject || "(no subject)",
+    textBody: content.text,
+    ...(content.html ? { htmlBody: content.html } : {}),
+    providerMessageId: content.id,
+    headers: content.headers,
+    status: "received",
+    attachments: content.attachments.map((attachment) => ({
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      sizeBytes: attachment.sizeBytes,
+      providerAttachmentId: attachment.id
+    })),
+    summary,
+    suggestedReply: "Thanks for getting back to me. I'll follow up shortly.",
+    createdAt: now,
+    updatedAt: now
+  };
+  await collections.emailMessages.insertOne(message);
+  await bumpThread(collections, thread._id, now);
+  await recordAudit(collections, {
+    agentId: agent._id,
+    ownerUserId: agent.ownerUserId,
+    actor: "system",
+    action: AUDIT_ACTIONS.email.receive,
+    status: "allowed",
+    detail: `Reply from ${from}: ${summary}`,
+    resourceType: "emailMessage",
+    resourceId: message._id.toHexString(),
+    metadata: { emailId }
+  });
+  if (agent.ownerUserId) {
+    emitOwnerEvent(agent.ownerUserId, "email.received", {
+      agentId: agent._id.toHexString(),
+      threadId: thread._id.toHexString(),
+      messageId: message._id.toHexString(),
+      from,
+      subject: message.subject,
+      summary
+    });
+  }
+  return { status: "received", message };
+}
+
+export async function listAgentEmailThreads(collections: Collections, agent: AgentDocument, cursor?: string) {
+  const query = {
+    agentId: agent._id,
+    ...(cursor && ObjectId.isValid(cursor) ? { _id: { $lt: new ObjectId(cursor) } } : {})
+  };
+  const threads = await collections.emailThreads.find(query).sort({ lastMessageAt: -1, _id: -1 }).limit(25).toArray();
+  const unreadCounts = await collections.emailMessages.aggregate<{ _id: ObjectId; count: number }>([
+    { $match: { agentId: agent._id, direction: "inbound", readAt: { $exists: false } } },
+    { $group: { _id: "$threadId", count: { $sum: 1 } } }
+  ]).toArray();
+  const unreadByThread = Object.fromEntries(unreadCounts.map((entry) => [entry._id.toHexString(), entry.count]));
+  return {
+    threads: threads.map((thread) => ({
+      id: thread._id.toHexString(),
+      counterparty: thread.counterpartyEmail,
+      subject: thread.subject,
+      lastMessageAt: thread.lastMessageAt.toISOString(),
+      unreadCount: unreadByThread[thread._id.toHexString()] ?? 0
+    })),
+    nextCursor: threads.length === 25 ? threads[threads.length - 1]!._id.toHexString() : null
+  };
+}
+
+export async function getAgentEmailThread(collections: Collections, agent: AgentDocument, threadId: string) {
+  const thread = await loadAgentThread(collections, agent, threadId);
+  const messages = await collections.emailMessages.find({ agentId: agent._id, threadId: thread._id }).sort({ createdAt: 1 }).toArray();
+  await collections.emailMessages.updateMany(
+    { agentId: agent._id, threadId: thread._id, direction: "inbound", readAt: { $exists: false } },
+    { $set: { readAt: new Date() } }
+  );
+  return { thread, messages };
+}
+
+export async function replyToAgentEmailThread(
+  collections: Collections,
+  config: AppConfig,
+  provider: EmailProvider,
+  input: { agent: AgentDocument; threadId: string; text: string; idempotencyKey?: string }
+) {
+  const { thread, messages } = await getAgentEmailThread(collections, input.agent, input.threadId);
+  const lastInbound = [...messages].reverse().find((message) => message.direction === "inbound");
+  const headers: Record<string, string> = {};
+  const messageId = lastInbound?.headers?.["message-id"] ?? lastInbound?.providerMessageId;
+  if (messageId) {
+    headers["In-Reply-To"] = messageId;
+    headers.References = [lastInbound?.headers?.references, messageId].filter(Boolean).join(" ");
+  }
+  return sendAgentEmail(collections, config, provider, {
+    agent: input.agent,
+    to: thread.counterpartyEmail,
+    subject: thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`,
+    text: input.text,
+    threadId: thread._id.toHexString(),
+    idempotencyKey: input.idempotencyKey,
+    headers
+  });
+}
+
 async function resolveThread(
   collections: Collections,
   agent: AgentDocument,
@@ -186,6 +339,106 @@ async function resolveThread(
   };
   await collections.emailThreads.insertOne(thread);
   return thread;
+}
+
+async function resolveInboundAccount(collections: Collections, content: ReceivedEmailContent) {
+  for (const recipient of recipientCandidates(content)) {
+    const account = await collections.emailAccounts.findOne({ address: recipient, status: "active" });
+    if (account) {
+      return account;
+    }
+  }
+  return null;
+}
+
+function recipientCandidates(content: ReceivedEmailContent): string[] {
+  return [...content.to, ...content.cc, ...content.receivedFor]
+    .map(extractEmailAddress)
+    .filter(Boolean)
+    .map((address) => address.toLowerCase());
+}
+
+async function resolveInboundThread(
+  collections: Collections,
+  agent: AgentDocument,
+  content: ReceivedEmailContent,
+  from: string,
+  now: Date
+): Promise<EmailThreadDocument> {
+  const references = [
+    content.headers["in-reply-to"],
+    ...(content.headers.references?.split(/\s+/) ?? [])
+  ].filter(Boolean);
+  if (references.length) {
+    const referenced = await collections.emailMessages.findOne({
+      agentId: agent._id,
+      $or: [
+        { providerMessageId: { $in: references } },
+        { "headers.message-id": { $in: references } }
+      ]
+    });
+    if (referenced) {
+      const thread = await collections.emailThreads.findOne({ _id: referenced.threadId, agentId: agent._id });
+      if (thread) {
+        return thread;
+      }
+    }
+  }
+  const existing = await collections.emailThreads.findOne({ agentId: agent._id, counterpartyEmail: from });
+  if (existing) {
+    return existing;
+  }
+  const thread: EmailThreadDocument = {
+    _id: new ObjectId(),
+    agentId: agent._id,
+    subject: content.subject || "(no subject)",
+    counterpartyEmail: from,
+    lastMessageAt: now,
+    messageCount: 0,
+    createdAt: now,
+    updatedAt: now
+  };
+  await collections.emailThreads.insertOne(thread);
+  return thread;
+}
+
+async function loadAgentThread(collections: Collections, agent: AgentDocument, threadId: string): Promise<EmailThreadDocument> {
+  if (!ObjectId.isValid(threadId)) {
+    throw new ApiError(404, "not_found", "email thread not found");
+  }
+  const thread = await collections.emailThreads.findOne({ _id: new ObjectId(threadId), agentId: agent._id });
+  if (!thread) {
+    throw new ApiError(404, "not_found", "email thread not found");
+  }
+  return thread;
+}
+
+function readInboundEmailId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const data = record.data && typeof record.data === "object" ? record.data as Record<string, unknown> : record;
+  for (const key of ["email_id", "id"]) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function extractEmailAddress(value: string): string {
+  return value.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)?.[0] ?? value.trim();
+}
+
+function normalizeHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+}
+
+function summarizeHeuristic(body: string): string {
+  const firstLine = body.split(/\n+/).map((line) => line.trim()).find(Boolean) ?? "";
+  return firstLine ? (firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine) : "(empty reply)";
 }
 
 async function bumpThread(collections: Collections, threadId: ObjectId, at: Date): Promise<void> {
