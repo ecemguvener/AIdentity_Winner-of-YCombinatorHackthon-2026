@@ -22,6 +22,12 @@ import {
   placeOutboundCall,
   serializePhoneCall
 } from "./phone-service.js";
+import {
+  findLatestSmsCode,
+  listAgentSmsConversation,
+  sendAgentSms,
+  serializeSmsMessage
+} from "./sms-service.js";
 
 type ToolName = "email" | "phone" | "calendar" | "payment";
 type PermissionName = "email.send" | "phone.call" | "calendar.create" | "payment.purchase";
@@ -93,6 +99,22 @@ const phoneCallSchema = z.object({
 
 const phoneCallsQuerySchema = z.object({
   cursor: z.string().optional()
+});
+
+const smsSendSchema = z.object({
+  to: z.string().min(3).max(40),
+  body: z.string().min(1).max(1600),
+  idempotencyKey: z.string().min(1).max(120).optional()
+});
+
+const smsListQuerySchema = z.object({
+  with: z.string().min(3).max(40),
+  cursor: z.string().optional()
+});
+
+const smsLatestCodeQuerySchema = z.object({
+  from: z.string().min(3).max(40).optional(),
+  since: z.string().datetime().optional()
 });
 
 const calendarBookSchema = z.object({
@@ -298,6 +320,47 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
     }
     const { callId } = request.params as { callId: string };
     return { call: serializePhoneCall(await getAgentPhoneCall(collections, agentContext.agent, callId)) };
+  });
+
+  app.post("/api/v1/agent/phone/sms", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const payload = smsSendSchema.parse(request.body ?? {});
+    const message = await sendAgentSms(collections, config, {
+      agent: agentContext.agent,
+      to: payload.to,
+      body: payload.body,
+      idempotencyKey: payload.idempotencyKey
+    });
+    return { message: serializeSmsMessage(message) };
+  });
+
+  app.get("/api/v1/agent/phone/sms", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const query = smsListQuerySchema.parse(request.query ?? {});
+    const page = await listAgentSmsConversation(collections, agentContext.agent, { with: query.with, cursor: query.cursor });
+    return {
+      messages: page.messages.map(serializeSmsMessage),
+      next_cursor: page.nextCursor
+    };
+  });
+
+  app.get("/api/v1/agent/phone/sms/latest-code", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const query = smsLatestCodeQuerySchema.parse(request.query ?? {});
+    const result = await findLatestSmsCode(collections, agentContext.agent, {
+      from: query.from,
+      since: query.since ? new Date(query.since) : null
+    });
+    return { code: result.code, receivedAt: result.receivedAt.toISOString(), from: result.from };
   });
 
   app.post("/api/tools/calendar/book", async (request, reply) => {

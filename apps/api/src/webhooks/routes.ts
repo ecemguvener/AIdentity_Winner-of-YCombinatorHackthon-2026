@@ -6,6 +6,7 @@ import { requireAuth } from "../auth.js";
 import { AUDIT_ACTIONS, recordAudit } from "../audit.js";
 import { ingestResendReceivedEmail } from "../email-service.js";
 import { handleElevenLabsPostCall } from "../phone-post-call.js";
+import { ingestInboundSms, updateSmsDeliveryStatus } from "../sms-service.js";
 import {
   handleElevenLabsPersonalization,
   replayElevenLabsPersonalization,
@@ -54,6 +55,30 @@ export function registerWebhookRoutes(app: FastifyInstance, collections: Collect
     extractEventId: (payload) => readPostCallEventId(payload),
     extractEventType: (payload) => (isRecord(payload) && typeof payload.type === "string" ? payload.type : "post_call_transcription"),
     handle: (payload) => handleElevenLabsPostCall(collections, config, payload)
+  });
+
+  registerWebhookRoute(app, collections, config, {
+    path: "/webhooks/twilio/sms",
+    provider: "twilio",
+    verify: providerVerifier("twilio"),
+    extractEventId: (payload) => (isRecord(payload) && typeof payload.MessageSid === "string" ? payload.MessageSid : null),
+    extractEventType: () => "sms.received",
+    responseContentType: "text/xml",
+    handle: (payload) => ingestInboundSms(collections, payload),
+    handleReplay: () => "<Response/>"
+  });
+
+  registerWebhookRoute(app, collections, config, {
+    path: "/webhooks/twilio/status",
+    provider: "twilio",
+    verify: providerVerifier("twilio"),
+    extractEventId: (payload) => {
+      if (!isRecord(payload)) return null;
+      const sid = typeof payload.MessageSid === "string" ? payload.MessageSid : typeof payload.SmsSid === "string" ? payload.SmsSid : "";
+      return sid ? `status:${sid}:${payload.MessageStatus ?? payload.SmsStatus ?? ""}` : null;
+    },
+    extractEventType: () => "sms.status",
+    handle: (payload) => updateSmsDeliveryStatus(collections, payload)
   });
 
   // Ops visibility into the dead-letter queue (e.g. ?status=failed). Session

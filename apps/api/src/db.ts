@@ -247,7 +247,8 @@ export interface SmsMessageDocument extends Document {
   counterpartyE164: string;
   body: string;
   twilioMessageSid?: string;
-  status: "queued" | "sent" | "delivered" | "received" | "failed";
+  idempotencyKey?: string;
+  status: "queued" | "sent" | "delivered" | "received" | "failed" | "undelivered";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -428,6 +429,14 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.calls.createIndex({ elevenLabsConversationId: 1 }, { sparse: true }),
     collections.smsMessages.createIndex({ agentId: 1, createdAt: -1 }),
     collections.smsMessages.createIndex({ twilioMessageSid: 1 }, { sparse: true, unique: true }),
+    collections.smsMessages.createIndex(
+      { agentId: 1, idempotencyKey: 1 },
+      {
+        unique: true,
+        name: "sms_agent_idempotency_unique",
+        partialFilterExpression: { idempotencyKey: { $exists: true } }
+      }
+    ),
     collections.policies.createIndex({ agentId: 1 }, { unique: true }),
     collections.webhookEvents.createIndex({ provider: 1, providerEventId: 1 }, { unique: true }),
     collections.billingAccounts.createIndex({ ownerUserId: 1 }, { unique: true }),

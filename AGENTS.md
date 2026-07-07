@@ -58,6 +58,9 @@ The Node API exposes:
 - `POST /api/v1/agent/phone/call`
 - `GET /api/v1/agent/phone/calls`
 - `GET /api/v1/agent/phone/calls/:callId`
+- `POST /api/v1/agent/phone/sms`
+- `GET /api/v1/agent/phone/sms`
+- `GET /api/v1/agent/phone/sms/latest-code`
 - `POST /api/tools/calendar/book`
 - Payment tool routes under `/api/tools/payments/*`
 - Email tool routes under `/api/tools/email/*` and `/api/sites/:siteId/email/*`
@@ -67,6 +70,8 @@ The Node API exposes:
 - `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
 - `POST /webhooks/elevenlabs/personalization` (ElevenLabs signed inbound-call personalization; returns conversation initiation data)
 - `POST /webhooks/elevenlabs/post-call` (ElevenLabs signed post-call transcript/status/cost finalization)
+- `POST /webhooks/twilio/sms` (Twilio inbound SMS webhook; TwiML empty response)
+- `POST /webhooks/twilio/status` (Twilio SMS delivery status webhook)
 - Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
 
 ## Key Files
@@ -93,7 +98,9 @@ The Node API exposes:
 | `apps/api/src/phone-numbers.ts` | Twilio phone number persistence and lifecycle helpers |
 | `apps/api/src/lib/phone.ts` | Shared E.164 phone normalization helper |
 | `apps/api/src/providers/twilio-numbers.ts` | Twilio/mock number search, purchase, release, and audit listing |
+| `apps/api/src/providers/twilio-sms.ts` | Twilio/mock SMS send provider |
 | `apps/api/src/providers/elevenlabs-phone.ts` | ElevenLabs Conversational AI phone number import/assign/remove provider |
+| `apps/api/src/sms-service.ts` | Agent SMS send/receive, delivery status updates, latest-code extraction, and serializers |
 | `apps/api/src/email.ts` | Email routes, drafting helpers, and email activity serializers |
 | `apps/api/src/email-service.ts` | Persistent outbound/inbound email threads, idempotency, and replies |
 | `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |

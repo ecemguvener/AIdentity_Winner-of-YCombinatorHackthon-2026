@@ -104,6 +104,22 @@ Use a Twilio credential pair limited to the account or subaccount that owns Bark
 - `POST /webhooks/twilio/sms`
 - `POST /webhooks/twilio/status`
 
+Inbound SMS webhooks return empty TwiML (`<Response/>`) after storing messages for active Barkan phone numbers. Delivery status webhooks update outbound SMS rows to `sent`, `delivered`, `failed`, or `undelivered`.
+
+Agents use bearer-token phone SMS APIs:
+
+- `POST /api/v1/agent/phone/sms` with `{ "to": "+15551234567", "body": "Hello" }`
+- `GET /api/v1/agent/phone/sms?with=+15551234567`
+- `GET /api/v1/agent/phone/sms/latest-code?from=+15551234567&since=2026-07-07T10:00:00.000Z`
+
+`latest-code` scans recent inbound SMS bodies for 4-8 digit verification codes and returns the newest match.
+
+Useful Twilio test numbers:
+
+- `+15005550006`: valid test recipient
+- `+15005550001`: invalid phone number
+- `+15005550007`: carrier violation
+
 Run the audit before and after live drills:
 
 ```bash

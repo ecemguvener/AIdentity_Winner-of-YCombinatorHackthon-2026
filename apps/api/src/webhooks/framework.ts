@@ -56,6 +56,7 @@ export interface WebhookRouteOptions {
   extractEventType: (payload: unknown) => string;
   handle: (payload: unknown, event: WebhookEventDocument) => Promise<unknown> | unknown;
   handleReplay?: (payload: unknown, event: WebhookEventDocument) => Promise<unknown> | unknown;
+  responseContentType?: string;
 }
 
 /**
@@ -164,6 +165,9 @@ export function registerWebhookRoute(
       { _id: claim.event._id },
       { $set: { status: isSkippedResponse(responsePayload) ? "skipped" : "processed", processedAt: new Date(), updatedAt: new Date() }, $unset: { error: "" } }
     );
+    if (options.responseContentType) {
+      reply.type(options.responseContentType);
+    }
     return reply.code(200).send(responsePayload !== undefined ? responsePayload : { ok: true, event_id: providerEventId });
   });
 }
