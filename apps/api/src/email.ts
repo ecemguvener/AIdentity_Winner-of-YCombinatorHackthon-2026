@@ -6,6 +6,7 @@ import type { AppConfig } from "./config.js";
 import type { Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { AUDIT_ACTIONS, recordAuditForAgentHexId } from "./audit.js";
+import { ApiError, codeForStatus, type ApiErrorCode } from "./errors.js";
 import { loadAgentIdentityFromRequest, type AgentIdentity } from "./identity.js";
 
 // ---------------------------------------------------------------------------
@@ -80,12 +81,13 @@ const threadByCounterparty = new Map<string, string>(); // `${accountId}:${count
 let auditCollections: Collections | null = null;
 
 /** Error carrying an HTTP status so route handlers can translate cleanly. */
-export class EmailError extends Error {
+export class EmailError extends ApiError {
   constructor(
     readonly status: number,
-    message: string
+    message: string,
+    code: ApiErrorCode = codeForStatus(status)
   ) {
-    super(message);
+    super(status, code, message);
     this.name = "EmailError";
   }
 }
@@ -718,8 +720,7 @@ export function registerEmailRoutes(app: FastifyInstance, collections: Collectio
   const requireEmailAgent = async (request: FastifyRequest, reply: FastifyReply): Promise<AgentIdentity | null> => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
     if (!identity) {
-      reply.code(401).send({ error: "missing or invalid identity token" });
-      return null;
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
     ensureSiteEmailIdentity(identity.id, identity.name, config);
     return identity;
@@ -758,7 +759,7 @@ export function registerEmailRoutes(app: FastifyInstance, collections: Collectio
     const identity = await requireEmailAgent(request, reply);
     if (!identity) return;
     const { agentId } = request.params as { agentId: string };
-    if (identity.id !== agentId) return reply.code(403).send({ error: "identity token does not match requested agent" });
+    if (identity.id !== agentId) throw new ApiError(403, "forbidden", "identity token does not match requested agent");
     return getEmailActivity(agentId);
   });
 
@@ -773,7 +774,7 @@ export function registerEmailRoutes(app: FastifyInstance, collections: Collectio
         ? verifyResendSignature(secret, request.headers as Record<string, unknown>, rawBody)
         : request.headers["x-webhook-secret"] === secret;
       if (!ok) {
-        return reply.code(401).send({ error: "invalid webhook signature" });
+        throw new ApiError(401, "unauthorized", "invalid webhook signature");
       }
     }
     const notification = await ingestInboundReply(normalizeInbound(request.body), config);
@@ -792,17 +793,21 @@ export function registerSiteEmailRoutes(app: FastifyInstance, collections: Colle
     if (!authContext) return null;
     const siteId = parseObjectId((request.params as { siteId: string }).siteId);
     if (!siteId) {
-      reply.code(404).send({ error: "agent identity not found" });
-      return null;
+      throw new ApiError(404, "not_found", "agent identity not found");
     }
-    const site = await collections.sites.findOne({ _id: siteId, ownerUserId: authContext.user._id });
-    if (!site) {
-      reply.code(404).send({ error: "agent identity not found" });
-      return null;
+    // The legacy "site" id is an agent id since task 010 (or a pre-migration
+    // legacy site id from a stale dashboard tab).
+    const agent = await collections.agents.findOne({
+      ownerUserId: authContext.user._id,
+      status: { $ne: "revoked" },
+      $or: [{ _id: siteId }, { legacySiteId: siteId }]
+    });
+    if (!agent) {
+      throw new ApiError(404, "not_found", "agent identity not found");
     }
-    const accountId = site._id.toHexString();
-    ensureSiteEmailIdentity(accountId, site.name || "Assistant", config); // lazy provision on first touch
-    return { accountId, name: site.name || "Assistant" };
+    const accountId = agent._id.toHexString();
+    ensureSiteEmailIdentity(accountId, agent.name || "Assistant", config); // lazy provision on first touch
+    return { accountId, name: agent.name || "Assistant" };
   };
 
   app.get("/api/sites/:siteId/email-activity", async (request, reply) => {
@@ -850,7 +855,7 @@ async function runEmail(reply: FastifyReply, fn: () => unknown | Promise<unknown
     return await fn();
   } catch (error) {
     if (error instanceof EmailError) {
-      return reply.code(error.status).send({ error: error.message });
+      throw error;
     }
     throw error;
   }

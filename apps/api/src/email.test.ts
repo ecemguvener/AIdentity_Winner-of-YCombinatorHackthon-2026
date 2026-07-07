@@ -189,7 +189,7 @@ describe("email capability routes", () => {
       payload: { request: "Email John and ask if he can meet tomorrow." }
     });
     expect(request.statusCode).toBe(422);
-    expect(request.json().error).toMatch(/recipient/i);
+    expect(request.json().message).toMatch(/recipient/i);
 
     await app.close();
   });
@@ -205,7 +205,7 @@ describe("email capability routes", () => {
       payload: { to: "john@example.com", subject: "Hi", body: "Hello" }
     });
     expect(blocked.statusCode).toBe(403);
-    expect(blocked.json().error).toMatch(/approval/i);
+    expect(blocked.json().message).toMatch(/approval/i);
 
     const allowed = await app.inject({
       method: "POST",
@@ -233,7 +233,7 @@ describe("email capability routes", () => {
       payload: { to: "john@example.com", subject: "Hi", body: "Hello" }
     });
     expect(blocked.statusCode).toBe(403);
-    expect(blocked.json().error).toMatch(/paused/i);
+    expect(blocked.json().message).toMatch(/paused/i);
 
     const resumed = await app.inject({ method: "POST", url: "/api/tools/email/resume", headers: { authorization: `Bearer ${token}` } });
     expect(resumed.json().status).toBe("active");

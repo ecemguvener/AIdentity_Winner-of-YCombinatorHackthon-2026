@@ -2,17 +2,24 @@ import type { FastifyInstance } from "fastify";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
-import type { ApiKeyDocument, AtlasProjectDocument, Collections, SiteDocument } from "./db.js";
+import type { AgentDocument, Collections, IdentityTokenDocument } from "./db.js";
+import { ApiError } from "./errors.js";
 import { requireAuth } from "./auth.js";
-import {
-  createAtlasProjectId,
-  createBarkanApiKey,
-  createPublicSiteKey,
-  createSitePreviewImage,
-  hashApiKey,
-  isAtlasProjectId,
-  serializeSite
-} from "./security.js";
+import { recordAudit } from "./audit.js";
+import { findOwnedLegacyAgent, issueOwnerToken, revokeAgentAndTokens } from "./agents-routes.js";
+import { identityTokenMode, reserveAgentSlug } from "./identity.js";
+import { createAtlasProjectId, isAtlasProjectId, serializeSite } from "./security.js";
+import { issueIdentityToken } from "./agent-auth.js";
+
+// ---------------------------------------------------------------------------
+// DEPRECATED legacy sites/site-setups routes, kept as thin adapters over the
+// `agents` collection until the web UI migrates to /api/v1/agents (task 012).
+// Response shapes match apps/web/src/api.ts; every response carries a
+// `deprecation: true` header.
+//   site           -> agent (site id = agent id)
+//   site setup     -> provisioning agent (projectId = agent.legacyProjectId)
+//   site api key   -> identity token
+// ---------------------------------------------------------------------------
 
 const updateSiteSchema = z.object({
   name: z.string().min(1).max(80).optional(),
@@ -33,357 +40,292 @@ export function registerSiteRoutes(
   collections: Collections,
   config: AppConfig
 ) {
-  app.get("/api/sites", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const sites = await collections.sites
-      .find({ ownerUserId: authContext.user._id })
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    return { sites: sites.map(serializeSite) };
-  });
-
-  app.post("/api/sites", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    return reply.code(409).send({
-      error: "Create an agent identity setup before creating the identity."
-    });
-  });
-
-  app.post("/api/site-setups", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const payload = siteSetupSchema.parse(request.body);
-    const now = new Date();
-    const project: AtlasProjectDocument = {
-      _id: new ObjectId(),
-      ownerUserId: authContext.user._id,
-      projectId: createAtlasProjectId(),
-      name: payload.name.trim(),
-      pendingSiteDomain: normalizeDomain(payload.domain),
-      createdAt: now,
-      updatedAt: now
-    } as AtlasProjectDocument;
-    const apiKey = createBarkanApiKey();
-    const apiKeyDocument: ApiKeyDocument = {
-      _id: new ObjectId(),
-      userId: authContext.user._id,
-      projectId: project.projectId,
-      keyHash: hashApiKey(apiKey),
-      prefix: apiKey.slice(0, 10),
-      name: `${project.name} link token`,
-      createdAt: now
-    } as ApiKeyDocument;
-
-    await collections.atlasProjects.insertOne(project);
-    await collections.apiKeys.insertOne(apiKeyDocument);
-
-    return reply.code(201).send({
-      setup: serializeSiteSetup(project),
-      apiKey: serializeApiKey(apiKeyDocument),
-      secret: apiKey
-    });
-  });
-
-  app.get("/api/site-setups/:projectId", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const project = await findOwnedAtlasProject(collections, authContext.user._id, (request.params as { projectId: string }).projectId);
-    if (!project) {
-      return reply.code(404).send({ error: "site setup not found" });
-    }
-
-    return buildSiteSetupState(collections, authContext.user._id, project);
-  });
-
-  app.post("/api/site-setups/:projectId/complete", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const project = await findOwnedAtlasProject(collections, authContext.user._id, (request.params as { projectId: string }).projectId);
-    if (!project) {
-      return reply.code(404).send({ error: "site setup not found" });
-    }
-
-    const existingSite = project.siteId
-      ? await collections.sites.findOne({ _id: project.siteId, ownerUserId: authContext.user._id })
-      : null;
-    const site = existingSite ?? await createSiteFromSetup(collections, authContext.user._id, project);
-    await collections.atlasProjects.updateOne(
-      { _id: project._id },
-      { $set: { siteId: site._id, updatedAt: new Date() } }
-    );
-    await collections.apiKeys.updateMany(
-      { userId: authContext.user._id, projectId: project.projectId },
-      { $set: { siteId: site._id } }
-    );
-
-    const apiKeys = await collections.apiKeys
-      .find({ userId: authContext.user._id, siteId: site._id })
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    return serializeSiteDetail(site, apiKeys);
-  });
-
-  app.get("/api/sites/:siteId", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const site = await findOwnedSite(collections, authContext.user._id, (request.params as { siteId: string }).siteId);
-    if (!site) {
-      return reply.code(404).send({ error: "site not found" });
-    }
-
-    const apiKeys = await collections.apiKeys
-      .find({ userId: authContext.user._id, siteId: site._id })
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    return serializeSiteDetail(site, apiKeys);
-  });
-
-  app.patch("/api/sites/:siteId", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const siteId = parseObjectId((request.params as { siteId: string }).siteId);
-    if (!siteId) {
-      return reply.code(404).send({ error: "site not found" });
-    }
-
-    const payload = updateSiteSchema.parse(request.body);
-    const update: Record<string, unknown> = { updatedAt: new Date() };
-
-    if (payload.name) {
-      update.name = payload.name.trim();
-    }
-
-    if (payload.domain) {
-      update.domain = normalizeDomain(payload.domain);
-    }
-
-    const result = await collections.sites.findOneAndUpdate(
-      { _id: siteId, ownerUserId: authContext.user._id },
-      { $set: update },
-      { returnDocument: "after" }
-    );
-
-    if (!result) {
-      return reply.code(404).send({ error: "site not found" });
-    }
-
-    return { site: serializeSite(result) };
-  });
-
-  app.delete("/api/sites/:siteId", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const site = await findOwnedSite(collections, authContext.user._id, (request.params as { siteId: string }).siteId);
-    if (!site) {
-      return reply.code(404).send({ error: "site not found" });
-    }
-
-    const deleteResult = await collections.sites.deleteOne({
-      _id: site._id,
-      ownerUserId: authContext.user._id
+  app.register(async (legacyApp) => {
+    legacyApp.addHook("onSend", async (_request, reply, payload) => {
+      reply.header("deprecation", "true");
+      return payload;
     });
 
-    if (deleteResult.deletedCount === 0) {
-      return reply.code(404).send({ error: "site not found" });
-    }
-
-    await Promise.all([
-      collections.apiKeys.deleteMany({ userId: authContext.user._id, siteId: site._id }),
-      collections.atlasProjects.deleteMany({ ownerUserId: authContext.user._id, siteId: site._id }),
-      collections.interactionLogs.deleteMany({ siteId: site._id })
-    ]);
-
-    return { ok: true };
-  });
-
-  app.post("/api/sites/:siteId/api-keys", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const site = await findOwnedSite(collections, authContext.user._id, (request.params as { siteId: string }).siteId);
-    if (!site) {
-      return reply.code(404).send({ error: "site not found" });
-    }
-
-    const payload = createSiteApiKeySchema.parse(request.body ?? {});
-    const atlasProject = await findOrCreateSiteAtlasProject(collections, site);
-    const apiKey = createBarkanApiKey();
-    const now = new Date();
-    const name = payload.name?.trim() || `${site.name} link token`;
-    const insertResult = await collections.apiKeys.insertOne({
-      _id: new ObjectId(),
-      userId: authContext.user._id,
-      siteId: site._id,
-      projectId: atlasProject.projectId,
-      keyHash: hashApiKey(apiKey),
-      prefix: apiKey.slice(0, 10),
-      name,
-      createdAt: now
+    legacyApp.get("/api/sites", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agents = await collections.agents
+        .find({ ownerUserId: authContext.user._id, status: { $ne: "revoked" } })
+        .sort({ createdAt: -1 })
+        .toArray();
+      const domains = await loadLegacyDomains(collections, agents);
+      return { sites: agents.map((agent) => serializeAgentAsSite(agent, domains)) };
     });
 
-    return reply.code(201).send({
-      apiKey: {
-        id: String(insertResult.insertedId),
-        name,
-        prefix: apiKey.slice(0, 10),
-        createdAt: now.toISOString(),
-        lastUsedAt: null
-      },
-      secret: apiKey
-    });
-  });
-
-  app.delete("/api/sites/:siteId/api-keys/:apiKeyId", async (request, reply) => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) {
-      return;
-    }
-
-    const { siteId: siteIdParam, apiKeyId: apiKeyIdParam } = request.params as {
-      siteId: string;
-      apiKeyId: string;
-    };
-    const siteId = parseObjectId(siteIdParam);
-    const apiKeyId = parseObjectId(apiKeyIdParam);
-    if (!siteId || !apiKeyId) {
-      return reply.code(404).send({ error: "link token not found" });
-    }
-
-    const deleteResult = await collections.apiKeys.deleteOne({
-      _id: apiKeyId,
-      userId: authContext.user._id,
-      siteId
+    legacyApp.post("/api/sites", async (request, reply) => {
+      await requireAuth(request, reply, collections, config);
+      throw new ApiError(409, "validation_failed", "Create an agent identity setup before creating the identity.");
     });
 
-    if (deleteResult.deletedCount === 0) {
-      return reply.code(404).send({ error: "link token not found" });
-    }
+    legacyApp.post("/api/site-setups", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const payload = siteSetupSchema.parse(request.body);
 
-    return { ok: true };
+      const now = new Date();
+      const agent: AgentDocument = {
+        _id: new ObjectId(),
+        ownerUserId: authContext.user._id,
+        name: payload.name.trim(),
+        slug: await reserveAgentSlug(collections, authContext.user._id, payload.name),
+        status: "provisioning",
+        runtime: "openclaw",
+        capabilities: { email: false, phone: false },
+        approvalMode: "always",
+        legacyProjectId: createAtlasProjectId(),
+        legacyDomain: normalizeDomain(payload.domain),
+        createdAt: now,
+        updatedAt: now
+      };
+      await collections.agents.insertOne(agent);
+      await collections.policies.insertOne({
+        _id: new ObjectId(),
+        agentId: agent._id,
+        email: {},
+        phone: {},
+        createdAt: now,
+        updatedAt: now
+      });
+      const { plaintext, tokenDoc } = await issueIdentityToken(collections, agent._id, `${agent.name} link token`, {
+        mode: identityTokenMode(config)
+      });
+      await recordAudit(collections, {
+        agentId: agent._id,
+        ownerUserId: authContext.user._id,
+        actor: "owner",
+        action: "agent.create",
+        status: "allowed",
+        detail: `Agent ${agent.name} created via legacy site setup.`
+      });
+
+      return reply.code(201).send({
+        setup: serializeAgentAsSetup(agent),
+        apiKey: serializeTokenAsApiKey(tokenDoc),
+        secret: plaintext
+      });
+    });
+
+    legacyApp.get("/api/site-setups/:projectId", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agent = await findAgentBySetupProjectId(collections, authContext.user._id, request.params);
+      return {
+        setup: serializeAgentAsSetup(agent),
+        apiKeys: await listActiveTokensAsApiKeys(collections, agent)
+      };
+    });
+
+    legacyApp.post("/api/site-setups/:projectId/complete", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agent = await findAgentBySetupProjectId(collections, authContext.user._id, request.params);
+      if (agent.status === "provisioning") {
+        agent.status = "active";
+        agent.updatedAt = new Date();
+        await collections.agents.updateOne(
+          { _id: agent._id },
+          { $set: { status: "active", updatedAt: agent.updatedAt } }
+        );
+      }
+
+      const domains = await loadLegacyDomains(collections, [agent]);
+      return {
+        site: serializeAgentAsSite(agent, domains),
+        apiKeys: await listActiveTokensAsApiKeys(collections, agent)
+      };
+    });
+
+    legacyApp.get("/api/sites/:siteId", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agent = await findOwnedLegacyAgent(collections, authContext.user._id, request.params);
+      const domains = await loadLegacyDomains(collections, [agent]);
+      return {
+        site: serializeAgentAsSite(agent, domains),
+        apiKeys: await listActiveTokensAsApiKeys(collections, agent)
+      };
+    });
+
+    legacyApp.patch("/api/sites/:siteId", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agent = await findOwnedLegacyAgent(collections, authContext.user._id, request.params);
+      const payload = updateSiteSchema.parse(request.body);
+
+      const update: Record<string, unknown> = { updatedAt: new Date() };
+      if (payload.name) {
+        update.name = payload.name.trim();
+      }
+      if (payload.domain) {
+        update.legacyDomain = normalizeDomain(payload.domain);
+      }
+
+      const updated = await collections.agents.findOneAndUpdate(
+        { _id: agent._id },
+        { $set: update },
+        { returnDocument: "after" }
+      );
+      if (!updated) {
+        throw new ApiError(404, "not_found", "site not found");
+      }
+      await recordAudit(collections, {
+        agentId: agent._id,
+        ownerUserId: authContext.user._id,
+        actor: "owner",
+        action: "agent.update",
+        status: "allowed",
+        detail: `Agent ${updated.name} updated via legacy site route.`
+      });
+
+      const domains = await loadLegacyDomains(collections, [updated]);
+      return { site: serializeAgentAsSite(updated, domains) };
+    });
+
+    legacyApp.delete("/api/sites/:siteId", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agent = await findOwnedLegacyAgent(collections, authContext.user._id, request.params);
+      await revokeAgentAndTokens(collections, agent, authContext.user._id);
+      return { ok: true };
+    });
+
+    legacyApp.post("/api/sites/:siteId/api-keys", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agent = await findOwnedLegacyAgent(collections, authContext.user._id, request.params);
+      const payload = createSiteApiKeySchema.parse(request.body ?? {});
+
+      const name = payload.name?.trim() || `${agent.name} link token`;
+      const { plaintext, tokenDoc } = await issueOwnerToken(collections, config, agent, name);
+      await recordAudit(collections, {
+        agentId: agent._id,
+        ownerUserId: authContext.user._id,
+        actor: "owner",
+        action: "agent.token.create",
+        status: "allowed",
+        detail: `Identity token ${tokenDoc.prefix}… (${name}) created via legacy site route.`
+      });
+
+      return reply.code(201).send({
+        apiKey: serializeTokenAsApiKey(tokenDoc),
+        secret: plaintext
+      });
+    });
+
+    legacyApp.delete("/api/sites/:siteId/api-keys/:apiKeyId", async (request, reply) => {
+      const authContext = await requireAuth(request, reply, collections, config);
+      const agent = await findOwnedLegacyAgent(collections, authContext.user._id, request.params);
+      const { apiKeyId } = request.params as { apiKeyId: string };
+      if (!ObjectId.isValid(apiKeyId)) {
+        throw new ApiError(404, "not_found", "link token not found");
+      }
+
+      const token = await collections.identityTokens.findOneAndUpdate(
+        { _id: new ObjectId(apiKeyId), agentId: agent._id },
+        { $set: { status: "revoked", updatedAt: new Date() } },
+        { returnDocument: "after" }
+      );
+      if (!token) {
+        throw new ApiError(404, "not_found", "link token not found");
+      }
+      await recordAudit(collections, {
+        agentId: agent._id,
+        ownerUserId: authContext.user._id,
+        actor: "owner",
+        action: "agent.token.revoke",
+        status: "allowed",
+        detail: `Identity token ${token.prefix}… (${token.name}) revoked via legacy site route.`
+      });
+
+      return { ok: true };
+    });
   });
 }
 
-function serializeSiteDetail(site: SiteDocument, apiKeys: ApiKeyDocument[]) {
-  return {
-    site: serializeSite(site),
-    apiKeys: apiKeys.map(serializeApiKey)
-  };
-}
+// ---------------------------------------------------------------------------
+// Adapter helpers
+// ---------------------------------------------------------------------------
 
-function serializeSiteSetup(project: AtlasProjectDocument) {
-  return {
-    projectId: project.projectId,
-    name: project.name,
-    domain: project.pendingSiteDomain ?? "",
-    createdAt: project.createdAt.toISOString(),
-    updatedAt: project.updatedAt.toISOString()
-  };
-}
-
-async function buildSiteSetupState(
+async function findAgentBySetupProjectId(
   collections: Collections,
   ownerUserId: ObjectId,
-  project: AtlasProjectDocument
-) {
-  const apiKeys = await collections.apiKeys
-    .find({ userId: ownerUserId, projectId: project.projectId })
+  params: unknown
+): Promise<AgentDocument> {
+  const projectId = (params as { projectId?: string }).projectId ?? "";
+  if (!isAtlasProjectId(projectId)) {
+    throw new ApiError(404, "not_found", "site setup not found");
+  }
+  const agent = await collections.agents.findOne({
+    ownerUserId,
+    legacyProjectId: projectId,
+    status: { $ne: "revoked" }
+  });
+  if (!agent) {
+    throw new ApiError(404, "not_found", "site setup not found");
+  }
+  return agent;
+}
+
+async function listActiveTokensAsApiKeys(collections: Collections, agent: AgentDocument) {
+  const tokens = await collections.identityTokens
+    .find({ agentId: agent._id, status: "active" })
     .sort({ createdAt: -1 })
     .toArray();
+  return tokens.map(serializeTokenAsApiKey);
+}
 
+/**
+ * Migrated agents (task 005) carry no legacyDomain of their own — resolve it
+ * from the linked legacy site row in one batch.
+ */
+async function loadLegacyDomains(collections: Collections, agents: AgentDocument[]): Promise<Map<string, string>> {
+  const domains = new Map<string, string>();
+  const legacySiteIds = agents
+    .filter((agent) => !agent.legacyDomain && agent.legacySiteId)
+    .map((agent) => agent.legacySiteId as ObjectId);
+  if (legacySiteIds.length === 0) {
+    return domains;
+  }
+
+  const sites = await collections.sites.find({ _id: { $in: legacySiteIds } }).toArray();
+  const domainBySiteId = new Map(sites.map((site) => [site._id.toHexString(), site.domain]));
+  for (const agent of agents) {
+    if (!agent.legacyDomain && agent.legacySiteId) {
+      const domain = domainBySiteId.get(agent.legacySiteId.toHexString());
+      if (domain) {
+        domains.set(agent._id.toHexString(), domain);
+      }
+    }
+  }
+  return domains;
+}
+
+function serializeAgentAsSite(agent: AgentDocument, legacyDomains: Map<string, string>) {
+  return serializeSite({
+    _id: agent._id,
+    name: agent.name,
+    domain: agent.legacyDomain ?? legacyDomains.get(agent._id.toHexString()) ?? "",
+    publicSiteKey: `site_${agent._id.toHexString()}`,
+    createdAt: agent.createdAt,
+    updatedAt: agent.updatedAt
+  });
+}
+
+function serializeAgentAsSetup(agent: AgentDocument) {
   return {
-    setup: serializeSiteSetup(project),
-    apiKeys: apiKeys.map(serializeApiKey)
+    projectId: agent.legacyProjectId ?? "",
+    name: agent.name,
+    domain: agent.legacyDomain ?? "",
+    createdAt: agent.createdAt.toISOString(),
+    updatedAt: agent.updatedAt.toISOString()
   };
 }
 
-async function createSiteFromSetup(
-  collections: Collections,
-  ownerUserId: ObjectId,
-  project: AtlasProjectDocument
-): Promise<SiteDocument> {
-  if (!project.pendingSiteDomain) {
-    throw new Error("Agent identity setup is missing an OpenClaw endpoint.");
-  }
-
-  const now = new Date();
-  const insertResult = await collections.sites.insertOne({
-    _id: new ObjectId(),
-    ownerUserId,
-    name: project.name,
-    domain: project.pendingSiteDomain,
-    publicSiteKey: createPublicSiteKey(),
-    previewImage: createSitePreviewImage(),
-    createdAt: now,
-    updatedAt: now
-  });
-  const site = await collections.sites.findOne({ _id: insertResult.insertedId, ownerUserId });
-  if (!site) {
-    throw new Error("could not create agent identity");
-  }
-
-  return site;
-}
-
-async function findOwnedSite(
-  collections: Collections,
-  ownerUserId: ObjectId,
-  siteId: string
-): Promise<SiteDocument | null> {
-  const objectId = parseObjectId(siteId);
-  if (!objectId) {
-    return null;
-  }
-
-  return collections.sites.findOne({
-    _id: objectId,
-    ownerUserId
-  });
-}
-
-async function findOwnedAtlasProject(
-  collections: Collections,
-  ownerUserId: ObjectId,
-  projectId: string
-): Promise<AtlasProjectDocument | null> {
-  if (!isAtlasProjectId(projectId)) {
-    return null;
-  }
-
-  return collections.atlasProjects.findOne({
-    ownerUserId,
-    projectId
-  });
+function serializeTokenAsApiKey(token: IdentityTokenDocument) {
+  return {
+    id: token._id.toHexString(),
+    name: token.name,
+    prefix: token.prefix,
+    createdAt: token.createdAt.toISOString(),
+    lastUsedAt: token.lastUsedAt ? token.lastUsedAt.toISOString() : null
+  };
 }
 
 function normalizeDomain(domain: string): string {
@@ -392,72 +334,4 @@ function normalizeDomain(domain: string): string {
     .replace(/^https?:\/\//i, "")
     .replace(/\/.*$/, "")
     .toLowerCase();
-}
-
-function parseObjectId(value: string): ObjectId | null {
-  return ObjectId.isValid(value) ? new ObjectId(value) : null;
-}
-
-function serializeApiKey(apiKey: ApiKeyDocument) {
-  return {
-    id: String(apiKey._id),
-    name: apiKey.name,
-    prefix: apiKey.prefix,
-    createdAt: apiKey.createdAt.toISOString(),
-    lastUsedAt: apiKey.lastUsedAt ? apiKey.lastUsedAt.toISOString() : null
-  };
-}
-
-async function findOrCreateSiteAtlasProject(
-  collections: Collections,
-  site: SiteDocument
-): Promise<AtlasProjectDocument> {
-  const existingProject = await collections.atlasProjects.findOne({
-    ownerUserId: site.ownerUserId,
-    siteId: site._id
-  });
-  if (existingProject) {
-    if (!isAtlasProjectId(existingProject.projectId)) {
-      return repairSiteAtlasProject(collections, existingProject);
-    }
-
-    return existingProject;
-  }
-
-  const now = new Date();
-  const project: AtlasProjectDocument = {
-    _id: new ObjectId(),
-    ownerUserId: site.ownerUserId,
-    siteId: site._id,
-    projectId: createAtlasProjectId(),
-    name: site.name,
-    createdAt: now,
-    updatedAt: now
-  } as AtlasProjectDocument;
-
-  await collections.atlasProjects.insertOne(project);
-  return project;
-}
-
-async function repairSiteAtlasProject(
-  collections: Collections,
-  project: AtlasProjectDocument
-): Promise<AtlasProjectDocument> {
-  const repairedProject = {
-    ...project,
-    projectId: createAtlasProjectId(),
-    updatedAt: new Date()
-  };
-
-  await collections.atlasProjects.updateOne(
-    { _id: project._id },
-    {
-      $set: {
-        projectId: repairedProject.projectId,
-        updatedAt: repairedProject.updatedAt
-      }
-    }
-  );
-
-  return repairedProject;
 }

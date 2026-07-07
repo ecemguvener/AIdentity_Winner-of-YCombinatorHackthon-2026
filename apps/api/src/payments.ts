@@ -6,6 +6,7 @@ import type { AppConfig } from "./config.js";
 import type { Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { AUDIT_ACTIONS, recordAuditForAgentHexId } from "./audit.js";
+import { ApiError, codeForStatus, type ApiErrorCode } from "./errors.js";
 import { loadAgentIdentityFromRequest, type AgentIdentity } from "./identity.js";
 
 // ---------------------------------------------------------------------------
@@ -103,12 +104,13 @@ const DEFAULT_POLICY = {
 };
 
 /** Error carrying an HTTP status so route handlers can translate cleanly. */
-export class PaymentError extends Error {
+export class PaymentError extends ApiError {
   constructor(
     readonly status: number,
-    message: string
+    message: string,
+    code: ApiErrorCode = codeForStatus(status)
   ) {
-    super(message);
+    super(status, code, message);
     this.name = "PaymentError";
   }
 }
@@ -678,7 +680,7 @@ export function registerPaymentRoutes(app: FastifyInstance, collections: Collect
   auditCollections = collections;
   app.post("/api/tools/payments/request-purchase", async (request, reply) => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    if (!identity) throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     const payload = requestPurchaseSchema.parse(request.body ?? {});
     const purchase = createPurchaseRequest(identity.id, fromPayload(payload));
     return reply.code(201).send(serializeDecision(purchase));
@@ -686,7 +688,7 @@ export function registerPaymentRoutes(app: FastifyInstance, collections: Collect
 
   app.post("/api/tools/payments/request-purchase-from-text", async (request, reply) => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    if (!identity) throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     const { prompt } = requestPurchaseFromTextSchema.parse(request.body ?? {});
     return runPayment(reply, async () => {
       const { purchase, parsed } = await createPurchaseFromPrompt(identity.id, prompt, config);
@@ -703,7 +705,7 @@ export function registerPaymentRoutes(app: FastifyInstance, collections: Collect
 
   app.post("/api/tools/payments/:requestId/execute", async (request, reply) => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    if (!identity) throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     const { requestId } = request.params as { requestId: string };
     return runPayment(reply, () => {
       const txn = executeApprovedPurchase(identity.id, requestId, readIdempotencyKey(request));
@@ -713,16 +715,16 @@ export function registerPaymentRoutes(app: FastifyInstance, collections: Collect
 
   app.patch("/api/tools/payments/policy", async (request, reply) => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    if (!identity) throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     const patch = policySchema.parse(request.body ?? {});
     return serializePolicy(updatePaymentPolicy(identity.id, patch));
   });
 
   app.get("/api/identity/:agentId/payment-activity", async (request, reply) => {
     const identity = await loadAgentIdentityFromRequest(request, collections);
-    if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+    if (!identity) throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     const { agentId } = request.params as { agentId: string };
-    if (identity.id !== agentId) return reply.code(403).send({ error: "identity token does not match requested agent" });
+    if (identity.id !== agentId) throw new ApiError(403, "forbidden", "identity token does not match requested agent");
     return getPaymentActivity(agentId);
   });
 }
@@ -734,7 +736,7 @@ async function bearerDecide(
   decision: "approved" | "rejected"
 ) {
   const identity = await loadAgentIdentityFromRequest(request, collections);
-  if (!identity) return reply.code(401).send({ error: "missing or invalid identity token" });
+  if (!identity) throw new ApiError(401, "unauthorized", "missing or invalid identity token");
   const { requestId } = request.params as { requestId: string };
   const { note } = decisionSchema.parse(request.body ?? {});
   return runPayment(reply, () => serializeDecision(decidePurchase(identity.id, requestId, decision, note)));
@@ -751,15 +753,19 @@ export function registerSitePaymentRoutes(app: FastifyInstance, collections: Col
     if (!authContext) return null;
     const siteId = parseObjectId((request.params as { siteId: string }).siteId);
     if (!siteId) {
-      reply.code(404).send({ error: "agent identity not found" });
-      return null;
+      throw new ApiError(404, "not_found", "agent identity not found");
     }
-    const site = await collections.sites.findOne({ _id: siteId, ownerUserId: authContext.user._id });
-    if (!site) {
-      reply.code(404).send({ error: "agent identity not found" });
-      return null;
+    // The legacy "site" id is an agent id since task 010 (or a pre-migration
+    // legacy site id from a stale dashboard tab).
+    const agent = await collections.agents.findOne({
+      ownerUserId: authContext.user._id,
+      status: { $ne: "revoked" },
+      $or: [{ _id: siteId }, { legacySiteId: siteId }]
+    });
+    if (!agent) {
+      throw new ApiError(404, "not_found", "agent identity not found");
     }
-    const accountId = site._id.toHexString();
+    const accountId = agent._id.toHexString();
     provisionPaymentIdentity(accountId); // lazy: card + default policy on first touch
     return accountId;
   };
@@ -827,7 +833,7 @@ async function runPayment(reply: FastifyReply, fn: () => unknown | Promise<unkno
     return await fn();
   } catch (error) {
     if (error instanceof PaymentError) {
-      return reply.code(error.status).send({ error: error.message });
+      throw error;
     }
     throw error;
   }

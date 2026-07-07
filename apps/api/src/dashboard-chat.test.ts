@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import { buildApp } from "./app.js";
 import type { AppConfig } from "./config.js";
-import type { Collections, SiteDocument, UserDocument } from "./db.js";
+import type { AgentDocument, Collections, UserDocument } from "./db.js";
 import { hashSessionToken } from "./security.js";
 
 const baseConfig: AppConfig = {
@@ -18,7 +18,12 @@ const baseConfig: AppConfig = {
   ELEVENLABS_VOICE_ID: "voice_test",
   OPENAI_API_KEY: "openai",
   EMAIL_AGENT_DOMAIN: "agents.barkan.dev",
-};
+  TWILIO_NUMBER_COUNTRY: "US",
+  OPENAI_DASHBOARD_CHAT_MODEL: "gpt-5.4-2026-03-05",
+  EMAIL_PLATFORM_FROM: "Barkan <no-reply@barkan.dev>",
+  RESEND_WEBHOOK_SECRET: undefined,
+  API_RATE_LIMIT_MAX: 1000
+} as AppConfig;
 
 describe("dashboard chat", () => {
   it("streams chat events with CORS headers for credentialed dashboard requests", async () => {
@@ -37,7 +42,7 @@ describe("dashboard chat", () => {
       createCollections({
         sessionToken,
         user,
-        sites: [createSite(user._id)]
+        agents: [createAgent(user._id)]
       })
     );
 
@@ -78,7 +83,7 @@ describe("dashboard chat", () => {
       createCollections({
         sessionToken,
         user,
-        sites: [createSite(user._id)]
+        agents: [createAgent(user._id)]
       })
     );
 
@@ -127,7 +132,7 @@ describe("dashboard chat", () => {
       createCollections({
         sessionToken,
         user,
-        sites: [createSite(user._id)]
+        agents: [createAgent(user._id)]
       })
     );
 
@@ -193,7 +198,7 @@ describe("dashboard chat", () => {
       createCollections({
         sessionToken,
         user,
-        sites: [createSite(user._id)]
+        agents: [createAgent(user._id)]
       })
     );
 
@@ -227,11 +232,11 @@ describe("dashboard chat", () => {
 function createCollections({
   sessionToken,
   user,
-  sites
+  agents
 }: {
   sessionToken: string;
   user: UserDocument;
-  sites: SiteDocument[];
+  agents: AgentDocument[];
 }): Collections {
   return {
     sessions: {
@@ -244,11 +249,11 @@ function createCollections({
     users: {
       findOne: vi.fn().mockResolvedValue(user)
     },
-    sites: {
+    agents: {
       find: vi.fn().mockImplementation(({ ownerUserId }: { ownerUserId: ObjectId }) => ({
         sort: vi.fn().mockReturnValue({
           limit: vi.fn().mockReturnValue({
-            toArray: vi.fn().mockResolvedValue(sites.filter((site) => site.ownerUserId.equals(ownerUserId)))
+            toArray: vi.fn().mockResolvedValue(agents.filter((agent) => agent.ownerUserId?.equals(ownerUserId)))
           })
         })
       }))
@@ -265,14 +270,17 @@ function createUser(): UserDocument {
   } as UserDocument;
 }
 
-function createSite(ownerUserId: ObjectId): SiteDocument {
+function createAgent(ownerUserId: ObjectId): AgentDocument {
   return {
     _id: new ObjectId(),
     ownerUserId,
     name: "Test site",
-    domain: "example.com",
-    publicSiteKey: "site_test",
+    slug: "test-site",
+    status: "active",
+    capabilities: { email: true, phone: true },
+    approvalMode: "always",
+    legacyDomain: "example.com",
     createdAt: new Date("2026-05-26T10:00:00.000Z"),
     updatedAt: new Date("2026-05-26T10:00:00.000Z")
-  } as SiteDocument;
+  } as AgentDocument;
 }

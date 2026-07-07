@@ -595,19 +595,28 @@ function isDashboardChatCallTranscriptTurn(value: unknown): value is DashboardCh
 function parseApiError(text: string, fallback = "request failed"): string {
   try {
     const parsed = JSON.parse(text) as {
-      error?: string;
+      error?: string | {
+        message?: string;
+        details?: {
+          fieldErrors?: Record<string, string[] | undefined>;
+          formErrors?: string[];
+        };
+      };
       message?: string;
       details?: {
         fieldErrors?: Record<string, string[] | undefined>;
         formErrors?: string[];
       };
     };
-    const fieldError = Object.values(parsed.details?.fieldErrors ?? {})
+    const details = typeof parsed.error === "object" && parsed.error !== null ? parsed.error.details ?? parsed.details : parsed.details;
+    const nestedMessage = typeof parsed.error === "object" && parsed.error !== null ? parsed.error.message : undefined;
+    const legacyMessage = typeof parsed.error === "string" ? parsed.error : undefined;
+    const fieldError = Object.values(details?.fieldErrors ?? {})
       .flatMap((messages) => messages ?? [])
       .find((message) => message.trim());
-    const formError = parsed.details?.formErrors?.find((message) => message.trim());
+    const formError = details?.formErrors?.find((message) => message.trim());
 
-    return fieldError || formError || parsed.message || parsed.error || fallback;
+    return fieldError || formError || parsed.message || nestedMessage || legacyMessage || fallback;
   } catch {
     return fallback;
   }

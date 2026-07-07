@@ -1,10 +1,14 @@
+import crypto from "node:crypto";
 import fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
 import type { AppConfig } from "./config.js";
 import type { Collections } from "./db.js";
 import { buildCorsOptionsForRequest, isPublicCorsPath, isTrustedDashboardOrigin } from "./cors.js";
+import { ApiError, buildErrorPayload, codeForStatus, validationApiError } from "./errors.js";
+import { registerAgentRoutes } from "./agents-routes.js";
 import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
@@ -12,36 +16,69 @@ import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
 import { registerIdentityRoutes } from "./identity.js";
 import { registerPaymentRoutes, registerSitePaymentRoutes } from "./payments.js";
 import { registerSiteRoutes } from "./sites.js";
+import { registerRawBodyParsers } from "./webhooks/framework.js";
+import { registerWebhookRoutes } from "./webhooks/routes.js";
 
 export async function buildApp(config: AppConfig, collections: Collections) {
   const app = fastify({
     logger: {
       level: config.NODE_ENV === "test" ? "silent" : "info"
     },
-    bodyLimit: 8 * 1024 * 1024
+    bodyLimit: 8 * 1024 * 1024,
+    genReqId: () => crypto.randomBytes(8).toString("hex")
   });
 
-  // Keep the raw JSON body around so the email inbound webhook can verify the
-  // Resend (Svix) signature, which is computed over the exact bytes received.
-  app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
-    (request as { rawBody?: string }).rawBody = typeof body === "string" ? body : "";
-    if (typeof body !== "string" || body.trim() === "") {
-      done(null, {});
-      return;
-    }
-    try {
-      done(null, JSON.parse(body));
-    } catch (error) {
-      (error as Error & { statusCode?: number }).statusCode = 400;
-      done(error as Error, undefined);
+  // Keep the exact raw bytes (JSON and urlencoded) on request.rawBody so
+  // webhook signature verification works over what was actually received.
+  registerRawBodyParsers(app);
+
+  app.addHook("onRoute", (routeOptions) => {
+    const url = routeOptions.url;
+    if (isAgentTokenRoute(url)) {
+      routeOptions.config = {
+        ...routeOptions.config,
+        rateLimit: {
+          max: 60,
+          timeWindow: "1 minute",
+          groupId: "agent-token",
+          keyGenerator: agentTokenRateLimitKey,
+          errorResponseBuilder: (_request, context) =>
+            new ApiError(429, "rate_limited", "rate limit exceeded", { retryAfter: context.after })
+        }
+      };
+    } else if (isAuthRateLimitedRoute(url)) {
+      routeOptions.config = {
+        ...routeOptions.config,
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+          groupId: "auth",
+          keyGenerator: (request) => request.ip,
+          exponentialBackoff: true,
+          errorResponseBuilder: (_request, context) =>
+            new ApiError(429, "rate_limited", "rate limit exceeded", { retryAfter: context.after })
+        }
+      };
     }
   });
 
   await app.register(cookie);
+  await app.register(rateLimit, {
+    global: true,
+    max: config.API_RATE_LIMIT_MAX,
+    timeWindow: "1 minute",
+    keyGenerator: (request) => request.ip,
+    errorResponseBuilder: (_request, context) =>
+      new ApiError(429, "rate_limited", "rate limit exceeded", { retryAfter: context.after })
+  });
   await app.register(cors, {
     delegator: (request, callback) => {
       callback(null, buildCorsOptionsForRequest(config, request));
     }
+  });
+
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("x-request-id", request.id);
   });
 
   app.addHook("preHandler", async (request, reply) => {
@@ -51,40 +88,63 @@ export async function buildApp(config: AppConfig, collections: Collections) {
       !isPublicCorsPath(request.url) &&
       !isTrustedDashboardOrigin(origin, config)
     ) {
-      return reply.code(403).send({ error: "origin is not allowed" });
+      throw new ApiError(403, "forbidden", "origin is not allowed");
     }
   });
 
-  app.addHook("preSerialization", async (_request, reply, payload) => {
-    if (
-      reply.statusCode >= 400 &&
-      isRecord(payload) &&
-      typeof payload.error === "string" &&
-      typeof payload.message !== "string"
-    ) {
-      return { ...payload, message: payload.error };
+  app.addHook("preSerialization", async (request, reply, payload) => {
+    if (reply.statusCode >= 400 && isRecord(payload)) {
+      if (isRecord(payload.error) && typeof payload.error.code === "string") {
+        return payload;
+      }
+
+      const message =
+        typeof payload.error === "string"
+          ? payload.error
+          : typeof payload.message === "string"
+            ? payload.message
+            : "invalid request";
+      const details = payload.details;
+      return buildErrorPayload(
+        new ApiError(reply.statusCode, codeForStatus(reply.statusCode), message, details),
+        request.id
+      );
     }
 
     return payload;
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setNotFoundHandler((_request, reply) => {
+    throw new ApiError(404, "not_found", "route not found");
+  });
+
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
-      const message = "invalid request";
-      reply.code(400).send({
-        error: message,
-        message,
-        details: error.flatten()
-      });
+      const apiError = validationApiError(error);
+      reply.code(apiError.statusCode).send(buildErrorPayload(apiError, request.id));
       return;
     }
 
-    app.log.error(error);
-    reply.code(500).send({ error: "internal server error", message: "internal server error" });
+    if (error instanceof ApiError) {
+      reply.code(error.statusCode).send(buildErrorPayload(error, request.id));
+      return;
+    }
+
+    const statusCode = readStatusCode(error);
+    if (statusCode >= 400 && statusCode < 500) {
+      const apiError = new ApiError(statusCode, codeForStatus(statusCode), safeClientErrorMessage(error, statusCode));
+      reply.code(apiError.statusCode).send(buildErrorPayload(apiError, request.id));
+      return;
+    }
+
+    request.log.error({ error }, "request failed");
+    const apiError = new ApiError(500, "internal", "internal server error");
+    reply.code(500).send(buildErrorPayload(apiError, request.id));
   });
 
   app.get("/api/health", async () => ({ ok: true }));
 
+  registerAgentRoutes(app, collections, config);
   registerAuditRoutes(app, collections, config);
   registerAuthRoutes(app, collections, config);
   registerDashboardChatRoutes(app, collections, config);
@@ -94,10 +154,50 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerPaymentRoutes(app, collections, config);
   registerSitePaymentRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);
+  registerWebhookRoutes(app, collections, config);
 
   return app;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isAgentTokenRoute(url: string): boolean {
+  return url.startsWith("/api/tools/") || url.startsWith("/api/identity/") || url.startsWith("/api/v1/agent/");
+}
+
+function isAuthRateLimitedRoute(url: string): boolean {
+  return ["/api/auth/login", "/api/auth/signup", "/api/auth/check-email"].includes(url);
+}
+
+function agentTokenRateLimitKey(request: { headers: Record<string, unknown>; ip: string }): string {
+  const authorization = request.headers.authorization;
+  if (typeof authorization !== "string") {
+    return `ip:${request.ip}`;
+  }
+
+  const [scheme, token] = authorization.split(/\s+/, 2);
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    return `ip:${request.ip}`;
+  }
+
+  return `token:${crypto.createHash("sha256").update(token).digest("hex")}`;
+}
+
+function readStatusCode(error: unknown): number {
+  if (!isRecord(error)) {
+    return 500;
+  }
+
+  const statusCode = error.statusCode ?? error.status;
+  return typeof statusCode === "number" ? statusCode : 500;
+}
+
+function safeClientErrorMessage(error: unknown, statusCode: number): string {
+  if (isRecord(error) && typeof error.message === "string") {
+    return error.message;
+  }
+
+  return statusCode === 404 ? "route not found" : "invalid request";
 }

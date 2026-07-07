@@ -1,227 +1,109 @@
-import { describe, expect, it, vi } from "vitest";
-import { ObjectId } from "mongodb";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import type { AppConfig } from "./config.js";
-import type { ApiKeyDocument, AtlasProjectDocument, Collections, SessionDocument, SiteDocument, UserDocument } from "./db.js";
-import { createSessionExpiry, createSessionToken, hashPassword, hashSessionToken } from "./security.js";
+import { connectDatabase, type Database } from "./db.js";
 
-const config: AppConfig = {
+const config = {
   NODE_ENV: "test",
   API_PORT: 0,
   PUBLIC_APP_URL: "http://localhost:4888",
   PUBLIC_API_URL: "http://localhost:4001",
-  MONGODB_URI: "mongodb://127.0.0.1:27017/barkan-test",
+  MONGODB_URI: "set-by-beforeAll",
   SESSION_COOKIE_NAME: "barkan_session",
   SESSION_SECRET: "test-barkan-session-secret",
   PROVIDER_MODE_EMAIL: "mock",
   PROVIDER_MODE_PHONE: "mock",
-  STRIPE_SECRET_KEY: undefined,
-  STRIPE_WEBHOOK_SECRET: undefined,
-  TWILIO_ACCOUNT_SID: undefined,
-  TWILIO_AUTH_TOKEN: undefined,
   TWILIO_NUMBER_COUNTRY: "US",
-  TWILIO_ADDRESS_SID: undefined,
-  ELEVENLABS_API_KEY: undefined,
-  ELEVENLABS_AGENT_ID: undefined,
-  ELEVENLABS_AGENT_PHONE_NUMBER_ID: undefined,
   ELEVENLABS_VOICE_ID: "voice",
-  ELEVENLABS_WORKSPACE_WEBHOOK_SECRET: undefined,
-  OPENAI_API_KEY: undefined,
   OPENAI_DASHBOARD_CHAT_MODEL: "gpt-5.4-2026-03-05",
-  RESEND_API_KEY: undefined,
   EMAIL_AGENT_DOMAIN: "example.test",
-  EMAIL_FROM_DOMAIN: undefined,
   EMAIL_PLATFORM_FROM: "Barkan <no-reply@barkan.dev>",
-  RESEND_WEBHOOK_SECRET: undefined,
-  EMAIL_WEBHOOK_SECRET: undefined,
-  EMAIL_SANDBOX_REDIRECT_TO: undefined,
-  SENTRY_DSN: undefined,
-  API_RATE_LIMIT_MAX: 300
-};
+  API_RATE_LIMIT_MAX: 1000
+} as unknown as AppConfig;
 
-describe("site identity routes", () => {
-  it("creates and completes an agent identity setup", async () => {
-    const user = await createUser();
-    const sessionToken = createSessionToken();
-    const session: SessionDocument = {
-      _id: new ObjectId(),
-      userId: user._id,
-      tokenHash: hashSessionToken(sessionToken, config.SESSION_SECRET),
-      expiresAt: createSessionExpiry(),
-      createdAt: new Date()
-    } as SessionDocument;
-    const collections = createCollections(user, session);
-    const app = await buildApp(config, collections);
+let mongoServer: MongoMemoryServer;
+let database: Database;
+let app: Awaited<ReturnType<typeof buildApp>>;
+let sessionCookie: string;
 
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  (config as { MONGODB_URI: string }).MONGODB_URI = mongoServer.getUri();
+  database = await connectDatabase(config);
+  app = await buildApp(config, database.collections);
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/api/auth/signup",
+    payload: { email: "user@example.com", password: "password12345" }
+  });
+  const cookie = signup.cookies.find((candidate) => candidate.name === config.SESSION_COOKIE_NAME);
+  if (!cookie) {
+    throw new Error("signup did not set a session cookie");
+  }
+  sessionCookie = cookie.value;
+}, 60_000);
+
+afterAll(async () => {
+  await app?.close();
+  await database?.client.close();
+  await mongoServer?.stop();
+});
+
+describe("legacy site identity routes (agents adapter)", () => {
+  it("creates and completes an agent identity setup with deprecation headers", async () => {
+    const cookies = { [config.SESSION_COOKIE_NAME]: sessionCookie };
     const setupResponse = await app.inject({
       method: "POST",
       url: "/api/site-setups",
-      cookies: { [config.SESSION_COOKIE_NAME]: sessionToken },
+      cookies,
       payload: { name: "Ava", domain: "https://openclaw.example.com/runtime" }
     });
 
     expect(setupResponse.statusCode).toBe(201);
+    expect(setupResponse.headers.deprecation).toBe("true");
     const setupBody = setupResponse.json();
     expect(setupBody.setup).toMatchObject({
       name: "Ava",
       domain: "openclaw.example.com"
     });
-    expect(setupBody.secret).toMatch(/^ck_/);
+    expect(setupBody.secret).toMatch(/^brk_/);
+
+    // Setup creates a provisioning agent under the hood.
+    const agent = await database.collections.agents.findOne({ legacyProjectId: setupBody.setup.projectId });
+    expect(agent?.status).toBe("provisioning");
 
     const completeResponse = await app.inject({
       method: "POST",
       url: `/api/site-setups/${setupBody.setup.projectId}/complete`,
-      cookies: { [config.SESSION_COOKIE_NAME]: sessionToken }
+      cookies
     });
 
     expect(completeResponse.statusCode).toBe(200);
+    expect(completeResponse.headers.deprecation).toBe("true");
     expect(completeResponse.json()).toMatchObject({
       site: {
         name: "Ava",
         domain: "openclaw.example.com"
       }
     });
+    expect(completeResponse.json().site.id).toBe(agent?._id.toHexString());
 
-    await app.close();
+    const completedAgent = await database.collections.agents.findOne({ _id: agent!._id });
+    expect(completedAgent?.status).toBe("active");
   });
 
   it("does not register removed widget and Atlas agent routes", async () => {
-    const user = await createUser();
-    const session: SessionDocument = {
-      _id: new ObjectId(),
-      userId: user._id,
-      tokenHash: "unused",
-      expiresAt: createSessionExpiry(),
-      createdAt: new Date()
-    } as SessionDocument;
-    const app = await buildApp(config, createCollections(user, session));
-
     await expectRouteNotFound(app, "GET", "/widget.js");
     await expectRouteNotFound(app, "GET", "/api/widget/config?siteKey=site_test");
     await expectRouteNotFound(app, "POST", "/api/widget/action");
     await expectRouteNotFound(app, "POST", "/api/atlas/connect");
     await expectRouteNotFound(app, "POST", "/api/atlas/agent/select-files");
-
-    await app.close();
   });
 });
 
-async function createUser(): Promise<UserDocument> {
-  return {
-    _id: new ObjectId(),
-    email: "user@example.com",
-    displayName: "User",
-    passwordHash: await hashPassword("password123"),
-    createdAt: new Date()
-  } as UserDocument;
-}
-
-async function expectRouteNotFound(app: Awaited<ReturnType<typeof buildApp>>, method: string, url: string) {
-  const response = await app.inject({ method, url });
+async function expectRouteNotFound(testApp: Awaited<ReturnType<typeof buildApp>>, method: string, url: string) {
+  const response = await testApp.inject({ method: method as "GET" | "POST", url });
   expect(response.statusCode).toBe(404);
-}
-
-function createCollections(user: UserDocument, session: SessionDocument): Collections {
-  let currentProject: AtlasProjectDocument | null = null;
-  let currentSite: SiteDocument | null = null;
-  const apiKeys: ApiKeyDocument[] = [];
-
-  return {
-    users: {
-      findOne: vi.fn().mockImplementation((filter: Partial<UserDocument>) =>
-        Promise.resolve(filter._id?.equals(user._id) || filter.email === user.email ? user : null)
-      )
-    },
-    sessions: {
-      findOne: vi.fn().mockImplementation((filter: Partial<SessionDocument>) =>
-        Promise.resolve(filter.tokenHash === session.tokenHash ? session : null)
-      ),
-      deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 }),
-      insertOne: vi.fn()
-    },
-    sites: {
-      find: vi.fn().mockReturnValue({
-        sort: () => ({
-          toArray: () => Promise.resolve(currentSite ? [currentSite] : [])
-        })
-      }),
-      findOne: vi.fn().mockImplementation((filter: { _id?: ObjectId; ownerUserId?: ObjectId }) =>
-        Promise.resolve(
-          currentSite &&
-            filter._id?.equals(currentSite._id) &&
-            filter.ownerUserId?.equals(currentSite.ownerUserId)
-            ? currentSite
-            : null
-        )
-      ),
-      insertOne: vi.fn().mockImplementation((site: SiteDocument) => {
-        currentSite = site;
-        return Promise.resolve({ insertedId: site._id });
-      }),
-      findOneAndUpdate: vi.fn(),
-      deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 })
-    },
-    apiKeys: {
-      insertOne: vi.fn().mockImplementation((apiKey: ApiKeyDocument) => {
-        apiKeys.push(apiKey);
-        return Promise.resolve({ insertedId: apiKey._id });
-      }),
-      find: vi.fn().mockImplementation((filter: { userId?: ObjectId; siteId?: ObjectId; projectId?: string }) => ({
-        sort: () => ({
-          toArray: () =>
-            Promise.resolve(
-              apiKeys.filter((apiKey) => {
-                if (filter.userId && !filter.userId.equals(apiKey.userId)) {
-                  return false;
-                }
-                if (filter.siteId && !filter.siteId.equals(apiKey.siteId)) {
-                  return false;
-                }
-                if (filter.projectId && filter.projectId !== apiKey.projectId) {
-                  return false;
-                }
-                return true;
-              })
-            )
-        })
-      })),
-      updateMany: vi.fn().mockImplementation((filter: { projectId?: string }, update: { $set?: Partial<ApiKeyDocument> }) => {
-        for (const apiKey of apiKeys) {
-          if (!filter.projectId || apiKey.projectId === filter.projectId) {
-            Object.assign(apiKey, update.$set);
-          }
-        }
-        return Promise.resolve({ modifiedCount: apiKeys.length });
-      }),
-      deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 }),
-      deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 })
-    },
-    atlasProjects: {
-      insertOne: vi.fn().mockImplementation((project: AtlasProjectDocument) => {
-        currentProject = project;
-        return Promise.resolve({ insertedId: project._id });
-      }),
-      findOne: vi.fn().mockImplementation((filter: { ownerUserId?: ObjectId; projectId?: string; siteId?: ObjectId }) =>
-        Promise.resolve(
-          currentProject &&
-            (!filter.ownerUserId || filter.ownerUserId.equals(currentProject.ownerUserId)) &&
-            (!filter.projectId || filter.projectId === currentProject.projectId) &&
-            (!filter.siteId || filter.siteId.equals(currentProject.siteId))
-            ? currentProject
-            : null
-        )
-      ),
-      updateOne: vi.fn().mockImplementation((_filter: unknown, update: { $set?: Partial<AtlasProjectDocument> }) => {
-        if (currentProject && update.$set) {
-          currentProject = { ...currentProject, ...update.$set };
-        }
-        return Promise.resolve({ matchedCount: currentProject ? 1 : 0 });
-      }),
-      find: vi.fn().mockReturnValue({ toArray: () => Promise.resolve(currentProject ? [currentProject] : []) }),
-      deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 })
-    },
-    interactionLogs: {
-      deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 })
-    }
-  } as unknown as Collections;
 }

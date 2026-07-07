@@ -1,4 +1,5 @@
 import type { AppConfig } from "./config.js";
+import { ApiError, type ApiErrorCode } from "./errors.js";
 
 const callConversationGuidance =
   "Call naturally and keep the conversation moving. Do not repeatedly ask for confirmation; only confirm final details that affect the outcome, like time, price, address, availability, or cancellation policy.";
@@ -42,9 +43,9 @@ interface PhoneCallCompletionOptions {
   maxWaitMs?: number;
 }
 
-export class PhoneCallError extends Error {
-  constructor(message: string) {
-    super(message);
+export class PhoneCallError extends ApiError {
+  constructor(message: string, statusCode = 400, code: ApiErrorCode = "provider_error") {
+    super(statusCode, code, message);
     this.name = "PhoneCallError";
   }
 }
@@ -52,12 +53,12 @@ export class PhoneCallError extends Error {
 export async function placeAgentPhoneCall(request: PhoneCallRequest, config: AppConfig): Promise<PhoneCallResult> {
   const toNumber = normalizePhoneNumber(request.toNumber);
   if (!toNumber) {
-    throw new PhoneCallError("The phone number must be an E.164-style number, for example +14155550198.");
+    throw new PhoneCallError("The phone number must be an E.164-style number, for example +14155550198.", 400, "validation_failed");
   }
 
   const task = request.task.trim();
   if (!task) {
-    throw new PhoneCallError("The call task cannot be empty.");
+    throw new PhoneCallError("The call task cannot be empty.", 400, "validation_failed");
   }
 
   if (config.PROVIDER_MODE_PHONE === "mock") {

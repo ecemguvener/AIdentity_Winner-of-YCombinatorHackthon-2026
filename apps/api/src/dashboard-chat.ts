@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
-import type { Collections, SiteDocument } from "./db.js";
+import type { ObjectId } from "mongodb";
+import type { Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { buildTrustedDashboardCorsHeaders } from "./cors.js";
+import { ApiError } from "./errors.js";
 import { createPurchaseFromPrompt, formatPurchaseAmount, PaymentError, provisionPaymentIdentity } from "./payments.js";
 import { EmailError, sendSiteEmailFromText } from "./email.js";
 import { PhoneCallError, placeAgentPhoneCall, waitForPhoneCallCompletion, type PhoneCallResult, type PhoneCallTranscriptTurn } from "./phone.js";
@@ -53,15 +55,22 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
     }
 
     if (!config.OPENAI_API_KEY) {
-      return reply.code(503).send({ error: "OpenAI is not configured" });
+      throw new ApiError(503, "provider_error", "OpenAI is not configured");
     }
 
     const payload = dashboardChatRequestSchema.parse(request.body);
-    const sites = await collections.sites
-      .find({ ownerUserId: authContext.user._id })
+    const agents = await collections.agents
+      .find({ ownerUserId: authContext.user._id, status: { $ne: "revoked" } })
       .sort({ createdAt: -1 })
       .limit(50)
       .toArray();
+    const sites: ChatAgentIdentity[] = agents.map((agent) => ({
+      _id: agent._id,
+      name: agent.name,
+      domain: agent.legacyDomain ?? "",
+      createdAt: agent.createdAt,
+      updatedAt: agent.updatedAt
+    }));
 
     // If the latest message is a shopping instruction, drive the payment tool
     // directly and stream a confirmation instead of a normal chat reply.
@@ -87,12 +96,21 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
       );
     } catch (error) {
       request.log.error({ error }, "dashboard chat OpenClaw request failed");
-      return reply.code(502).send({ error: "AI response failed" });
+      throw new ApiError(502, "provider_error", "AI response failed");
     }
   });
 }
 
 type DashboardChatMessage = z.infer<typeof dashboardChatMessageSchema>;
+
+// Minimal identity view the chat tools need (backed by `agents` since task 010).
+interface ChatAgentIdentity {
+  _id: ObjectId;
+  name: string;
+  domain: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 interface OpenAIResponseObject {
   id?: string;
@@ -123,7 +141,7 @@ interface DashboardChatCallEvent {
 
 async function runOpenClawDashboardChat(
   messages: DashboardChatMessage[],
-  sites: SiteDocument[],
+  sites: ChatAgentIdentity[],
   config: AppConfig,
   request: FastifyRequest,
   callerName: string,
@@ -168,7 +186,7 @@ async function runOpenClawDashboardChat(
 
 async function createOpenClawResponse(
   input: Array<Record<string, unknown>>,
-  sites: SiteDocument[],
+  sites: ChatAgentIdentity[],
   config: AppConfig,
   request: FastifyRequest,
   includeWebSearch: boolean
@@ -208,7 +226,7 @@ async function createOpenClawResponse(
   throw new Error("AI response failed");
 }
 
-function buildOpenClawInstructions(sites: SiteDocument[]): string {
+function buildOpenClawInstructions(sites: ChatAgentIdentity[]): string {
   return `${openClawDashboardInstructions}
 
 Dashboard identity context:
@@ -274,7 +292,7 @@ function buildOpenAIEndpointUrl(): string {
 
 async function runOpenClawTool(
   functionCall: OpenAIFunctionCall,
-  sites: SiteDocument[],
+  sites: ChatAgentIdentity[],
   config: AppConfig,
   callerName: string,
   onCallEvent?: (event: DashboardChatCallEvent) => void
@@ -450,14 +468,14 @@ function hasPhoneOrSchedulingIntent(text: string): boolean {
   return /\b(?:call|phone|ring|dial|appointment|reservation|book|schedule|reschedule|barber|doctor|dentist)\b/i.test(text);
 }
 
-function resolvePurchaseSite(text: string, sites: SiteDocument[]): SiteDocument | null {
+function resolvePurchaseSite(text: string, sites: ChatAgentIdentity[]): ChatAgentIdentity | null {
   const lowered = text.toLowerCase();
   return sites.find((site) => site.name && lowered.includes(site.name.toLowerCase())) ?? sites[0] ?? null;
 }
 
 async function runChatPurchase(
   text: string,
-  sites: SiteDocument[],
+  sites: ChatAgentIdentity[],
   config: AppConfig
 ): Promise<string> {
   const site = resolvePurchaseSite(text, sites);
@@ -497,7 +515,7 @@ function isEmailIntent(text: string): boolean {
   return /\be-?mail\b/i.test(text) && /\b(ask|tell|send|reply|write|invite|follow up|let .* know|about|to)\b/i.test(text);
 }
 
-async function runChatEmail(text: string, sites: SiteDocument[], config: AppConfig): Promise<string> {
+async function runChatEmail(text: string, sites: ChatAgentIdentity[], config: AppConfig): Promise<string> {
   const site = resolvePurchaseSite(text, sites);
   if (!site) {
     return "You don't have an agent identity yet. Create one first, then I can send email on its behalf.";

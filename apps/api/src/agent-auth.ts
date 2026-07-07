@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { FastifyRequest, preHandlerHookHandler } from "fastify";
 import { ObjectId } from "mongodb";
 import type { AgentDocument, Collections, IdentityTokenDocument } from "./db.js";
+import { ApiError } from "./errors.js";
 import { hashApiKey } from "./security.js";
 
 // ---------------------------------------------------------------------------
@@ -109,7 +110,7 @@ export function requireAgentAuth(collections: Collections): preHandlerHookHandle
   return async (request, reply) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
-      return reply.code(401).send({ error: "missing or invalid identity token" });
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
     request.agentContext = agentContext;
   };

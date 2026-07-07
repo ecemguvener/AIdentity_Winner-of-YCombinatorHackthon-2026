@@ -88,6 +88,9 @@ export interface AgentDocument extends Document {
   // Set by the sites/atlasProjects migration (task 005) to link back to legacy rows.
   legacySiteId?: ObjectId;
   legacyProjectId?: string;
+  // OpenClaw endpoint captured by the legacy site-setup flow; kept only for
+  // the /api/sites* adapter responses until the web UI migrates (task 012).
+  legacyDomain?: string;
   createdAt: Date;
   updatedAt: Date;
 }

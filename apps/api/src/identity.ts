@@ -10,6 +10,7 @@ import {
   type IdentityTokenMode
 } from "./agent-auth.js";
 import { AUDIT_ACTIONS, listAuditEntries, recordAudit, serializeAuditEntry } from "./audit.js";
+import { ApiError } from "./errors.js";
 import { slugify } from "./lib/slug.js";
 import { normalizeEmail } from "./security.js";
 
@@ -94,7 +95,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
     if (payload.owner_email) {
       const owner = await collections.users.findOne({ email: normalizeEmail(payload.owner_email) });
       if (!owner) {
-        return reply.code(404).send({ error: "owner_email does not match an existing user" });
+        throw new ApiError(404, "not_found", "owner_email does not match an existing user");
       }
       ownerUserId = owner._id;
     }
@@ -176,7 +177,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
   app.post("/api/tools/phone/call", async (request, reply) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
-      return reply.code(401).send({ error: "missing or invalid identity token" });
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
     const identity = agentIdentityView(agentContext.agent);
 
@@ -191,7 +192,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
         status: "blocked",
         detail: block
       });
-      return reply.code(403).send({ error: block });
+      throw new ApiError(403, block === "human approval is required for this action" ? "approval_required" : "forbidden", block);
     }
 
     const transcript = [
@@ -222,7 +223,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
   app.post("/api/tools/calendar/book", async (request, reply) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
-      return reply.code(401).send({ error: "missing or invalid identity token" });
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
     const identity = agentIdentityView(agentContext.agent);
 
@@ -237,7 +238,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
         status: "blocked",
         detail: block
       });
-      return reply.code(403).send({ error: block });
+      throw new ApiError(403, block === "human approval is required for this action" ? "approval_required" : "forbidden", block);
     }
 
     await recordAudit(collections, {
@@ -261,12 +262,12 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
   app.get("/api/identity/:agentId/audit-log", async (request, reply) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
-      return reply.code(401).send({ error: "missing or invalid identity token" });
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
 
     const { agentId } = request.params as { agentId: string };
     if (agentContext.agent._id.toHexString() !== agentId) {
-      return reply.code(403).send({ error: "identity token does not match requested agent" });
+      throw new ApiError(403, "forbidden", "identity token does not match requested agent");
     }
 
     const { entries } = await listAuditEntries(collections, {
@@ -294,7 +295,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
   app.post("/api/identity/revoke", async (request, reply) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
-      return reply.code(401).send({ error: "missing or invalid identity token" });
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
 
     await collections.identityTokens.updateOne(
@@ -319,7 +320,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
   app.post("/api/identity/tokens/rotate", async (request, reply) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
-      return reply.code(401).send({ error: "missing or invalid identity token" });
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
     }
 
     // Issue the replacement before revoking the old token so the agent is
@@ -367,7 +368,7 @@ function checkAction(identity: AgentIdentity, permission: PermissionName, approv
   return null;
 }
 
-async function reserveAgentSlug(
+export async function reserveAgentSlug(
   collections: Collections,
   ownerUserId: ObjectId | null,
   agentName: string
@@ -390,7 +391,7 @@ function normalizeRuntime(runtime: string): NonNullable<AgentDocument["runtime"]
   return "other";
 }
 
-function identityTokenMode(config: AppConfig): IdentityTokenMode {
+export function identityTokenMode(config: AppConfig): IdentityTokenMode {
   return config.PROVIDER_MODE_EMAIL === "mock" && config.PROVIDER_MODE_PHONE === "mock" ? "test" : "live";
 }
 

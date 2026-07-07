@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { Collections, UserDocument } from "./db.js";
+import { ApiError } from "./errors.js";
 import {
   createSessionExpiry,
   createSessionToken,
@@ -68,12 +69,12 @@ export function registerAuthRoutes(
     const email = normalizeEmail(credentials.email);
 
     if (!isPasswordUsable(credentials.password)) {
-      return reply.code(400).send(errorResponse("password must be between 8 and 128 characters"));
+      throw new ApiError(400, "validation_failed", "password must be between 8 and 128 characters");
     }
 
     const existingUser = await collections.users.findOne({ email });
     if (existingUser) {
-      return reply.code(409).send(errorResponse("email is already registered"));
+      throw new ApiError(409, "validation_failed", "email is already registered");
     }
 
     const now = new Date();
@@ -86,7 +87,7 @@ export function registerAuthRoutes(
 
     const user = await collections.users.findOne({ _id: insertResult.insertedId });
     if (!user) {
-      return reply.code(500).send(errorResponse("could not create user"));
+      throw new ApiError(500, "internal", "internal server error");
     }
 
     await createSession(reply, collections, config, user._id);
@@ -99,7 +100,7 @@ export function registerAuthRoutes(
     const user = await collections.users.findOne({ email });
 
     if (!user || !(await verifyPassword(credentials.password, user.passwordHash))) {
-      return reply.code(401).send(errorResponse("invalid email or password"));
+      throw new ApiError(401, "unauthorized", "invalid email or password");
     }
 
     await createSession(reply, collections, config, user._id);
@@ -157,7 +158,7 @@ export function registerAuthRoutes(
       if (email !== authContext.user.email) {
         const existingUser = await collections.users.findOne({ email }, { projection: { _id: 1 } });
         if (existingUser && !existingUser._id.equals(authContext.user._id)) {
-          return reply.code(409).send(errorResponse("email is already registered"));
+          throw new ApiError(409, "validation_failed", "email is already registered");
         }
       }
       updates.email = email;
@@ -174,7 +175,7 @@ export function registerAuthRoutes(
     );
     const updatedUser = updateResult ?? await collections.users.findOne({ _id: authContext.user._id });
     if (!updatedUser) {
-      return reply.code(404).send(errorResponse("user not found"));
+      throw new ApiError(404, "not_found", "user not found");
     }
 
     return { user: serializeUser(updatedUser) };
@@ -199,7 +200,7 @@ export function registerAuthRoutes(
     );
     const updatedUser = updateResult ?? await collections.users.findOne({ _id: authContext.user._id });
     if (!updatedUser) {
-      return reply.code(404).send(errorResponse("user not found"));
+      throw new ApiError(404, "not_found", "user not found");
     }
 
     return { user: serializeUser(updatedUser) };
@@ -213,11 +214,11 @@ export function registerAuthRoutes(
 
     const payload = updatePasswordSchema.parse(request.body);
     if (!(await verifyPassword(payload.currentPassword, authContext.user.passwordHash))) {
-      return reply.code(400).send(errorResponse("current password is incorrect"));
+      throw new ApiError(400, "validation_failed", "current password is incorrect");
     }
 
     if (!isPasswordUsable(payload.newPassword)) {
-      return reply.code(400).send(errorResponse("password must be between 8 and 128 characters"));
+      throw new ApiError(400, "validation_failed", "password must be between 8 and 128 characters");
     }
 
     await collections.users.updateOne(
@@ -239,13 +240,12 @@ export async function requireAuth(
   reply: FastifyReply,
   collections: Collections,
   config: AppConfig
-): Promise<AuthContext | null> {
+): Promise<AuthContext> {
   const token = getAcceptedSessionCookieNames(config)
     .map((cookieName) => request.cookies[cookieName])
     .find((cookieValue): cookieValue is string => Boolean(cookieValue));
   if (!token) {
-    reply.code(401).send(errorResponse("authentication required"));
-    return null;
+    throw new ApiError(401, "unauthorized", "authentication required");
   }
 
   const session = await collections.sessions.findOne({
@@ -255,14 +255,12 @@ export async function requireAuth(
 
   if (!session) {
     clearSessionCookie(reply, config);
-    reply.code(401).send(errorResponse("authentication required"));
-    return null;
+    throw new ApiError(401, "unauthorized", "authentication required");
   }
 
   const user = await collections.users.findOne({ _id: session.userId });
   if (!user) {
-    reply.code(401).send(errorResponse("authentication required"));
-    return null;
+    throw new ApiError(401, "unauthorized", "authentication required");
   }
 
   return { user };
@@ -342,10 +340,6 @@ function extractSessionTokens(request: FastifyRequest, cookieNames: string[]): s
   }
 
   return [...tokens];
-}
-
-function errorResponse(message: string) {
-  return { error: message, message };
 }
 
 function serializeUser(user: UserDocument) {

@@ -19,7 +19,7 @@ The current product lets a user sign up, create an agent identity, link it to an
 - **UI**: Tailwind with shadcn-style local components
 - **Auth**: classic email/password, bcrypt password hashes, HTTP-only cookie sessions
 - **Identity setup**: user creates a named identity, chooses an OpenClaw endpoint or managed deployment, copies a link prompt/token, then completes setup
-- **Current data model**: identity records are still stored in legacy `sites`/`site-setups` shaped collections and routes for speed during the hackathon; user-facing language should say agent identity
+- **Current data model**: agents are first-class (`agents`/`identityTokens`/`auditLogs` collections); the legacy `/api/sites*` routes are thin deprecated adapters over `agents` until the web UI migrates to `/api/v1/agents` (task 012)
 
 ### Node API
 
@@ -33,16 +33,15 @@ The Node API exposes:
 - `PATCH /api/auth/me`
 - `PATCH /api/auth/me/notifications`
 - `POST /api/auth/me/password`
-- `GET /api/sites`
-- `POST /api/sites` (guarded legacy route; onboarding uses setup completion)
-- `POST /api/site-setups`
-- `GET /api/site-setups/:projectId`
-- `POST /api/site-setups/:projectId/complete`
-- `GET /api/sites/:siteId`
-- `PATCH /api/sites/:siteId`
-- `DELETE /api/sites/:siteId`
-- `POST /api/sites/:siteId/api-keys`
-- `DELETE /api/sites/:siteId/api-keys/:apiKeyId`
+- `POST /api/v1/agents`
+- `GET /api/v1/agents`
+- `GET /api/v1/agents/:agentId`
+- `PATCH /api/v1/agents/:agentId`
+- `DELETE /api/v1/agents/:agentId` (soft delete: revokes agent + tokens, runs capability teardown)
+- `POST /api/v1/agents/:agentId/tokens` (max 5 active)
+- `DELETE /api/v1/agents/:agentId/tokens/:tokenId`
+- `POST /api/v1/agents/:agentId/capabilities/:capability/enable|disable` (email|phone; card returns 400 "coming soon")
+- Deprecated legacy adapters over `agents` (respond with `deprecation: true` header): `GET/POST /api/sites`, `POST /api/site-setups`, `GET /api/site-setups/:projectId`, `POST /api/site-setups/:projectId/complete`, `GET/PATCH/DELETE /api/sites/:siteId`, `POST /api/sites/:siteId/api-keys`, `DELETE /api/sites/:siteId/api-keys/:apiKeyId`
 - `POST /api/dashboard/chat`
 - `POST /api/identity/init`
 - `POST /api/identity/revoke`
@@ -52,6 +51,8 @@ The Node API exposes:
 - `POST /api/tools/calendar/book`
 - Payment tool routes under `/api/tools/payments/*`
 - Email tool routes under `/api/tools/email/*` and `/api/sites/:siteId/email/*`
+- `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
+- Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
 
 ## Key Files
 
@@ -64,12 +65,16 @@ The Node API exposes:
 | `apps/web/src/components/PaymentsPanel.tsx` | Payment capability UI |
 | `apps/api/src/app.ts` | Fastify app wiring |
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
-| `apps/api/src/sites.ts` | Legacy-named identity setup/detail routes |
+| `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
+| `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
+| `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
 | `apps/api/src/phone.ts` | Phone call integration/mock fallback |
 | `apps/api/src/email.ts` | Email capability integration/mock fallback |
 | `apps/api/src/payments.ts` | Payment capability and policy engine |
+| `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |
+| `apps/api/src/webhooks/verify.ts` | Stripe/Svix/Twilio/ElevenLabs signature verifiers |
 
 ## Build & Run
 
