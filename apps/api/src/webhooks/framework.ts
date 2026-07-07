@@ -162,10 +162,14 @@ export function registerWebhookRoute(
 
     await collections.webhookEvents.updateOne(
       { _id: claim.event._id },
-      { $set: { status: "processed", processedAt: new Date(), updatedAt: new Date() }, $unset: { error: "" } }
+      { $set: { status: isSkippedResponse(responsePayload) ? "skipped" : "processed", processedAt: new Date(), updatedAt: new Date() }, $unset: { error: "" } }
     );
     return reply.code(200).send(responsePayload !== undefined ? responsePayload : { ok: true, event_id: providerEventId });
   });
+}
+
+function isSkippedResponse(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && (value as { skipped?: unknown }).skipped === true);
 }
 
 /**

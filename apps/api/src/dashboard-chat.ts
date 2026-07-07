@@ -12,7 +12,6 @@ import { createEmailProvider } from "./providers/email-provider.js";
 import {
   PhoneCallError,
   placeOutboundCall,
-  waitForCallCompletion,
   type OutboundCallResult,
   type PhoneCallTranscriptTurn
 } from "./phone-service.js";
@@ -325,24 +324,6 @@ async function runOpenClawTool(
     });
     emitPhoneCallStarted(result, agent.name, task, recipientName, onCallEvent);
 
-    const completion = await waitForCallCompletion(collections, result.callId, {
-      intervalMs: config.PROVIDER_MODE_PHONE === "mock" ? 100 : 2000
-    });
-    onCallEvent?.({
-      type: "call_completed",
-      call: {
-        callId: result.callId,
-        toNumber: result.to,
-        recipientName,
-        agentIdentityName: agent.name,
-        task,
-        status: completion?.status ?? result.status,
-        simulated: result.simulated,
-        durationSecs: completion?.durationSecs ?? null,
-        transcript: (completion?.transcript ?? []) as PhoneCallTranscriptTurn[]
-      }
-    });
-
     return {
       tool: functionCall.name,
       ok: true,
@@ -351,9 +332,7 @@ async function runOpenClawTool(
       from: result.from,
       to: result.to,
       simulated: result.simulated,
-      finalStatus: completion?.status ?? result.status,
-      durationSecs: completion?.durationSecs ?? null,
-      transcript: completion?.transcript ?? []
+      finalStatus: result.status
     };
   } catch (error) {
     if (error instanceof PhoneCallError) {

@@ -119,7 +119,7 @@ async function loadCallContext(
 ): Promise<[AgentDocument | null, PhonePolicy, UserDocument | null]> {
   const agent = await collections.agents.findOne({ _id: call.agentId, status: { $ne: "revoked" } });
   if (!agent) {
-    return [null, { inboundEnabled: false, blockedCallers: [], inboundInstructions: "" }, null];
+    return [null, { inboundEnabled: false, blockedCallers: [], inboundInstructions: "", storeTranscripts: true }, null];
   }
   const [policy, owner] = await Promise.all([
     getPhonePolicy(collections, agent),

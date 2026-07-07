@@ -219,8 +219,6 @@ describe("dashboard chat", () => {
     expect(response.statusCode).toBe(200);
     expect(response.payload).toContain("data: {\"type\":\"call_started\"");
     expect(response.payload).toContain("\"toNumber\":\"+33757509222\"");
-    expect(response.payload).toContain("data: {\"type\":\"call_completed\"");
-    expect(response.payload).toContain("[mock] Called +33757509222 about: Book a barber appointment for 11am.");
     expect(response.payload).toContain("data: {\"type\":\"delta\",\"text\":\"The call has ended and the appointment is noted.\"}");
     expect(response.payload).toContain("data: {\"type\":\"done\"}");
 

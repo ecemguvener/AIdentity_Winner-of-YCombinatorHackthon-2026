@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { AppConfig } from "./config.js";
 import { connectDatabase, type AgentDocument, type Database, type PhoneNumberDocument, type UserDocument } from "./db.js";
 import { defaultEmailPolicy, defaultPhonePolicy } from "./policies.js";
-import { buildPersonalAssistantCallBrief, getAgentPhoneCall, listAgentPhoneCalls, placeOutboundCall, waitForCallCompletion } from "./phone-service.js";
+import { buildPersonalAssistantCallBrief, getAgentPhoneCall, listAgentPhoneCalls, placeOutboundCall } from "./phone-service.js";
 
 const config = {
   PROVIDER_MODE_PHONE: "mock",
@@ -82,7 +82,6 @@ describe("phone service outbound calls", () => {
       counterpartyE164: "+3375750922",
       transcript: [{ role: "agent", message: "[mock] Called +3375750922 about: Book a barber appointment.", timeInCallSecs: 0 }]
     });
-    await expect(waitForCallCompletion(database.collections, result.callId, { intervalMs: 1, maxWaitMs: 5 })).resolves.toMatchObject({ status: "completed" });
   });
 
   it("sends the agent-owned ElevenLabs phone number and dynamic variables", async () => {

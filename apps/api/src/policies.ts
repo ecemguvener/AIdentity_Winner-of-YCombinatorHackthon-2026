@@ -25,7 +25,8 @@ const defaultInboundInstructions =
 const phonePolicySchema = z.object({
   inboundEnabled: z.boolean().default(true),
   blockedCallers: z.array(z.string().min(1).max(32)).max(500).default([]),
-  inboundInstructions: z.string().max(2000).default(defaultInboundInstructions)
+  inboundInstructions: z.string().max(2000).default(defaultInboundInstructions),
+  storeTranscripts: z.boolean().default(true)
 });
 
 export function defaultEmailPolicy(approvalMode: AgentDocument["approvalMode"]): EmailPolicy {
@@ -53,7 +54,8 @@ export function defaultPhonePolicy(): PhonePolicy {
   return {
     inboundEnabled: true,
     blockedCallers: [],
-    inboundInstructions: defaultInboundInstructions
+    inboundInstructions: defaultInboundInstructions,
+    storeTranscripts: true
   };
 }
 

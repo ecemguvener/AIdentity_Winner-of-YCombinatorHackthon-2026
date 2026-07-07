@@ -10,7 +10,6 @@ const callConversationGuidance =
   "Call naturally and keep the conversation moving. Do not repeatedly ask for confirmation; only confirm final details that affect the outcome, like time, price, address, availability, or cancellation policy.";
 
 const mockCompletionDelayMs = 2000;
-const terminalStatuses = new Set(["completed", "failed", "no_answer"]);
 
 export interface PlaceOutboundCallInput {
   agent: AgentDocument;
@@ -95,28 +94,6 @@ export async function placeOutboundCall(
     }
   );
   return { callId: call._id.toHexString(), status, from: phoneNumber.e164, to: toNumber, simulated: false };
-}
-
-export async function waitForCallCompletion(
-  collections: Collections,
-  callId: ObjectId | string,
-  options: { intervalMs?: number; maxWaitMs?: number } = {}
-): Promise<CallDocument | null> {
-  const id = callId instanceof ObjectId ? callId : new ObjectId(callId);
-  const intervalMs = options.intervalMs ?? 500;
-  const maxWaitMs = options.maxWaitMs ?? 3 * 60 * 1000;
-  const startedAt = Date.now();
-  let latest: CallDocument | null = null;
-
-  // INTERIM until task 026: post-call webhook will own completion updates.
-  while (Date.now() - startedAt <= maxWaitMs) {
-    latest = await collections.calls.findOne({ _id: id });
-    if (!latest || terminalStatuses.has(latest.status)) {
-      return latest;
-    }
-    await sleep(intervalMs);
-  }
-  return latest;
 }
 
 export async function listAgentPhoneCalls(
@@ -378,8 +355,4 @@ function punctuate(value: string): string {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

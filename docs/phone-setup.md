@@ -28,6 +28,7 @@ ELEVENLABS_API_KEY=...
 ELEVENLABS_AGENT_ID=...
 ELEVENLABS_VOICE_ID=...
 ELEVENLABS_WORKSPACE_WEBHOOK_SECRET=...
+CALL_COST_CENTS_PER_MINUTE=15
 ```
 
 `TWILIO_ADDRESS_SID` and `TWILIO_BUNDLE_SID` are passed through during purchase when your country or account requires regulatory compliance.
@@ -87,6 +88,14 @@ Configure the ElevenLabs workspace webhook secret in Barkan as `ELEVENLABS_WORKS
 ```text
 https://api.example.com/webhooks/elevenlabs/personalization
 ```
+
+Set the post-call webhook URL to:
+
+```text
+https://api.example.com/webhooks/elevenlabs/post-call
+```
+
+Post-call webhooks finalize call status, transcript, summary, duration, and usage cost. `CALL_COST_CENTS_PER_MINUTE` controls the local cost estimate before billing integration.
 
 ## Twilio Scope
 

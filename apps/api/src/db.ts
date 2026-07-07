@@ -264,6 +264,7 @@ export interface PhonePolicy {
   inboundEnabled: boolean;
   blockedCallers: string[];
   inboundInstructions: string;
+  storeTranscripts: boolean;
 }
 
 // Per-agent policy configuration.

@@ -1,0 +1,32 @@
+{
+  "event_id": "evt_post_call_completed_fixture",
+  "type": "post_call_transcription",
+  "data": {
+    "conversation_id": "conv_fixture_completed",
+    "status": "done",
+    "transcript": [
+      {
+        "role": "agent",
+        "message": "Hi, this is Maya calling from Barkan.",
+        "time_in_call_secs": 1
+      },
+      {
+        "role": "user",
+        "message": "Great, please call back tomorrow.",
+        "time_in_call_secs": 22
+      }
+    ],
+    "analysis": {
+      "transcript_summary": "Caller asked Maya to call back tomorrow; follow-up scheduled."
+    },
+    "metadata": {
+      "call_duration_secs": 61,
+      "call_sid": "CA_fixture_123"
+    },
+    "conversation_initiation_client_data": {
+      "dynamic_variables": {
+        "barkan_call_id": "000000000000000000000000"
+      }
+    }
+  }
+}

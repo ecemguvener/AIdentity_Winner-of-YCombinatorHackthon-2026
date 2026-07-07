@@ -66,6 +66,7 @@ The Node API exposes:
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
 - `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
 - `POST /webhooks/elevenlabs/personalization` (ElevenLabs signed inbound-call personalization; returns conversation initiation data)
+- `POST /webhooks/elevenlabs/post-call` (ElevenLabs signed post-call transcript/status/cost finalization)
 - Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
 
 ## Key Files
@@ -86,6 +87,7 @@ The Node API exposes:
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
 | `apps/api/src/phone-service.ts` | Per-agent outbound phone call service, call persistence, mock lifecycle, and call serializers |
+| `apps/api/src/phone-post-call.ts` | ElevenLabs post-call webhook finalization, transcript storage, call cost, and usage metering |
 | `apps/api/src/phone-provisioning.ts` | Twilio number purchase + ElevenLabs voice-agent phone capability provisioner |
 | `apps/api/src/phone-personalization.ts` | ElevenLabs inbound-call personalization webhook and call row creation |
 | `apps/api/src/phone-numbers.ts` | Twilio phone number persistence and lifecycle helpers |

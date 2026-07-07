@@ -5,6 +5,7 @@ import type { Collections, WebhookEventDocument } from "../db.js";
 import { requireAuth } from "../auth.js";
 import { AUDIT_ACTIONS, recordAudit } from "../audit.js";
 import { ingestResendReceivedEmail } from "../email-service.js";
+import { handleElevenLabsPostCall } from "../phone-post-call.js";
 import {
   handleElevenLabsPersonalization,
   replayElevenLabsPersonalization,
@@ -44,6 +45,15 @@ export function registerWebhookRoutes(app: FastifyInstance, collections: Collect
     extractEventType: () => "conversation.personalization",
     handle: (payload) => handleElevenLabsPersonalization(collections, payload),
     handleReplay: (payload) => replayElevenLabsPersonalization(collections, payload)
+  });
+
+  registerWebhookRoute(app, collections, config, {
+    path: "/webhooks/elevenlabs/post-call",
+    provider: "elevenlabs",
+    verify: providerVerifier("elevenlabs"),
+    extractEventId: (payload) => readPostCallEventId(payload),
+    extractEventType: (payload) => (isRecord(payload) && typeof payload.type === "string" ? payload.type : "post_call_transcription"),
+    handle: (payload) => handleElevenLabsPostCall(collections, config, payload)
   });
 
   // Ops visibility into the dead-letter queue (e.g. ?status=failed). Session
@@ -157,6 +167,17 @@ function serializeWebhookEvent(event: WebhookEventDocument) {
     created_at: event.createdAt.toISOString(),
     updated_at: event.updatedAt.toISOString()
   };
+}
+
+function readPostCallEventId(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+  const data = isRecord(payload.data) ? payload.data : payload;
+  for (const key of ["event_id", "eventId", "id"]) {
+    const value = payload[key] ?? data[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  const conversationId = data.conversation_id ?? data.conversationId;
+  return typeof conversationId === "string" && conversationId.trim() ? `post-call:${conversationId.trim()}` : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
