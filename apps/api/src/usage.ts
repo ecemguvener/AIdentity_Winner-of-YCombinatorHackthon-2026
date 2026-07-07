@@ -157,7 +157,6 @@ export async function reportUsageToStripe(
 }
 
 export function registerUsageRoutes(app: FastifyInstance, collections: Collections, config: AppConfig): void {
-  if (!hasStripeBillingConfig(config)) return;
   app.get("/api/v1/billing/usage", async (request, reply) => {
     const authContext = await requireAuth(request, reply, collections, config);
     return await getUsageSummary(collections, authContext.user._id);

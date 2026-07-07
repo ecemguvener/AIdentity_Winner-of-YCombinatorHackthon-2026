@@ -74,6 +74,19 @@ afterAll(async () => {
 });
 
 describe("billing routes and Stripe sync", () => {
+  it("returns plan catalog from the server-side billing catalog", async () => {
+    const { cookie } = await insertOwnerSession();
+
+    const response = await app.inject({ method: "GET", url: "/api/v1/billing/plans", headers: { cookie } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().plans).toMatchObject([
+      { plan: "free", monthlyPriceEur: 0, limits: { agents: 1, phoneNumbers: 0 }, includedUsage: { emails: 50 } },
+      { plan: "pro", monthlyPriceEur: 29, limits: { agents: 3, phoneNumbers: 1 }, includedUsage: { callMinutes: 120 } },
+      { plan: "scale", monthlyPriceEur: 99, limits: { agents: 10, phoneNumbers: 3 }, includedUsage: { sms: 1000 } }
+    ]);
+  });
+
   it("creates a free billing account on signup", async () => {
     const response = await app.inject({
       method: "POST",
@@ -172,6 +185,42 @@ describe("billing routes and Stripe sync", () => {
     expect(await database.collections.billingAccounts.findOne({ ownerUserId: user._id })).toMatchObject({ subscriptionStatus: "past_due" });
     expect(await database.collections.auditLogs.findOne({ agentId: agent._id, action: "billing.payment_failed" }))
       .toMatchObject({ status: "blocked", detail: "Stripe invoice payment failed for owner@example.com." });
+  });
+
+  it("returns platform ops status", async () => {
+    const { cookie } = await insertOwnerSession();
+    await database.collections.webhookEvents.insertOne({
+      _id: new ObjectId(),
+      provider: "stripe",
+      providerEventId: "evt_status",
+      eventType: "customer.subscription.updated",
+      payloadHash: "hash",
+      status: "processed",
+      createdAt: new Date("2026-07-07T12:00:00.000Z"),
+      updatedAt: new Date("2026-07-07T12:00:00.000Z")
+    });
+    await database.collections.phoneNumbers.insertOne({
+      _id: new ObjectId(),
+      agentId: new ObjectId(),
+      e164: "+15005550001",
+      country: "US",
+      twilioSid: "PN123",
+      capabilitiesVoice: true,
+      capabilitiesSms: true,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const response = await app.inject({ method: "GET", url: "/api/v1/ops/status", headers: { cookie } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      providerModes: { email: "mock", phone: "mock", billing: "live" },
+      emailDomainVerified: false,
+      stripeWebhookLastSeenAt: "2026-07-07T12:00:00.000Z",
+      twilioNumbers: 1
+    });
   });
 });
 

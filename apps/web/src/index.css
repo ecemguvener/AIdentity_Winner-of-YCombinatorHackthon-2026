@@ -1238,6 +1238,34 @@ button:disabled {
   gap: 14px;
 }
 
+.dashboard-page__plan-badge {
+  position: relative;
+  min-width: 36px;
+  height: 24px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dashboard-page__plan-badge i {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #d97706;
+}
+
 .dashboard-page__rail-button,
 .dashboard-page__logout,
 .dashboard-page__identity {
@@ -3696,6 +3724,185 @@ button:disabled {
 
 .plan-limit-modal__primary:hover {
   background: #2a2a2a;
+}
+
+.billing-current-plan,
+.billing-plan-grid,
+.billing-usage,
+.billing-ops {
+  display: grid;
+  gap: 18px;
+}
+
+.billing-page__loading,
+.billing-page__actions,
+.billing-page__note,
+.billing-page__warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.billing-page__loading,
+.billing-page__note {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.billing-page__warning,
+.billing-page__blocking {
+  border: 1px solid rgba(217, 119, 6, 0.22);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.billing-page__blocking {
+  display: grid;
+  gap: 4px;
+}
+
+.billing-page__blocking p {
+  margin: 0;
+}
+
+.billing-status-pill {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.billing-status-pill--warning {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.billing-plan-grid__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.billing-plan-card {
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  background: #ffffff;
+}
+
+.billing-plan-card--current {
+  border-color: #111111;
+}
+
+.billing-plan-card header {
+  display: grid;
+  gap: 4px;
+}
+
+.billing-plan-card h4,
+.billing-plan-card ul {
+  margin: 0;
+}
+
+.billing-plan-card h4 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.billing-plan-card header strong {
+  font-size: 24px;
+  font-weight: 850;
+}
+
+.billing-plan-card ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.billing-usage__rows,
+.billing-usage__row {
+  display: grid;
+  gap: 12px;
+}
+
+.billing-usage__row > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: #111111;
+  font-size: 13px;
+}
+
+.billing-usage__row span {
+  color: #6b7280;
+  font-weight: 650;
+}
+
+.billing-usage__bar {
+  height: 9px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.billing-usage__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+}
+
+.billing-usage__bar--warning span {
+  background: #d97706;
+}
+
+.billing-dns-records {
+  display: grid;
+  gap: 8px;
+}
+
+.billing-dns-records button {
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  background: #ffffff;
+  color: #111111;
+  text-align: left;
+}
+
+.billing-dns-records small {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .billing-plan-grid__cards {
+    grid-template-columns: 1fr;
+  }
 }
 
 .site-onboarding-page {

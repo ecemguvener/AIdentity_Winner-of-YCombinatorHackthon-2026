@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useState, type ChangeEvent } from "react";
-import { Loader2, LogOut, X } from "lucide-react";
+import { Copy, ExternalLink, Loader2, LogOut, X } from "lucide-react";
 import { api, type Site, type User } from "../api";
+import { billingApi, type BillingAccountView, type BillingPlanName, type BillingPlanView, type BillingUsageView, type EmailDomainStatusView, type OpsStatusView, type UsageMeter } from "../api/billing";
+import { ApiClientError } from "../api/client";
 import { FloatingField, getErrorMessage, profileAvatarAcceptedTypes, profileAvatarMaxBytes, type ToastNotificationInput, type UserSettingsSection } from "../legacy/shared";
 import { getDashboardChatGreetingName } from "./ChatPage";
 
@@ -40,6 +42,14 @@ export function UserSettingsPage({
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null);
+  const [billingPlans, setBillingPlans] = useState<BillingPlanView[]>([]);
+  const [billingUsage, setBillingUsage] = useState<BillingUsageView | null>(null);
+  const [emailDomain, setEmailDomain] = useState<EmailDomainStatusView | null>(null);
+  const [opsStatus, setOpsStatus] = useState<OpsStatusView | null>(null);
+  const [isBillingLoading, setIsBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState("");
+  const [billingBlocks, setBillingBlocks] = useState<string[]>([]);
   const avatarInputId = useId();
   const joinedDate = formatProfileDate(user.createdAt);
   const initials = getUserInitials(displayName, email);
@@ -64,6 +74,68 @@ export function UserSettingsPage({
     setIdentityEmails(user.notificationPreferences.identityEmails);
     setSecurityEmails(user.notificationPreferences.securityEmails);
   }, [user]);
+
+  useEffect(() => {
+    if (activeSection !== "billing") return;
+    void loadBillingSection();
+    if (new URLSearchParams(window.location.search).get("checkout") !== "success") return;
+    const timers = [2000, 5000, 10_000].map((delay) => window.setTimeout(() => void loadBillingSection(), delay));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [activeSection]);
+
+  async function loadBillingSection() {
+    setIsBillingLoading(true);
+    setBillingError("");
+    try {
+      const [account, plans, usage, domain, status] = await Promise.all([
+        billingApi.getAccount(),
+        billingApi.getPlans(),
+        billingApi.getUsage(),
+        billingApi.getEmailDomain(),
+        billingApi.getOpsStatus()
+      ]);
+      setBillingAccount(account);
+      setBillingPlans(plans.plans);
+      setBillingUsage(usage);
+      setEmailDomain(domain.domain);
+      setOpsStatus(status);
+    } catch (error) {
+      setBillingError(getErrorMessage(error, "Could not load billing"));
+    } finally {
+      setIsBillingLoading(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    setBillingError("");
+    try {
+      const response = await billingApi.portal();
+      window.location.assign(response.portalUrl);
+    } catch (error) {
+      setBillingError(getErrorMessage(error, "Could not open billing portal"));
+    }
+  }
+
+  async function choosePlan(plan: BillingPlanName) {
+    if (plan === "free") return;
+    setBillingBlocks([]);
+    setBillingError("");
+    try {
+      const response = await billingApi.checkout(plan);
+      window.location.assign(response.checkoutUrl);
+    } catch (error) {
+      const blocks = error instanceof ApiClientError && Array.isArray((error.details as { blocking?: unknown }).blocking)
+        ? ((error.details as { blocking: unknown[] }).blocking.filter((item): item is string => typeof item === "string"))
+        : [];
+      if (blocks.length > 0) setBillingBlocks(blocks);
+      setBillingError(getErrorMessage(error, "Could not start checkout"));
+    }
+  }
+
+  async function copyDnsRecord(record: EmailDomainStatusView["records"][number]) {
+    await navigator.clipboard?.writeText(`${record.type} ${record.name} ${record.value}`);
+    onNotify({ title: "DNS record copied" });
+  }
 
   async function saveProfileSettings() {
     if (!normalizedDisplayName || !normalizedEmail) {
@@ -415,31 +487,27 @@ export function UserSettingsPage({
                 </div>
               </header>
 
-              <section className="site-detail-panel__api-key site-detail-page__section site-detail-page__section--flush">
-                <div className="site-detail-page__section-heading">
-                  <div>
-                    <h3>Workspace usage</h3>
-                    <p>Current dashboard footprint for this account.</p>
-                  </div>
-                </div>
-                <div className="user-settings-page__metric-grid">
-                  <UserSettingsMetric label="Identities" value={sites.length} />
-                  <UserSettingsMetric label="Plan" value="Starter" />
-                  <UserSettingsMetric label="Billing" value="Not configured" />
-                </div>
-              </section>
-
-              <section className="site-detail-panel__api-key site-detail-page__section">
-                <div className="site-detail-page__section-heading">
-                  <div>
-                    <h3>Plan management</h3>
-                    <p>Upgrade and billing management will appear here when account billing is connected.</p>
-                  </div>
-                  <button className="site-detail-page__section-action" type="button" disabled>
-                    Manage plan
-                  </button>
-                </div>
-              </section>
+              {isBillingLoading && !billingAccount ? (
+                <section className="site-detail-panel__api-key site-detail-page__section site-detail-page__section--flush">
+                  <div className="billing-page__loading"><Loader2 size={18} aria-hidden="true" /> Loading billing</div>
+                </section>
+              ) : null}
+              {billingError ? <p className="site-detail-panel__error">{billingError}</p> : null}
+              {billingAccount ? (
+                <BillingCurrentPlan account={billingAccount} onPortal={() => void openBillingPortal()} />
+              ) : null}
+              {billingBlocks.length > 0 ? (
+                <section className="billing-page__blocking" aria-label="Plan change blockers">
+                  {billingBlocks.map((block) => <p key={block}>{block}</p>)}
+                </section>
+              ) : null}
+              {billingPlans.length > 0 && billingAccount ? (
+                <BillingPlanGrid plans={billingPlans} currentPlan={billingAccount.plan} onChoose={(plan) => void choosePlan(plan)} />
+              ) : null}
+              {billingUsage ? <BillingUsageSection usage={billingUsage} /> : null}
+              {opsStatus && emailDomain ? (
+                <BillingOpsSection status={opsStatus} domain={emailDomain} onCopyRecord={(record) => void copyDnsRecord(record)} />
+              ) : null}
             </>
           )}
           </div>
@@ -522,6 +590,165 @@ export function UserSettingsPage({
       ) : null}
     </>
   );
+}
+
+function BillingCurrentPlan({ account, onPortal }: { account: BillingAccountView; onPortal: () => void }) {
+  const status = account.subscriptionStatus ?? (account.plan === "free" ? "free" : "active");
+  const isPastDue = status === "past_due";
+  return (
+    <section className="site-detail-panel__api-key site-detail-page__section site-detail-page__section--flush billing-current-plan">
+      <div className="site-detail-page__section-heading">
+        <div>
+          <h3>{planLabel(account.plan)} plan</h3>
+          <p>{account.monthlyPriceEur === 0 ? "Free" : `€${account.monthlyPriceEur}/mo`} · {account.currentPeriodEnd ? `Renews ${formatProfileDate(account.currentPeriodEnd)}` : "No renewal date"}</p>
+        </div>
+        <span className={`billing-status-pill${isPastDue ? " billing-status-pill--warning" : ""}`}>{status.replace(/_/g, " ")}</span>
+      </div>
+      {isPastDue ? <p className="billing-page__warning">Payment failed. Update payment method to keep paid capabilities active.</p> : null}
+      <div className="user-settings-page__metric-grid">
+        <UserSettingsMetric label="Identities" value={account.includedUsage.agents} />
+        <UserSettingsMetric label="Phone numbers" value={account.includedUsage.phoneNumbers} />
+        <UserSettingsMetric label="Monthly emails" value={account.includedUsage.emails} />
+      </div>
+      <div className="billing-page__actions">
+        <button className="site-detail-page__section-action" type="button" onClick={onPortal}>
+          <ExternalLink size={14} aria-hidden="true" />
+          Manage payment method & invoices
+        </button>
+      </div>
+      {account.subscriptionStatus === "canceled" ? <p className="billing-page__note">Subscription canceled. Account stays on current access until period end.</p> : null}
+    </section>
+  );
+}
+
+function BillingPlanGrid({
+  plans,
+  currentPlan,
+  onChoose
+}: {
+  plans: BillingPlanView[];
+  currentPlan: BillingPlanName;
+  onChoose: (plan: BillingPlanName) => void;
+}) {
+  return (
+    <section className="site-detail-panel__api-key site-detail-page__section billing-plan-grid">
+      <div className="site-detail-page__section-heading">
+        <div>
+          <h3>Plans</h3>
+          <p>Limits and included usage come from the billing API.</p>
+        </div>
+      </div>
+      <div className="billing-plan-grid__cards">
+        {plans.map((plan) => {
+          const isCurrent = plan.plan === currentPlan;
+          return (
+            <article key={plan.plan} className={`billing-plan-card${isCurrent ? " billing-plan-card--current" : ""}`}>
+              <header>
+                <h4>{plan.name}</h4>
+                <strong>{plan.monthlyPriceEur === 0 ? "Free" : `€${plan.monthlyPriceEur}/mo`}</strong>
+              </header>
+              <ul>
+                <li>{plan.limits.agents} agent identities</li>
+                <li>{plan.limits.phoneNumbers} phone numbers</li>
+                <li>{plan.includedUsage.emails} emails included</li>
+                <li>{plan.includedUsage.callMinutes} call minutes</li>
+                <li>{plan.includedUsage.sms} SMS</li>
+                <li>{plan.features.phone ? "Phone enabled" : "No phone access"}</li>
+              </ul>
+              <button className="site-detail-page__section-action" type="button" disabled={isCurrent || plan.plan === "free"} onClick={() => onChoose(plan.plan)}>
+                {isCurrent ? "Current plan" : plan.plan === "free" ? "Included" : plan.monthlyPriceEur > priceForPlan(currentPlan, plans) ? "Upgrade" : "Downgrade"}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function BillingUsageSection({ usage }: { usage: BillingUsageView }) {
+  const meters: Array<{ meter: UsageMeter; label: string; unitCost: number }> = [
+    { meter: "emails_sent", label: "Emails", unitCost: 0.01 },
+    { meter: "call_minutes", label: "Call minutes", unitCost: 0.12 },
+    { meter: "sms_messages", label: "SMS", unitCost: 0.04 },
+    { meter: "active_numbers", label: "Active numbers", unitCost: 1.15 }
+  ];
+  return (
+    <section className="site-detail-panel__api-key site-detail-page__section billing-usage">
+      <div className="site-detail-page__section-heading">
+        <div>
+          <h3>Usage</h3>
+          <p>Current period {usage.periodKey}</p>
+        </div>
+      </div>
+      <div className="billing-usage__rows">
+        {meters.map(({ meter, label, unitCost }) => {
+          const row = usage.perMeter[meter];
+          const percent = row.included > 0 ? Math.min(100, Math.round((row.used / row.included) * 100)) : row.used > 0 ? 100 : 0;
+          const projectedCost = row.overage * unitCost;
+          return (
+            <div key={meter} className="billing-usage__row">
+              <div>
+                <strong>{label}</strong>
+                <span>{row.used} / {row.included} included{row.overage > 0 ? ` · ${row.overage} over · €${projectedCost.toFixed(2)}` : ""}</span>
+              </div>
+              <div className={`billing-usage__bar${percent >= 80 ? " billing-usage__bar--warning" : ""}`} aria-label={`${label} usage ${percent}%`}>
+                <span style={{ width: `${percent}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function BillingOpsSection({
+  status,
+  domain,
+  onCopyRecord
+}: {
+  status: OpsStatusView;
+  domain: EmailDomainStatusView;
+  onCopyRecord: (record: EmailDomainStatusView["records"][number]) => void;
+}) {
+  const missingRecords = domain.records.filter((record) => record.status !== "verified");
+  return (
+    <section className="site-detail-panel__api-key site-detail-page__section billing-ops">
+      <div className="site-detail-page__section-heading">
+        <div>
+          <h3>Platform status</h3>
+          <p>{domain.name} DNS {status.emailDomainVerified ? "verified" : "needs attention"}</p>
+        </div>
+      </div>
+      <div className="user-settings-page__metric-grid">
+        <UserSettingsMetric label="Email provider" value={status.providerModes.email} />
+        <UserSettingsMetric label="Phone provider" value={status.providerModes.phone} />
+        <UserSettingsMetric label="Billing provider" value={status.providerModes.billing} />
+        <UserSettingsMetric label="Twilio numbers" value={status.twilioNumbers} />
+      </div>
+      <p className="billing-page__note">Stripe webhook: {status.stripeWebhookLastSeenAt ? formatProfileDate(status.stripeWebhookLastSeenAt) : "No events yet"}</p>
+      {missingRecords.length > 0 ? (
+        <div className="billing-dns-records">
+          {missingRecords.map((record) => (
+            <button key={`${record.type}-${record.name}-${record.value}`} type="button" onClick={() => onCopyRecord(record)}>
+              <span>{record.type} {record.name}</span>
+              <small>{record.value}</small>
+              <Copy size={14} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function planLabel(plan: BillingPlanName): string {
+  return plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Scale";
+}
+
+function priceForPlan(plan: BillingPlanName, plans: BillingPlanView[]): number {
+  return plans.find((item) => item.plan === plan)?.monthlyPriceEur ?? 0;
 }
 
 function UserSettingsTab({

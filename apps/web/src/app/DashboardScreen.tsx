@@ -1,4 +1,6 @@
 import { Bell, LogOut, Mail, Phone, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { billingApi, type BillingPlanName } from "../api/billing";
 import type { AgentDetailResponse, AgentListItem, Approval, IdentityToken } from "../api/types";
 import type { User } from "../api";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
@@ -67,6 +69,24 @@ export function DashboardScreen({
   onNotify: (notification: ToastNotificationInput) => void;
   onCloseDetail: () => void;
 }) {
+  const [billingBadge, setBillingBadge] = useState<{ plan: BillingPlanName; warning: boolean } | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    void Promise.all([billingApi.getAccount(), billingApi.getUsage()])
+      .then(([account, usage]) => {
+        if (isCancelled) return;
+        const warning = Object.values(usage.perMeter).some((meter) =>
+          meter.included > 0 ? meter.used / meter.included >= 0.8 : meter.used > 0
+        );
+        setBillingBadge({ plan: account.plan, warning });
+      })
+      .catch(() => undefined);
+    return () => {
+      isCancelled = true;
+    };
+  }, [user.id]);
+
   return (
     <main className="dashboard-page">
       <aside className="dashboard-page__rail">
@@ -106,6 +126,12 @@ export function DashboardScreen({
         </div>
 
         <div className="dashboard-page__rail-footer">
+          {billingBadge ? (
+            <div className="dashboard-page__plan-badge" title={billingBadge.warning ? "Usage above 80%" : "Current plan"}>
+              <span>{billingBadge.plan}</span>
+              {billingBadge.warning ? <i aria-label="Usage above 80%" /> : null}
+            </div>
+          ) : null}
           <button
             className={`dashboard-page__identity${activeSection === "settings" ? " dashboard-page__identity--active" : ""}`}
             type="button"

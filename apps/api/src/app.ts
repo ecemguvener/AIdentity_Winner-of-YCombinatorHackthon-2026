@@ -169,6 +169,26 @@ export async function buildApp(config: AppConfig, collections: Collections) {
       : await getDomainStatus(config, mockMissingResendClient(config.EMAIL_AGENT_DOMAIN));
     return { domain: status };
   });
+  app.get("/api/v1/ops/status", async (request, reply) => {
+    await requireAuth(request, reply, collections, config);
+    const [emailDomainStatus, stripeWebhook, twilioNumbers] = await Promise.all([
+      config.PROVIDER_MODE_EMAIL === "live"
+        ? ensureAgentDomain(config)
+        : getDomainStatus(config, mockMissingResendClient(config.EMAIL_AGENT_DOMAIN)),
+      collections.webhookEvents.findOne({ provider: "stripe" }, { sort: { createdAt: -1 } }),
+      collections.phoneNumbers.countDocuments({ twilioSid: { $exists: true }, status: { $in: ["provisioning", "active"] } })
+    ]);
+    return {
+      providerModes: {
+        email: config.PROVIDER_MODE_EMAIL,
+        phone: config.PROVIDER_MODE_PHONE,
+        billing: config.STRIPE_SECRET_KEY && config.STRIPE_WEBHOOK_SECRET ? "live" : "mock"
+      },
+      emailDomainVerified: emailDomainStatus.verified,
+      stripeWebhookLastSeenAt: stripeWebhook?.createdAt.toISOString() ?? null,
+      twilioNumbers
+    };
+  });
 
   registerAgentRoutes(app, collections, config);
   registerApprovalRoutes(app, collections, config);

@@ -74,7 +74,9 @@ The Node API exposes:
 - Agent email routes: `GET /api/v1/agent/email/address`, `POST /api/v1/agent/email/send`, `GET /api/v1/agent/email/threads`, `GET /api/v1/agent/email/threads/:threadId`, `POST /api/v1/agent/email/threads/:threadId/reply`, `GET /api/v1/agent/email/threads/:threadId/attachments/:attachmentId`
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
+- `GET /api/v1/ops/status` (session-authed provider mode + billing/phone/email readiness)
 - `GET /api/v1/billing`
+- `GET /api/v1/billing/plans`
 - `GET /api/v1/billing/usage`
 - `POST /api/v1/billing/checkout`
 - `POST /api/v1/billing/portal`
@@ -93,6 +95,7 @@ The Node API exposes:
 |------|---------|
 | `apps/web/src/App.tsx` | Dashboard, auth, identity onboarding, and settings UI |
 | `apps/web/src/api.ts` | Browser API client |
+| `apps/web/src/api/billing.ts` | Browser API client for billing and ops status |
 | `apps/web/src/api/phone.ts` | Browser API client for owner phone/SMS routes |
 | `apps/web/src/components/PhonePanel.tsx` | Real phone/SMS tab: number, calls, transcripts, SMS threads, and policy UI |
 | `apps/web/src/components/EmailPanel.tsx` | Real email inbox, threads, compose, and policy UI |

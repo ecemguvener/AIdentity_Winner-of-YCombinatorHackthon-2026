@@ -58,9 +58,10 @@ const subscriptionEventTypes = [
 ] as const;
 
 export function registerBillingRoutes(app: FastifyInstance, collections: Collections, config: AppConfig): void {
-  if (!hasStripeBillingConfig(config)) {
-    return;
-  }
+  app.get("/api/v1/billing/plans", async (request, reply) => {
+    await requireAuth(request, reply, collections, config);
+    return { plans: serializeBillingPlans() };
+  });
 
   app.get("/api/v1/billing", async (request, reply) => {
     const authContext = await requireAuth(request, reply, collections, config);
@@ -69,6 +70,9 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
   });
 
   app.post("/api/v1/billing/checkout", async (request, reply) => {
+    if (!hasStripeBillingConfig(config)) {
+      throw new ApiError(503, "provider_error", "Stripe billing is not configured");
+    }
     const authContext = await requireAuth(request, reply, collections, config);
     const payload = checkoutSchema.parse(request.body ?? {});
     const blocking = await getDowngradeBlocks(collections, authContext.user._id, payload.plan);
@@ -96,6 +100,9 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
   });
 
   app.post("/api/v1/billing/portal", async (request, reply) => {
+    if (!hasStripeBillingConfig(config)) {
+      throw new ApiError(503, "provider_error", "Stripe billing is not configured");
+    }
     const authContext = await requireAuth(request, reply, collections, config);
     const account = await ensureBillingAccount(collections, config, authContext.user);
     const stripe = getStripeClient(config);
@@ -105,6 +112,27 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
     });
     return { portalUrl: session.url };
   });
+}
+
+export function serializeBillingPlans() {
+  return Object.values(billingPlans).map((plan) => ({
+    plan: plan.plan,
+    name: plan.plan === "free" ? "Free" : plan.plan === "pro" ? "Pro" : "Scale",
+    monthlyPriceEur: plan.monthlyPriceEur,
+    limits: {
+      agents: plan.agentLimit,
+      phoneNumbers: plan.phoneNumberLimit
+    },
+    features: {
+      email: plan.emailEnabled,
+      phone: plan.phoneEnabled
+    },
+    includedUsage: {
+      emails: plan.includedEmails,
+      callMinutes: plan.includedCallMinutes,
+      sms: plan.includedSms
+    }
+  }));
 }
 
 function overagePriceLineItems(config: AppConfig): Array<{ price: string }> {
@@ -277,6 +305,7 @@ function serializeBillingAccount(account: BillingAccountDocument) {
   const plan = billingPlans[account.plan];
   return {
     plan: account.plan,
+    monthlyPriceEur: plan.monthlyPriceEur,
     subscriptionStatus: account.subscriptionStatus ?? null,
     currentPeriodEnd: account.currentPeriodEnd?.toISOString() ?? null,
     includedUsage: {
