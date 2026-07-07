@@ -31,6 +31,10 @@ export const agentsApi = {
     requestJson<{ ok: boolean }>(`/api/v1/agents/${encodeURIComponent(agentId)}`, {
       method: "DELETE"
     }),
+  freezeAll: (agentId: string) =>
+    requestJson<{ ok: boolean }>(`/api/v1/agents/${encodeURIComponent(agentId)}/freeze-all`, {
+      method: "POST"
+    }),
   createToken: (agentId: string, name?: string) =>
     requestJson<CreateTokenResponse>(`/api/v1/agents/${encodeURIComponent(agentId)}/tokens`, {
       method: "POST",

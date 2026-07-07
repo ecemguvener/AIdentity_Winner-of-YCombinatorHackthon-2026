@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 
 export const SESSION_TTL_DAYS = 30;
+export const SESSION_IDLE_TTL_DAYS = 7;
+export const PASSWORD_MIN_LENGTH = 10;
 export const SITE_PREVIEW_IMAGES = [
   "site-preview-blue-flow",
   "site-preview-coral-mint",
@@ -34,6 +36,10 @@ export function createSessionExpiry(): Date {
   return new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
 }
 
+export function createSessionIdleExpiry(): Date {
+  return new Date(Date.now() + SESSION_IDLE_TTL_DAYS * 24 * 60 * 60 * 1000);
+}
+
 export function createPublicSiteKey(): string {
   return `site_${crypto.randomBytes(24).toString("base64url")}`;
 }
@@ -59,7 +65,7 @@ export function isAtlasProjectId(value: unknown): value is string {
 }
 
 export function isPasswordUsable(password: string): boolean {
-  return password.length >= 8 && password.length <= 128;
+  return password.length >= PASSWORD_MIN_LENGTH && password.length <= 128;
 }
 
 export function serializeSite(site: {

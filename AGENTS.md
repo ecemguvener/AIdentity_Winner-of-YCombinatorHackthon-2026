@@ -38,6 +38,7 @@ The Node API exposes:
 - `GET /api/v1/agents`
 - `GET /api/v1/agents/:agentId`
 - `PATCH /api/v1/agents/:agentId`
+- `POST /api/v1/agents/:agentId/freeze-all` (panic freeze: pauses agent, revokes active tokens, pauses email)
 - `DELETE /api/v1/agents/:agentId` (soft delete: revokes agent + tokens, runs capability teardown)
 - `POST /api/v1/agents/:agentId/tokens` (max 5 active)
 - `DELETE /api/v1/agents/:agentId/tokens/:tokenId`
@@ -118,6 +119,7 @@ The Node API exposes:
 | `apps/api/e2e/` | Mock-mode integration harness for owner, SDK/MCP, webhook, audit, and billing golden paths |
 | `apps/api/src/pairing.ts` | Device-code-style runtime pairing routes, one-time token reveal, and expiry sweeper |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
+| `docs/security.md` | Threat model, hardening checklist, and provider key rotation/freeze guidance |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |
 | `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |

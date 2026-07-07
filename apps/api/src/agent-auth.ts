@@ -101,7 +101,8 @@ export async function authenticateAgentRequest(
   }
   if (!token.lastUsedAt || now.getTime() - token.lastUsedAt.getTime() >= LAST_USED_UPDATE_INTERVAL_MS) {
     token.lastUsedAt = now;
-    await collections.identityTokens.updateOne({ _id: token._id }, { $set: { lastUsedAt: now } });
+    token.lastUsedIp = request.ip;
+    await collections.identityTokens.updateOne({ _id: token._id }, { $set: { lastUsedAt: now, lastUsedIp: request.ip } });
   }
   return { agent, token };
 }

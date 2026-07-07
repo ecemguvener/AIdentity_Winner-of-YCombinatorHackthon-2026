@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
 import type { AppConfig } from "./config.js";
@@ -39,7 +40,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
     logger: {
       level: config.NODE_ENV === "test" ? "silent" : "info"
     },
-    bodyLimit: 8 * 1024 * 1024,
+    bodyLimit: 1024 * 1024,
     genReqId: () => crypto.randomBytes(8).toString("hex")
   });
 
@@ -91,9 +92,17 @@ export async function buildApp(config: AppConfig, collections: Collections) {
       callback(null, buildCorsOptionsForRequest(config, request));
     }
   });
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    frameguard: { action: "deny" },
+    hsts: config.NODE_ENV === "production" ? undefined : false
+  });
 
   app.addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);
+    if (request.url.startsWith("/docs")) {
+      reply.header("content-security-policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'");
+    }
   });
 
   app.addHook("preHandler", async (request, reply) => {

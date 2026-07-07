@@ -139,7 +139,10 @@ function createCollections({
         tokenHash === hashSessionToken(sessionToken, baseConfig.SESSION_SECRET)
           ? Promise.resolve({ _id: new ObjectId(), userId: user._id, tokenHash, expiresAt: new Date(Date.now() + 1000) })
           : Promise.resolve(null)
-      )
+      ),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+      deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 }),
+      insertOne: vi.fn().mockResolvedValue({ insertedId: new ObjectId() })
     },
     users: {
       findOne: vi.fn().mockImplementation((filter: { _id?: ObjectId; email?: string } = {}) => {

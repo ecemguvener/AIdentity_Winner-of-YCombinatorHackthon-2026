@@ -91,7 +91,7 @@ export function AgentDetailPage({
     await runAction("token-create", async () => {
       const createdToken = await agentsApi.createToken(agent.id, tokenName.trim() || "runtime token");
       setNewTokenSecret(createdToken.secret);
-      onTokensChanged([{ id: createdToken.id, name: createdToken.name, prefix: createdToken.prefix, status: "active", lastUsedAt: null, createdAt: new Date().toISOString() }, ...tokens]);
+      onTokensChanged([{ id: createdToken.id, name: createdToken.name, prefix: createdToken.prefix, status: "active", lastUsedAt: null, lastUsedIp: null, unused90Days: false, createdAt: new Date().toISOString() }, ...tokens]);
       onNotify({ title: "Identity token created" });
     });
   }
@@ -121,6 +121,16 @@ export function AgentDetailPage({
       await agentsApi.delete(agent.id);
       onAgentDeleted(agent.id);
       onNotify({ title: "Agent identity deleted" });
+    });
+  }
+
+  async function freezeAll() {
+    const typedName = window.prompt(`Type ${agent.name} to freeze this agent and revoke every token.`);
+    if (typedName !== agent.name) return;
+    await runAction("freeze-all", async () => {
+      await agentsApi.freezeAll(agent.id);
+      await refreshDetail();
+      onNotify({ title: "Agent frozen" });
     });
   }
 
@@ -229,7 +239,11 @@ export function AgentDetailPage({
               <div className="site-detail-page__token-list">
                 {tokens.map((token) => (
                   <div className="site-detail-page__info-row" key={token.id}>
-                    <span>{token.name} · {token.prefix}... · {token.lastUsedAt ? `last used ${new Date(token.lastUsedAt).toLocaleDateString()}` : "never used"}</span>
+                    <span>
+                      {token.name} · {token.prefix}... · {token.lastUsedAt ? `last used ${new Date(token.lastUsedAt).toLocaleDateString()}` : "never used"}
+                      {token.lastUsedIp ? ` · ${token.lastUsedIp}` : ""}
+                      {token.unused90Days ? " · unused 90d" : ""}
+                    </span>
                     <button type="button" disabled={token.status === "revoked" || busyAction === `token-${token.id}`} onClick={() => void revokeToken(token.id)}>
                       {token.status === "revoked" ? "Revoked" : "Revoke"}
                     </button>
@@ -242,6 +256,10 @@ export function AgentDetailPage({
               <h2>Danger zone</h2>
               <button type="button" onClick={() => void pauseOrResume()}>
                 {agent.status === "paused" ? "Resume agent" : "Pause agent"}
+              </button>
+              <button type="button" disabled={busyAction === "freeze-all"} onClick={() => void freezeAll()}>
+                {busyAction === "freeze-all" ? <Loader2 size={15} aria-hidden="true" /> : <KeyRound size={15} aria-hidden="true" />}
+                <span>Freeze all access</span>
               </button>
               <button type="button" onClick={() => void deleteAgent()}>
                 <Trash2 size={15} aria-hidden="true" />

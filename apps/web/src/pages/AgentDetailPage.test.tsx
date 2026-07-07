@@ -110,6 +110,38 @@ describe("Agent detail page", () => {
     expect(screen.getAllByText(/@barkan\/mcp/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/BARKAN_IDENTITY_TOKEN/).length).toBeGreaterThan(0);
   });
+
+  it("calls freeze-all from danger zone after name confirmation", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("Maya");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/freeze-all")) {
+        expect(init?.method).toBe("POST");
+        return jsonResponse({ ok: true });
+      }
+      if (url.endsWith("/api/v1/agents/agent_1")) {
+        return jsonResponse(detail({ email: true }));
+      }
+      return jsonResponse({ error: "not found" }, 404);
+    });
+
+    render(
+      <AgentDetailPage
+        detail={detail({ email: true })}
+        activeTab="credentials"
+        onAgentDetailLoaded={vi.fn()}
+        onAgentUpdated={vi.fn()}
+        onAgentDeleted={vi.fn()}
+        onTokensChanged={vi.fn()}
+        onNotify={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /freeze all access/i })[0]!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/freeze-all"), expect.anything()));
+  });
 });
 
 function detail(capabilities: { email: boolean; phone?: boolean }): AgentDetailResponse {

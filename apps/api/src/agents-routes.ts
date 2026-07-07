@@ -188,6 +188,26 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
     return { ok: true };
   });
 
+  app.post("/api/v1/agents/:agentId/freeze-all", async (request, reply) => {
+    const authContext = await requireAuth(request, reply, collections, config);
+    const agent = await findOwnedAgent(collections, authContext.user._id, request.params);
+    const now = new Date();
+    await Promise.all([
+      collections.agents.updateOne({ _id: agent._id }, { $set: { status: "paused", updatedAt: now } }),
+      collections.identityTokens.updateMany({ agentId: agent._id, status: "active" }, { $set: { status: "revoked", updatedAt: now } }),
+      collections.emailAccounts.updateMany({ agentId: agent._id, status: "active" }, { $set: { status: "paused", updatedAt: now } })
+    ]);
+    await recordAudit(collections, {
+      agentId: agent._id,
+      ownerUserId: authContext.user._id,
+      actor: "owner",
+      action: "agent.freeze_all",
+      status: "allowed",
+      detail: `Agent ${agent.name} paused and all active tokens revoked.`
+    });
+    return reply.code(202).send({ ok: true });
+  });
+
   app.post("/api/v1/agents/:agentId/tokens", async (request, reply) => {
     const authContext = await requireAuth(request, reply, collections, config);
     const agent = await findOwnedAgent(collections, authContext.user._id, request.params);
@@ -469,6 +489,8 @@ function serializeTokenRedacted(token: IdentityTokenDocument) {
     prefix: token.prefix,
     status: token.status,
     lastUsedAt: token.lastUsedAt ? token.lastUsedAt.toISOString() : null,
+    lastUsedIp: token.lastUsedIp ?? null,
+    unused90Days: !token.lastUsedAt && token.createdAt.getTime() <= Date.now() - 90 * 24 * 60 * 60 * 1000,
     createdAt: token.createdAt.toISOString()
   };
 }

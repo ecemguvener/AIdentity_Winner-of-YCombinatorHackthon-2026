@@ -121,6 +121,14 @@ check_api_health "$api_health_url" "$api_health_retries"
 section "Publishing web release"
 run_quiet mkdir -p "$release_dir"
 run_quiet cp -a "$build_dir"/. "$release_dir"/
+cat >"$release_dir/_headers" <<'HEADERS'
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+HEADERS
 run_quiet ln -sfn "$release_dir" "$current_link"
 
 section "Deploy complete"

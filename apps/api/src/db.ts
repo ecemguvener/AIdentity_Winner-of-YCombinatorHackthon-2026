@@ -12,6 +12,9 @@ export interface UserDocument extends Document {
     securityEmails: boolean;
   };
   passwordHash: string;
+  loginFailedCount?: number;
+  loginFirstFailedAt?: Date;
+  loginLockedUntil?: Date;
   createdAt: Date;
   updatedAt?: Date;
 }
@@ -21,6 +24,8 @@ export interface SessionDocument extends Document {
   userId: ObjectId;
   tokenHash: string;
   expiresAt: Date;
+  idleExpiresAt?: Date;
+  lastSeenAt?: Date;
   createdAt: Date;
 }
 
@@ -105,6 +110,7 @@ export interface IdentityTokenDocument extends Document {
   name: string;
   status: "active" | "revoked";
   lastUsedAt?: Date;
+  lastUsedIp?: string;
   expiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -429,6 +435,7 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.users.createIndex({ email: 1 }, { unique: true }),
     collections.sessions.createIndex({ tokenHash: 1 }, { unique: true }),
     collections.sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    collections.sessions.createIndex({ idleExpiresAt: 1 }),
     collections.sites.createIndex({ ownerUserId: 1 }),
     collections.sites.createIndex({ publicSiteKey: 1 }, { unique: true }),
     collections.apiKeys.createIndex({ keyHash: 1 }, { unique: true }),

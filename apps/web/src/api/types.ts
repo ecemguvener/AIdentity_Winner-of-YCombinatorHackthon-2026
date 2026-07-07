@@ -44,6 +44,8 @@ export interface IdentityToken {
   prefix: string;
   status: "active" | "revoked";
   lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  unused90Days: boolean;
   createdAt: string;
 }
 

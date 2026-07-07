@@ -7,10 +7,12 @@ import { ensureBillingAccount } from "./billing.js";
 import { ApiError } from "./errors.js";
 import {
   createSessionExpiry,
+  createSessionIdleExpiry,
   createSessionToken,
   hashPassword,
   hashSessionToken,
   isPasswordUsable,
+  PASSWORD_MIN_LENGTH,
   normalizeEmail,
   verifyPassword
 } from "./security.js";
@@ -21,7 +23,7 @@ export interface AuthContext {
 
 const credentialsSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8).max(128)
+  password: z.string().min(1).max(128)
 });
 
 const emailLookupSchema = z.object({
@@ -49,8 +51,11 @@ const notificationPreferencesSchema = z.object({
 
 const updatePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
-  newPassword: z.string().min(8).max(128)
+  newPassword: z.string().min(PASSWORD_MIN_LENGTH).max(128)
 });
+
+const loginWindowMs = 15 * 60 * 1000;
+const lockoutThreshold = 10;
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -70,7 +75,7 @@ export function registerAuthRoutes(
     const email = normalizeEmail(credentials.email);
 
     if (!isPasswordUsable(credentials.password)) {
-      throw new ApiError(400, "validation_failed", "password must be between 8 and 128 characters");
+      throw new ApiError(400, "validation_failed", `password must be between ${PASSWORD_MIN_LENGTH} and 128 characters`);
     }
 
     const existingUser = await collections.users.findOne({ email });
@@ -101,10 +106,26 @@ export function registerAuthRoutes(
     const email = normalizeEmail(credentials.email);
     const user = await collections.users.findOne({ email });
 
+    if (user?.loginLockedUntil && user.loginLockedUntil.getTime() > Date.now()) {
+      throw new ApiError(423, "validation_failed", "account is temporarily locked; use password reset or wait before trying again", {
+        lockedUntil: user.loginLockedUntil.toISOString()
+      });
+    }
+
     if (!user || !(await verifyPassword(credentials.password, user.passwordHash))) {
+      if (user) {
+        await registerFailedLogin(collections, user);
+      }
       throw new ApiError(401, "unauthorized", "invalid email or password");
     }
 
+    await Promise.all([
+      collections.sessions.deleteMany({ userId: user._id }),
+      collections.users.updateOne(
+        { _id: user._id },
+        { $unset: { loginFailedCount: "", loginFirstFailedAt: "", loginLockedUntil: "" }, $set: { updatedAt: new Date() } }
+      )
+    ]);
     await createSession(reply, collections, config, user._id);
     return { user: serializeUser(user) };
   });
@@ -220,7 +241,7 @@ export function registerAuthRoutes(
     }
 
     if (!isPasswordUsable(payload.newPassword)) {
-      throw new ApiError(400, "validation_failed", "password must be between 8 and 128 characters");
+      throw new ApiError(400, "validation_failed", `password must be between ${PASSWORD_MIN_LENGTH} and 128 characters`);
     }
 
     await collections.users.updateOne(
@@ -252,7 +273,8 @@ export async function requireAuth(
 
   const session = await collections.sessions.findOne({
     tokenHash: hashSessionToken(token, config.SESSION_SECRET),
-    expiresAt: { $gt: new Date() }
+    expiresAt: { $gt: new Date() },
+    $or: [{ idleExpiresAt: { $exists: false } }, { idleExpiresAt: { $gt: new Date() } }]
   });
 
   if (!session) {
@@ -265,7 +287,32 @@ export async function requireAuth(
     throw new ApiError(401, "unauthorized", "authentication required");
   }
 
+  const idleExpiresAt = createSessionIdleExpiry();
+  await collections.sessions.updateOne(
+    { _id: session._id },
+    { $set: { lastSeenAt: new Date(), idleExpiresAt: idleExpiresAt < session.expiresAt ? idleExpiresAt : session.expiresAt } }
+  );
+
   return { user };
+}
+
+async function registerFailedLogin(collections: Collections, user: UserDocument): Promise<void> {
+  const now = new Date();
+  const firstFailedAt = user.loginFirstFailedAt && now.getTime() - user.loginFirstFailedAt.getTime() <= loginWindowMs
+    ? user.loginFirstFailedAt
+    : now;
+  const failedCount = firstFailedAt === user.loginFirstFailedAt ? (user.loginFailedCount ?? 0) + 1 : 1;
+  await collections.users.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        loginFailedCount: failedCount,
+        loginFirstFailedAt: firstFailedAt,
+        ...(failedCount >= lockoutThreshold ? { loginLockedUntil: new Date(now.getTime() + loginWindowMs) } : {}),
+        updatedAt: now
+      }
+    }
+  );
 }
 
 async function createSession(
@@ -280,6 +327,8 @@ async function createSession(
     userId,
     tokenHash: hashSessionToken(token, config.SESSION_SECRET),
     expiresAt: createSessionExpiry(),
+    idleExpiresAt: createSessionIdleExpiry(),
+    lastSeenAt: new Date(),
     createdAt: new Date()
   });
 

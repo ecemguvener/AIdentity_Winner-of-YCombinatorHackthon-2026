@@ -11,7 +11,7 @@ let mongoServer: MongoMemoryServer;
 let database: Database;
 
 function requestWithAuthorization(authorization?: string): FastifyRequest {
-  return { headers: authorization ? { authorization } : {} } as FastifyRequest;
+  return { headers: authorization ? { authorization } : {}, ip: "203.0.113.10" } as FastifyRequest;
 }
 
 async function createAgent(status: AgentDocument["status"] = "active"): Promise<AgentDocument> {
@@ -69,6 +69,7 @@ describe("authenticateAgentRequest", () => {
     expect(context?.token._id.equals(tokenDoc._id)).toBe(true);
     const stored = await database.collections.identityTokens.findOne({ _id: tokenDoc._id });
     expect(stored?.lastUsedAt).toBeInstanceOf(Date);
+    expect(stored?.lastUsedIp).toBe("203.0.113.10");
   });
 
   it("rejects a missing header and a non-bearer scheme", async () => {

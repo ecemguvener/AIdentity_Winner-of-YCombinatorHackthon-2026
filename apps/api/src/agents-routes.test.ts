@@ -363,6 +363,7 @@ describe("ownership", () => {
       { method: "GET" as const, url: `/api/v1/agents/${created.agent.id}` },
       { method: "PATCH" as const, url: `/api/v1/agents/${created.agent.id}`, payload: { name: "Nope" } },
       { method: "DELETE" as const, url: `/api/v1/agents/${created.agent.id}` },
+      { method: "POST" as const, url: `/api/v1/agents/${created.agent.id}/freeze-all` },
       { method: "POST" as const, url: `/api/v1/agents/${created.agent.id}/tokens`, payload: {} },
       { method: "POST" as const, url: `/api/v1/agents/${created.agent.id}/capabilities/email/enable` }
     ];
@@ -373,6 +374,43 @@ describe("ownership", () => {
       });
       expect(response.statusCode).toBe(404);
     }
+  });
+});
+
+describe("POST /api/v1/agents/:agentId/freeze-all", () => {
+  it("pauses the agent, revokes tokens, pauses email, and 401s capability calls", async () => {
+    const created = await createAgent({ name: "Frozen", capabilities: { email: true } });
+    const bearer = { authorization: `Bearer ${created.identityToken.secret}` };
+
+    const before = await app.inject({
+      method: "GET",
+      url: "/api/v1/agent/whoami",
+      headers: bearer
+    });
+    expect(before.statusCode).toBe(200);
+
+    const frozen = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${created.agent.id}/freeze-all`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie }
+    });
+    expect(frozen.statusCode).toBe(202);
+    expect(frozen.json()).toEqual({ ok: true });
+
+    const after = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent/email/send",
+      headers: bearer,
+      payload: { to: "casey@example.com", subject: "Nope", text: "Nope" }
+    });
+    expect(after.statusCode).toBe(401);
+
+    const detail = await getAgentDetail(created.agent.id);
+    expect(detail.json().agent.status).toBe("paused");
+    expect(detail.json().tokens.every((token: { status: string }) => token.status === "revoked")).toBe(true);
+    const email = await database.collections.emailAccounts.findOne({ agentId: new ObjectId(created.agent.id) });
+    expect(email?.status).toBe("paused");
+    await database.collections.agents.updateOne({ _id: new ObjectId(created.agent.id) }, { $set: { status: "revoked", updatedAt: new Date() } });
   });
 });
 
