@@ -141,8 +141,11 @@ The Node API exposes:
 | `docs/api/email.md` | Frozen agent-facing email API contract |
 | `docs/api/phone.md` | Frozen agent-facing phone/SMS API contract |
 | `docs/integrations/mcp.md` | MCP Streamable HTTP integration guide |
+| `docs/integrations/openclaw.md` | OpenClaw skill publish, install, env, and verification guide |
 | `docs/phone-setup.md` | Live phone provisioning and ElevenLabs setup guide |
 | `packages/mcp/src/cli.ts` | `@barkan/mcp` stdio bridge and pairing CLI |
+| `openclaw-skills/barkan-identity/SKILL.md` | Production OpenClaw AgentSkill for Barkan identity usage |
+| `scripts/validate-skills.mjs` | OpenClaw AgentSkill frontmatter and legacy-string validator |
 | `apps/api/src/providers/stripe-client.ts` | Stripe Billing SDK singleton |
 | `apps/api/src/stripe-webhooks.ts` | Stripe Billing webhook dispatcher |
 | `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |
