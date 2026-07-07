@@ -7,6 +7,7 @@ import type { AgentDocument, ApprovalDocument, Collections, EmailMessageDocument
 import { requireAuth } from "./auth.js";
 import { authenticateAgentRequest } from "./agent-auth.js";
 import { ApiError, codeForStatus, type ApiErrorCode } from "./errors.js";
+import { instrumentProviderCall } from "./metrics.js";
 import {
   getAgentEmailThread,
   listAgentEmailThreads,
@@ -154,7 +155,7 @@ async function draftWithOpenAI(prompt: string, senderName: string, config: AppCo
     "Do not invent an email address.";
 
   const model = process.env.OPENAI_EMAIL_MODEL || "gpt-4o-mini";
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await instrumentProviderCall("openai", "responses.email_draft", () => fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${config.OPENAI_API_KEY}` },
     body: JSON.stringify({
@@ -164,7 +165,7 @@ async function draftWithOpenAI(prompt: string, senderName: string, config: AppCo
       max_output_tokens: 600,
       text: { format: { type: "json_schema", name: "email_draft", schema: DRAFT_SCHEMA, strict: false } }
     })
-  });
+  }));
 
   const responseText = await response.text();
   if (!response.ok) {
@@ -216,7 +217,7 @@ export async function summarizeReply(subject: string, body: string, config: AppC
   if (config.OPENAI_API_KEY && body) {
     try {
       const model = process.env.OPENAI_EMAIL_MODEL || "gpt-4o-mini";
-      const response = await fetch("https://api.openai.com/v1/responses", {
+      const response = await instrumentProviderCall("openai", "responses.email_summary", () => fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${config.OPENAI_API_KEY}` },
         body: JSON.stringify({
@@ -227,7 +228,7 @@ export async function summarizeReply(subject: string, body: string, config: AppC
           max_output_tokens: 400,
           text: { format: { type: "json_schema", name: "reply_summary", schema: SUMMARY_SCHEMA, strict: false } }
         })
-      });
+      }));
       const responseText = await response.text();
       if (response.ok) {
         const outputText = readOpenAIOutputText(responseText);

@@ -34,8 +34,13 @@ import { registerSmsApprovalExecutor } from "./sms-service.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
 import { registerWebhookRoutes } from "./webhooks/routes.js";
 import { ensureAgentDomain, getDomainStatus } from "./providers/resend-domain.js";
+import { startAlertingLoop } from "./alerting.js";
+import { registerHealthRoutes } from "./health.js";
+import { registerMetricsHooks } from "./metrics.js";
+import { captureRequestException, initSentry } from "./sentry.js";
 
 export async function buildApp(config: AppConfig, collections: Collections) {
+  initSentry(config);
   const app = fastify({
     logger: {
       level: config.NODE_ENV === "test" ? "silent" : "info"
@@ -47,6 +52,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   // Keep the exact raw bytes (JSON and urlencoded) on request.rawBody so
   // webhook signature verification works over what was actually received.
   registerRawBodyParsers(app);
+  registerMetricsHooks(app, collections);
 
   app.addHook("onRoute", (routeOptions) => {
     const url = routeOptions.url;
@@ -161,12 +167,13 @@ export async function buildApp(config: AppConfig, collections: Collections) {
       return;
     }
 
+    captureRequestException(error, request);
     request.log.error({ error }, "request failed");
     const apiError = new ApiError(500, "internal", "internal server error");
     reply.code(500).send(buildErrorPayload(apiError, request.id));
   });
 
-  app.get("/api/health", async () => ({ ok: true }));
+  registerHealthRoutes(app, collections, config);
   registerEmailProvisioner(collections, config);
   registerPhoneProvisioner(collections, config);
   const emailProvider = createEmailProvider(config);
@@ -219,6 +226,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerSiteRoutes(app, collections, config);
   registerUsageRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
+  startAlertingLoop(collections, config);
 
   if (config.PROVIDER_MODE_EMAIL === "live") {
     setImmediate(() => {

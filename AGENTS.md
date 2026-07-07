@@ -77,6 +77,9 @@ The Node API exposes:
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
 - `GET /api/v1/ops/status` (session-authed provider mode + billing/phone/email readiness)
+- `GET /api/health` (shallow API + Mongo health)
+- `GET /internal/metrics` (Prometheus text; localhost/internal only)
+- `GET /internal/health/deep` (provider readiness; localhost/internal only, cached 60s)
 - `GET /api/v1/openapi.json`
 - `POST/GET /mcp` (agent-token MCP Streamable HTTP server with capability-scoped tools/resources)
 - `POST /api/v1/pairing/start`
@@ -114,12 +117,18 @@ The Node API exposes:
 | `apps/api/src/billing.ts` | Stripe Billing account, checkout, portal, plan limits, and subscription webhook sync |
 | `apps/api/src/usage.ts` | Usage ledger, summaries, Stripe meter reporting, and active-number sampling |
 | `apps/api/src/entitlements.ts` | Plan entitlement checks for agent creation, capabilities, usage, and phone numbers |
+| `apps/api/src/metrics.ts` | In-process Prometheus metrics and provider-call instrumentation |
+| `apps/api/src/alerting.ts` | Webhook/provider/approval alert evaluator and optional alert webhook |
+| `apps/api/src/health.ts` | Shallow and deep health endpoints |
+| `apps/api/src/sentry.ts` | API Sentry initialization and event scrubber |
+| `apps/web/src/sentry.ts` | Web Sentry initialization and event scrubber |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
 | `apps/api/src/mcp/server.ts` | MCP Streamable HTTP server, agent-token auth, capability-scoped tools, and resources |
 | `apps/api/e2e/` | Mock-mode integration harness for owner, SDK/MCP, webhook, audit, and billing golden paths |
 | `apps/api/src/pairing.ts` | Device-code-style runtime pairing routes, one-time token reveal, and expiry sweeper |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `docs/security.md` | Threat model, hardening checklist, and provider key rotation/freeze guidance |
+| `docs/operations.md` | Observability, alerts, health checks, metrics, and PM2 log rotation runbook |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |
 | `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |

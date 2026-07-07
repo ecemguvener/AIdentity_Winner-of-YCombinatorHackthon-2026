@@ -6,6 +6,7 @@ import type { BillingAccountDocument, Collections, UserDocument } from "./db.js"
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { requireAuth } from "./auth.js";
 import { ApiError } from "./errors.js";
+import { instrumentProviderCall } from "./metrics.js";
 import { getStripeClient, hasStripeBillingConfig, type Stripe } from "./providers/stripe-client.js";
 import { registerStripeEventHandler } from "./stripe-webhooks.js";
 
@@ -82,7 +83,7 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
     const account = await ensureBillingAccount(collections, config, authContext.user);
     const price = priceIdForPlan(config, payload.plan);
     const stripe = getStripeClient(config);
-    const session = await stripe.checkout.sessions.create({
+    const session = await instrumentProviderCall("stripe", "checkout.sessions.create", () => stripe.checkout.sessions.create({
       mode: "subscription",
       customer: account.stripeCustomerId,
       line_items: [{ price, quantity: 1 }, ...overagePriceLineItems(config)],
@@ -92,7 +93,7 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
       subscription_data: {
         metadata: { barkanUserId: authContext.user._id.toHexString(), plan: payload.plan }
       }
-    });
+    }));
     if (!session.url) {
       throw new ApiError(502, "provider_error", "Stripe checkout session did not include a URL");
     }
@@ -106,10 +107,10 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
     const authContext = await requireAuth(request, reply, collections, config);
     const account = await ensureBillingAccount(collections, config, authContext.user);
     const stripe = getStripeClient(config);
-    const session = await stripe.billingPortal.sessions.create({
+    const session = await instrumentProviderCall("stripe", "billingPortal.sessions.create", () => stripe.billingPortal.sessions.create({
       customer: account.stripeCustomerId,
       return_url: `${config.PUBLIC_APP_URL.replace(/\/$/, "")}/settings/billing`
-    });
+    }));
     return { portalUrl: session.url };
   });
 }
@@ -164,11 +165,11 @@ export async function ensureBillingAccount(
   const now = new Date();
   let stripeCustomerId = existing?.stripeCustomerId ?? `cus_pending_${user._id.toHexString()}`;
   if (config.STRIPE_SECRET_KEY) {
-    const customer = await getStripeClient(config).customers.create({
+    const customer = await instrumentProviderCall("stripe", "customers.create", () => getStripeClient(config).customers.create({
       email: user.email,
       name: user.displayName ?? undefined,
       metadata: { barkanUserId: user._id.toHexString() }
-    });
+    }));
     stripeCustomerId = customer.id;
   }
 

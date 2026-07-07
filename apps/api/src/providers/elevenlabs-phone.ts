@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { AppConfig } from "../config.js";
 import { ApiError } from "../errors.js";
+import { instrumentProviderCall } from "../metrics.js";
 
 export interface ImportTwilioNumberInput {
   e164: string;
@@ -22,7 +23,7 @@ export async function importTwilioNumber(
     return { phoneNumberId: `mock_pn_${crypto.randomBytes(6).toString("hex")}` };
   }
   requireElevenLabsConfig(config);
-  const response = await client.fetch(`${elevenLabsBaseUrl}/v1/convai/phone-numbers`, {
+  const response = await instrumentProviderCall("elevenlabs", "phone-numbers.import", () => client.fetch(`${elevenLabsBaseUrl}/v1/convai/phone-numbers`, {
     method: "POST",
     headers: elevenLabsHeaders(config),
     body: JSON.stringify({
@@ -32,7 +33,7 @@ export async function importTwilioNumber(
       sid: config.TWILIO_ACCOUNT_SID,
       token: config.TWILIO_AUTH_TOKEN
     })
-  });
+  }));
   const body = await readJson(response);
   if (!response.ok) {
     throw elevenLabsError(response, body, "ElevenLabs phone import failed");
@@ -53,11 +54,11 @@ export async function assignAgentToNumber(
     return;
   }
   requireElevenLabsConfig(config);
-  const response = await client.fetch(`${elevenLabsBaseUrl}/v1/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`, {
+  const response = await instrumentProviderCall("elevenlabs", "phone-numbers.assign", () => client.fetch(`${elevenLabsBaseUrl}/v1/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`, {
     method: "PATCH",
     headers: elevenLabsHeaders(config),
     body: JSON.stringify({ agent_id: config.ELEVENLABS_AGENT_ID })
-  });
+  }));
   const body = await readJson(response);
   if (!response.ok) {
     throw elevenLabsError(response, body, "ElevenLabs phone assignment failed");
@@ -73,10 +74,10 @@ export async function removeNumber(
     return;
   }
   requireElevenLabsConfig(config);
-  const response = await client.fetch(`${elevenLabsBaseUrl}/v1/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`, {
+  const response = await instrumentProviderCall("elevenlabs", "phone-numbers.remove", () => client.fetch(`${elevenLabsBaseUrl}/v1/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`, {
     method: "DELETE",
     headers: elevenLabsHeaders(config)
-  });
+  }));
   if (response.status === 404) {
     return;
   }

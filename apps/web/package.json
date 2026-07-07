@@ -10,6 +10,7 @@
     "lint": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@sentry/react": "^10.64.0",
     "framer-motion": "^12.40.0",
     "lenis": "^1.3.23",
     "lucide-react": "^0.468.0",

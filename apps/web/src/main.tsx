@@ -2,8 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import Lenis, { type LenisOptions } from "lenis";
 import { App } from "./App";
+import { initSentry } from "./sentry";
 import "lenis/dist/lenis.css";
 import "./index.css";
+
+initSentry();
 
 const lenisOptions: LenisOptions = {
   autoRaf: true,

@@ -6,6 +6,7 @@ import type { AgentDocument, Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { buildTrustedDashboardCorsHeaders } from "./cors.js";
 import { ApiError } from "./errors.js";
+import { instrumentProviderCall } from "./metrics.js";
 import { EmailError, sendSiteEmailFromText } from "./email.js";
 import { createEmailProvider } from "./providers/email-provider.js";
 import {
@@ -195,14 +196,14 @@ async function createOpenClawResponse(
     max_output_tokens: 1200
   };
 
-  const response = await fetch(buildOpenAIEndpointUrl(), {
+  const response = await instrumentProviderCall("openai", "responses.dashboard_chat", () => fetch(buildOpenAIEndpointUrl(), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${config.OPENAI_API_KEY}`
     },
     body: JSON.stringify(body)
-  });
+  }));
 
   if (response.ok) {
     return await response.json() as OpenAIResponseObject;

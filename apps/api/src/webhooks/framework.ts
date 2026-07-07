@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import type { AppConfig } from "../config.js";
 import type { Collections, WebhookEventDocument } from "../db.js";
 import { ApiError } from "../errors.js";
+import { recordWebhookEventMetric } from "../metrics.js";
 import {
   verifyElevenLabsSignature,
   verifyStripeSignature,
@@ -157,14 +158,17 @@ export function registerWebhookRoute(
         { _id: claim.event._id },
         { $set: { status: "failed", error: message.slice(0, 2000), updatedAt: new Date() } }
       );
+      recordWebhookEventMetric(options.provider, "failed");
       request.log.error({ provider: options.provider, providerEventId, error }, "webhook handler failed");
       throw new ApiError(500, "internal", "webhook handler failed");
     }
 
+    const finalStatus = isSkippedResponse(responsePayload) ? "skipped" : "processed";
     await collections.webhookEvents.updateOne(
       { _id: claim.event._id },
-      { $set: { status: isSkippedResponse(responsePayload) ? "skipped" : "processed", processedAt: new Date(), updatedAt: new Date() }, $unset: { error: "" } }
+      { $set: { status: finalStatus, processedAt: new Date(), updatedAt: new Date() }, $unset: { error: "" } }
     );
+    recordWebhookEventMetric(options.provider, finalStatus);
     if (options.responseContentType) {
       reply.type(options.responseContentType);
     }

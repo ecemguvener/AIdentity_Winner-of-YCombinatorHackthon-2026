@@ -1,6 +1,7 @@
 import twilio from "twilio";
 import type { AppConfig } from "../config.js";
 import { ApiError } from "../errors.js";
+import { instrumentProviderCall } from "../metrics.js";
 
 export interface SendSmsInput {
   from: string;
@@ -27,12 +28,12 @@ export async function sendSms(
     return { twilioMessageSid: `SMmock${String(mockSequence).padStart(8, "0")}` };
   }
   const twilioClient = client ?? createTwilioSmsClient(config);
-  const created = await twilioClient.messages.create({
+  const created = await instrumentProviderCall("twilio", "messages.create", () => twilioClient.messages.create({
     from: input.from,
     to: input.to,
     body: input.body,
     ...(input.statusCallback ? { statusCallback: input.statusCallback } : {})
-  });
+  }));
   const sid = readString(created.sid);
   if (!sid) {
     throw new ApiError(502, "provider_error", "Twilio did not return an SMS sid");

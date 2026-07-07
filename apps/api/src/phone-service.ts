@@ -5,6 +5,7 @@ import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
 import { checkEntitlement, throwPlanLimit } from "./entitlements.js";
 import { ApiError, type ApiErrorCode } from "./errors.js";
+import { instrumentProviderCall } from "./metrics.js";
 import { normalizeE164PhoneNumber } from "./lib/phone.js";
 import { getPhonePolicy } from "./policies.js";
 import { enforcePhoneCountry, quietHoursBlockReason, startOfPolicyDay } from "./phone-policy.js";
@@ -274,7 +275,7 @@ async function startElevenLabsOutboundCall(
   ]);
   const ownerName = owner?.displayName?.trim() || owner?.email.split("@", 1)[0] || "my owner";
   const callBrief = buildPersonalAssistantCallBrief({ ownerName, recipientName: input.recipientName }, task);
-  const response = await fetch("https://api.elevenlabs.io/v1/convai/twilio/outbound-call", {
+  const response = await instrumentProviderCall("elevenlabs", "twilio.outbound-call", () => fetch("https://api.elevenlabs.io/v1/convai/twilio/outbound-call", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -301,7 +302,7 @@ async function startElevenLabsOutboundCall(
         }
       }
     })
-  });
+  }));
 
   const responseText = await response.text();
   let responseJson: Record<string, unknown> = {};

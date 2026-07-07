@@ -53,6 +53,7 @@ const rawEnvironmentSchema = z.object({
   RESEND_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
   EMAIL_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
   SENTRY_DSN: optionalNonEmptyStringSchema,
+  ALERT_WEBHOOK_URL: optionalNonEmptyStringSchema,
   API_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300)
 });
 

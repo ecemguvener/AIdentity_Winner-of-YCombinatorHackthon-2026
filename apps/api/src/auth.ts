@@ -286,6 +286,7 @@ export async function requireAuth(
   if (!user) {
     throw new ApiError(401, "unauthorized", "authentication required");
   }
+  (request as FastifyRequest & { authUserId?: ObjectId }).authUserId = user._id;
 
   const idleExpiresAt = createSessionIdleExpiry();
   await collections.sessions.updateOne(

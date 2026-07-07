@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { Resend } from "resend";
 import type { AppConfig } from "../config.js";
+import { instrumentProviderCall } from "../metrics.js";
 
 export interface EmailAttachmentInput {
   filename?: string | false;
@@ -63,7 +64,7 @@ export class ResendEmailProvider implements EmailProvider {
   async sendEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult> {
     const headers = input.headers ?? {};
     const { ["Idempotency-Key"]: idempotencyKey, ["idempotency-key"]: lowercaseIdempotencyKey, ...emailHeaders } = headers;
-    const response = await this.resend.emails.send(
+    const response = await instrumentProviderCall("resend", "emails.send", () => this.resend.emails.send(
       {
         from: input.from,
         to: input.to,
@@ -76,7 +77,7 @@ export class ResendEmailProvider implements EmailProvider {
         replyTo: readAddressFromFromHeader(input.from)
       },
       { idempotencyKey: idempotencyKey ?? lowercaseIdempotencyKey }
-    );
+    ));
     if (response.error || !response.data) {
       throw new Error(response.error?.message ?? "Resend did not return a message id");
     }
@@ -90,13 +91,15 @@ export class MockEmailProvider implements EmailProvider {
   constructor(private readonly failWith?: Error) {}
 
   async sendEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult> {
-    this.sent.push(input);
-    if (this.failWith) {
-      throw this.failWith;
-    }
-    // eslint-disable-next-line no-console
-    console.info(`[email:mock] ${input.from} -> ${input.to} :: ${input.subject}`);
-    return { providerMessageId: `mock_${crypto.randomBytes(8).toString("hex")}` };
+    return instrumentProviderCall("resend", "emails.send", async () => {
+      this.sent.push(input);
+      if (this.failWith) {
+        throw this.failWith;
+      }
+      // eslint-disable-next-line no-console
+      console.info(`[email:mock] ${input.from} -> ${input.to} :: ${input.subject}`);
+      return { providerMessageId: `mock_${crypto.randomBytes(8).toString("hex")}` };
+    });
   }
 }
 
@@ -108,7 +111,7 @@ export class ResendInboundClient implements EmailInboundClient {
   }
 
   async getReceivedEmail(emailId: string): Promise<ReceivedEmailContent> {
-    const response = await this.resend.emails.receiving.get(emailId, { html_format: "cid" });
+    const response = await instrumentProviderCall("resend", "emails.receiving.get", () => this.resend.emails.receiving.get(emailId, { html_format: "cid" }));
     if (response.error || !response.data) {
       throw new Error(response.error?.message ?? "Resend did not return inbound email content");
     }
@@ -132,7 +135,7 @@ export class ResendInboundClient implements EmailInboundClient {
   }
 
   async getAttachment(emailId: string, attachmentId: string): Promise<{ data: ArrayBuffer; contentType: string; filename: string }> {
-    const response = await this.resend.emails.receiving.attachments.get({ emailId, id: attachmentId });
+    const response = await instrumentProviderCall("resend", "emails.receiving.attachments.get", () => this.resend.emails.receiving.attachments.get({ emailId, id: attachmentId }));
     if (response.error || !response.data) {
       throw new Error(response.error?.message ?? "Resend did not return attachment content");
     }

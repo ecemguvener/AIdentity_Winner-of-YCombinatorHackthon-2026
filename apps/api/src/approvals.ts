@@ -231,6 +231,7 @@ export function registerApprovalRoutes(app: FastifyInstance, collections: Collec
       "x-accel-buffering": "no"
     });
     reply.raw.write("retry: 3000\n\n");
+    setSseConnectionDelta(1);
 
     if (query.since) {
       const since = new Date(query.since);
@@ -255,6 +256,7 @@ export function registerApprovalRoutes(app: FastifyInstance, collections: Collec
     bus.on("approval-event", listener);
     bus.on("owner-event", ownerListener);
     request.raw.on("close", () => {
+      setSseConnectionDelta(-1);
       clearInterval(heartbeat);
       bus.off("approval-event", listener);
       bus.off("owner-event", ownerListener);
@@ -288,6 +290,11 @@ export function registerApprovalRoutes(app: FastifyInstance, collections: Collec
     const approval = await decideApproval(collections, authContext.user._id, params.id, decision, payload.note);
     return { approval: serializeApproval(approval) };
   }
+}
+
+function setSseConnectionDelta(delta: number): void {
+  const globalState = globalThis as typeof globalThis & { __barkanSseConnections?: number };
+  globalState.__barkanSseConnections = Math.max(0, (globalState.__barkanSseConnections ?? 0) + delta);
 }
 
 async function expirePendingApprovals(collections: Collections): Promise<number> {
