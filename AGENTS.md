@@ -55,6 +55,9 @@ The Node API exposes:
 - `POST /api/identity/tokens/rotate`
 - `GET /api/identity/:agentId/audit-log`
 - `POST /api/tools/phone/call`
+- `POST /api/v1/agent/phone/call`
+- `GET /api/v1/agent/phone/calls`
+- `GET /api/v1/agent/phone/calls/:callId`
 - `POST /api/tools/calendar/book`
 - Payment tool routes under `/api/tools/payments/*`
 - Email tool routes under `/api/tools/email/*` and `/api/sites/:siteId/email/*`
@@ -82,7 +85,7 @@ The Node API exposes:
 | `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
-| `apps/api/src/phone.ts` | Phone call integration/mock fallback |
+| `apps/api/src/phone-service.ts` | Per-agent outbound phone call service, call persistence, mock lifecycle, and call serializers |
 | `apps/api/src/phone-provisioning.ts` | Twilio number purchase + ElevenLabs voice-agent phone capability provisioner |
 | `apps/api/src/phone-personalization.ts` | ElevenLabs inbound-call personalization webhook and call row creation |
 | `apps/api/src/phone-numbers.ts` | Twilio phone number persistence and lifecycle helpers |

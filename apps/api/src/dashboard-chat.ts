@@ -2,14 +2,20 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { ObjectId } from "mongodb";
-import type { Collections } from "./db.js";
+import type { AgentDocument, Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { buildTrustedDashboardCorsHeaders } from "./cors.js";
 import { ApiError } from "./errors.js";
 import { createPurchaseFromPrompt, formatPurchaseAmount, PaymentError, provisionPaymentIdentity } from "./payments.js";
 import { EmailError, sendSiteEmailFromText } from "./email.js";
 import { createEmailProvider } from "./providers/email-provider.js";
-import { PhoneCallError, placeAgentPhoneCall, waitForPhoneCallCompletion, type PhoneCallResult, type PhoneCallTranscriptTurn } from "./phone.js";
+import {
+  PhoneCallError,
+  placeOutboundCall,
+  waitForCallCompletion,
+  type OutboundCallResult,
+  type PhoneCallTranscriptTurn
+} from "./phone-service.js";
 
 const dashboardChatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -66,11 +72,8 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
       .limit(50)
       .toArray();
     const sites: ChatAgentIdentity[] = agents.map((agent) => ({
-      _id: agent._id,
-      name: agent.name,
+      ...agent,
       domain: agent.legacyDomain ?? "",
-      createdAt: agent.createdAt,
-      updatedAt: agent.updatedAt
     }));
 
     // If the latest message is a shopping instruction, drive the payment tool
@@ -91,9 +94,8 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
     }
 
     try {
-      const callerName = getUserCallerName(authContext.user.displayName, authContext.user.email);
       await streamOpenClawDashboardChat(request, reply, config, async (onCallEvent) =>
-        runOpenClawDashboardChat(payload.messages, sites, config, request, callerName, onCallEvent)
+        runOpenClawDashboardChat(payload.messages, sites, collections, config, request, onCallEvent)
       );
     } catch (error) {
       request.log.error({ error }, "dashboard chat OpenClaw request failed");
@@ -105,13 +107,7 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
 type DashboardChatMessage = z.infer<typeof dashboardChatMessageSchema>;
 
 // Minimal identity view the chat tools need (backed by `agents` since task 010).
-interface ChatAgentIdentity {
-  _id: ObjectId;
-  name: string;
-  domain: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+type ChatAgentIdentity = AgentDocument & { domain: string };
 
 interface OpenAIResponseObject {
   id?: string;
@@ -143,9 +139,9 @@ interface DashboardChatCallEvent {
 async function runOpenClawDashboardChat(
   messages: DashboardChatMessage[],
   sites: ChatAgentIdentity[],
+  collections: Collections,
   config: AppConfig,
   request: FastifyRequest,
-  callerName: string,
   onCallEvent?: (event: DashboardChatCallEvent) => void
 ): Promise<string> {
   const input: Array<Record<string, unknown>> = messages.map((message) => ({
@@ -172,7 +168,7 @@ async function runOpenClawDashboardChat(
 
     input.push(...(response.output ?? []));
     for (const functionCall of functionCalls) {
-      const toolOutput = await runOpenClawTool(functionCall, sites, config, callerName, onCallEvent);
+      const toolOutput = await runOpenClawTool(functionCall, sites, collections, config, onCallEvent);
       toolResults.push(toolOutput);
       input.push({
         type: "function_call_output",
@@ -294,8 +290,8 @@ function buildOpenAIEndpointUrl(): string {
 async function runOpenClawTool(
   functionCall: OpenAIFunctionCall,
   sites: ChatAgentIdentity[],
+  collections: Collections,
   config: AppConfig,
-  callerName: string,
   onCallEvent?: (event: DashboardChatCallEvent) => void
 ): Promise<Record<string, unknown>> {
   if (functionCall.name !== "place_phone_call") {
@@ -308,41 +304,56 @@ async function runOpenClawTool(
   const parsedArguments = parseFunctionArguments(functionCall.argumentsText);
   const agentIdentityName = readNonEmptyString(parsedArguments.agent_identity_name) || sites[0]?.name || "OpenClaw Agent";
   const recipientName = readNonEmptyString(parsedArguments.recipient_name) || "Recipient";
+  const task = readNonEmptyString(parsedArguments.task) || "";
+  const agent = sites.find((site) => site.name.toLowerCase() === agentIdentityName.toLowerCase()) ?? sites[0];
+  if (!agent) {
+    return {
+      ok: false,
+      tool: functionCall.name,
+      error: "No agent identity is available for phone calls."
+    };
+  }
 
   try {
-    const result = await placeAgentPhoneCall({
+    const result = await placeOutboundCall(collections, config, {
+      agent,
       toNumber: readNonEmptyString(parsedArguments.to_number) || "",
-      task: readNonEmptyString(parsedArguments.task) || "",
-      callerName,
-      agentIdentityName,
+      task,
       recipientName,
       context: readNonEmptyString(parsedArguments.context),
       sourceUrl: readNonEmptyString(parsedArguments.source_url)
-    }, config);
-    emitPhoneCallStarted(result, recipientName, onCallEvent);
+    });
+    emitPhoneCallStarted(result, agent.name, task, recipientName, onCallEvent);
 
-    const completion = await waitForPhoneCallCompletion(result, config);
+    const completion = await waitForCallCompletion(collections, result.callId, {
+      intervalMs: config.PROVIDER_MODE_PHONE === "mock" ? 100 : 2000
+    });
     onCallEvent?.({
       type: "call_completed",
       call: {
         callId: result.callId,
-        toNumber: result.toNumber,
+        toNumber: result.to,
         recipientName,
-        agentIdentityName: result.agentIdentityName,
-        task: result.task,
-        status: completion.status,
+        agentIdentityName: agent.name,
+        task,
+        status: completion?.status ?? result.status,
         simulated: result.simulated,
-        durationSecs: completion.durationSecs,
-        transcript: completion.transcript
+        durationSecs: completion?.durationSecs ?? null,
+        transcript: (completion?.transcript ?? []) as PhoneCallTranscriptTurn[]
       }
     });
 
     return {
       tool: functionCall.name,
-      ...result,
-      finalStatus: completion.status,
-      durationSecs: completion.durationSecs,
-      transcript: completion.transcript
+      ok: true,
+      call_id: result.callId,
+      status: result.status,
+      from: result.from,
+      to: result.to,
+      simulated: result.simulated,
+      finalStatus: completion?.status ?? result.status,
+      durationSecs: completion?.durationSecs ?? null,
+      transcript: completion?.transcript ?? []
     };
   } catch (error) {
     if (error instanceof PhoneCallError) {
@@ -357,7 +368,9 @@ async function runOpenClawTool(
 }
 
 function emitPhoneCallStarted(
-  result: PhoneCallResult,
+  result: OutboundCallResult,
+  agentIdentityName: string,
+  task: string,
   recipientName: string,
   onCallEvent?: (event: DashboardChatCallEvent) => void
 ) {
@@ -365,23 +378,14 @@ function emitPhoneCallStarted(
     type: "call_started",
     call: {
       callId: result.callId,
-      toNumber: result.toNumber,
+      toNumber: result.to,
       recipientName,
-      agentIdentityName: result.agentIdentityName,
-      task: result.task,
+      agentIdentityName,
+      task,
       status: result.status,
       simulated: result.simulated
     }
   });
-}
-
-function getUserCallerName(displayName: string | null | undefined, email: string): string {
-  const name = displayName?.trim();
-  if (name) {
-    return name;
-  }
-
-  return email.split("@", 1)[0]?.trim() || "the account owner";
 }
 
 function extractFunctionCalls(response: OpenAIResponseObject): OpenAIFunctionCall[] {

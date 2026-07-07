@@ -220,7 +220,7 @@ describe("dashboard chat", () => {
     expect(response.payload).toContain("data: {\"type\":\"call_started\"");
     expect(response.payload).toContain("\"toNumber\":\"+33757509222\"");
     expect(response.payload).toContain("data: {\"type\":\"call_completed\"");
-    expect(response.payload).toContain("Mock call queued. A real ElevenLabs call will show the transcript here when it ends.");
+    expect(response.payload).toContain("[mock] Called +33757509222 about: Book a barber appointment for 11am.");
     expect(response.payload).toContain("data: {\"type\":\"delta\",\"text\":\"The call has ended and the appointment is noted.\"}");
     expect(response.payload).toContain("data: {\"type\":\"done\"}");
 
@@ -238,6 +238,8 @@ function createCollections({
   user: UserDocument;
   agents: AgentDocument[];
 }): Collections {
+  const calls: Array<Record<string, unknown>> = [];
+  const phoneNumberId = new ObjectId();
   return {
     sessions: {
       findOne: vi.fn().mockImplementation(({ tokenHash }: { tokenHash: string }) =>
@@ -257,6 +259,49 @@ function createCollections({
           })
         })
       }))
+    },
+    phoneNumbers: {
+      findOne: vi.fn().mockImplementation(({ agentId }: { agentId: ObjectId }) =>
+        Promise.resolve({
+          _id: phoneNumberId,
+          agentId,
+          e164: "+15005550001",
+          country: "US",
+          twilioSid: "PN123",
+          elevenLabsPhoneNumberId: "el-phone-1",
+          capabilitiesVoice: true,
+          capabilitiesSms: true,
+          status: "active",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+      )
+    },
+    calls: {
+      insertOne: vi.fn().mockImplementation((call: Record<string, unknown>) => {
+        calls.push(call);
+        return Promise.resolve({ insertedId: call._id });
+      }),
+      updateOne: vi.fn().mockImplementation((filter: { _id: ObjectId }, update: { $set?: Record<string, unknown> }) => {
+        const call = calls.find((candidate) => (candidate._id as ObjectId).equals(filter._id));
+        if (call && update.$set) Object.assign(call, update.$set);
+        return Promise.resolve({ matchedCount: call ? 1 : 0, modifiedCount: call ? 1 : 0 });
+      }),
+      findOne: vi.fn().mockImplementation((filter: { _id: ObjectId }) =>
+        Promise.resolve(calls.find((call) => (call._id as ObjectId).equals(filter._id)) ?? null)
+      )
+    },
+    policies: {
+      findOne: vi.fn().mockResolvedValue({
+        phone: {
+          inboundEnabled: true,
+          blockedCallers: [],
+          inboundInstructions: "Answer naturally."
+        }
+      })
+    },
+    auditLogs: {
+      insertOne: vi.fn().mockImplementation((entry: Record<string, unknown>) => Promise.resolve({ insertedId: entry._id }))
     }
   } as unknown as Collections;
 }

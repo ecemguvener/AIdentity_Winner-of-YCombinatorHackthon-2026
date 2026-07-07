@@ -16,6 +16,12 @@ import { normalizeEmail } from "./security.js";
 import { getProvisioner } from "./provisioning.js";
 import { registerEmailProvisioner } from "./email-provisioning.js";
 import { defaultEmailPolicy } from "./policies.js";
+import {
+  getAgentPhoneCall,
+  listAgentPhoneCalls,
+  placeOutboundCall,
+  serializePhoneCall
+} from "./phone-service.js";
 
 type ToolName = "email" | "phone" | "calendar" | "payment";
 type PermissionName = "email.send" | "phone.call" | "calendar.create" | "payment.purchase";
@@ -78,8 +84,15 @@ const initIdentitySchema = z.object({
 
 const phoneCallSchema = z.object({
   to: z.string().min(3).max(40),
-  script: z.string().min(1).max(5000),
+  script: z.string().min(1).max(5000).optional(),
+  task: z.string().min(1).max(5000).optional(),
+  context: z.string().max(8000).optional(),
+  recipientName: z.string().max(200).optional(),
   approved: z.boolean().optional()
+}).refine((payload) => payload.script || payload.task, { message: "script or task is required" });
+
+const phoneCallsQuerySchema = z.object({
+  cursor: z.string().optional()
 });
 
 const calendarBookSchema = z.object({
@@ -214,29 +227,77 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       throw new ApiError(403, block === "human approval is required for this action" ? "approval_required" : "forbidden", block);
     }
 
-    const transcript = [
-      `${identity.name}: Hi, I am calling on behalf of the team to ask two quick validation questions.`,
-      "Prospect: Sure, I can spare a minute.",
-      `${identity.name}: What is painful about the current workflow?`,
-      "Prospect: The manual follow-up is the part we never keep up with."
-    ];
-    await recordAudit(collections, {
-      agentId: agentContext.agent._id,
-      ownerUserId: agentContext.agent.ownerUserId,
-      actor: "agent",
-      action: AUDIT_ACTIONS.phone.outbound,
-      status: "allowed",
-      detail: `Simulated call placed to ${payload.to}.`
+    const result = await placeOutboundCall(collections, config, {
+      agent: agentContext.agent,
+      toNumber: payload.to,
+      task: payload.task ?? payload.script ?? "",
+      context: payload.context,
+      recipientName: payload.recipientName
     });
     return {
       ok: true,
-      provider: "demo-twilio",
-      call_id: `call_${randomId(12)}`,
-      // Real phone number provisioning lands in a later task.
-      from: null,
-      to: payload.to,
-      transcript
+      call_id: result.callId,
+      status: result.status,
+      from: result.from,
+      to: result.to
     };
+  });
+
+  app.post("/api/v1/agent/phone/call", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const identity = agentIdentityView(agentContext.agent);
+    const payload = phoneCallSchema.parse(request.body ?? {});
+    const block = checkAction(identity, "phone.call", payload.approved);
+    if (block) {
+      await recordAudit(collections, {
+        agentId: agentContext.agent._id,
+        ownerUserId: agentContext.agent.ownerUserId,
+        actor: "agent",
+        action: AUDIT_ACTIONS.phone.outbound,
+        status: "blocked",
+        detail: block
+      });
+      throw new ApiError(403, block === "human approval is required for this action" ? "approval_required" : "forbidden", block);
+    }
+
+    const result = await placeOutboundCall(collections, config, {
+      agent: agentContext.agent,
+      toNumber: payload.to,
+      task: payload.task ?? payload.script ?? "",
+      context: payload.context,
+      recipientName: payload.recipientName
+    });
+    return {
+      call_id: result.callId,
+      status: result.status,
+      from: result.from,
+      to: result.to
+    };
+  });
+
+  app.get("/api/v1/agent/phone/calls", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const query = phoneCallsQuerySchema.parse(request.query ?? {});
+    const page = await listAgentPhoneCalls(collections, agentContext.agent, query.cursor);
+    return {
+      calls: page.calls.map(serializePhoneCall),
+      next_cursor: page.nextCursor
+    };
+  });
+
+  app.get("/api/v1/agent/phone/calls/:callId", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const { callId } = request.params as { callId: string };
+    return { call: serializePhoneCall(await getAgentPhoneCall(collections, agentContext.agent, callId)) };
   });
 
   app.post("/api/tools/calendar/book", async (request, reply) => {

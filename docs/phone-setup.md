@@ -71,6 +71,10 @@ Inbound personalization uses:
 Outbound calls use:
 
 - `agent_identity_name`
+- `owner_name`
+- `agent_role`
+- `inbound_guidance`
+- `barkan_call_id`
 - `recipient_name`
 - `task`
 - `call_opening`

@@ -85,6 +85,20 @@ describe("identity layer routes (Mongo-backed)", () => {
     });
     expect(blocked.statusCode).toBe(403);
 
+    await database.collections.phoneNumbers.insertOne({
+      _id: new ObjectId(),
+      agentId: new ObjectId(init.agent_id),
+      e164: "+15005550001",
+      country: "US",
+      twilioSid: "PN123",
+      elevenLabsPhoneNumberId: "el-phone-1",
+      capabilitiesVoice: true,
+      capabilitiesSms: true,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
     const allowed = await app.inject({
       method: "POST",
       url: "/api/tools/phone/call",
@@ -92,7 +106,9 @@ describe("identity layer routes (Mongo-backed)", () => {
       payload: { to: "+1 555 0100", script: "Hi, can we talk?", approved: true }
     });
     expect(allowed.statusCode).toBe(200);
-    expect(allowed.json<{ ok: boolean; from: null }>().from).toBeNull();
+    expect(allowed.json<{ ok: boolean; from: string; transcript?: unknown }>())
+      .toMatchObject({ ok: true, from: "+15005550001", to: "+15550100" });
+    expect(allowed.json()).not.toHaveProperty("transcript");
 
     const audit = await app.inject({
       method: "GET",
