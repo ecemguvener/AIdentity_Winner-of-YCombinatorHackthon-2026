@@ -113,7 +113,13 @@ Agent-facing endpoints use `Authorization: Bearer <identity_token>`:
 apps/
   api/                     Fastify + MongoDB backend
   web/                     React + Vite dashboard
+packages/                  Workspace packages (empty for now)
+scripts/                   Dev, deploy, and build helper scripts
+openclaw-skills/           OpenClaw-facing identity skill
+docs/                      Product and integration notes
 _bmad/                     BMAD configuration
 .agents/                   BMAD agent skills
+ecosystem.config.cjs       PM2 process definitions
+package.json               npm workspace root
 AGENTS.md                  Repo architecture and agent instructions
 ```
