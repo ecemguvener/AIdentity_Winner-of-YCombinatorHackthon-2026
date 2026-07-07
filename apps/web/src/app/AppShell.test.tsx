@@ -1,27 +1,15 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { AppShell } from "./AppShell";
 
-describe("App", () => {
+describe("App shell", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     localStorage.clear();
     window.history.replaceState({}, "", "/");
   });
 
-  it("shows the current public product copy without old widget setup language", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("not needed"));
-
-    window.history.replaceState({}, "", "/plans");
-    render(<App />);
-
-    expect(await screen.findAllByText(/agent identities/i)).not.toHaveLength(0);
-    expect(screen.getByText(/OpenClaw identity linking/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Action Mode/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/widget snippet/i)).not.toBeInTheDocument();
-  });
-
-  it("renders the authenticated identity dashboard", async () => {
+  it("auth gate renders the authenticated identity dashboard", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/api/auth/me")) {
@@ -47,7 +35,7 @@ describe("App", () => {
     });
 
     window.history.replaceState({}, "", "/dashboard");
-    render(<App />);
+    render(<AppShell />);
 
     await waitFor(() => expect(screen.getByText("Identities")).toBeInTheDocument());
     expect(screen.getByText("New identity")).toBeInTheDocument();
