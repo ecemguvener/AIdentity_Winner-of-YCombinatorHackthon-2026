@@ -28,13 +28,13 @@ describe("App shell", () => {
           }
         });
       }
-      if (url.endsWith("/api/sites")) {
-        return jsonResponse({ sites: [] });
+      if (url.endsWith("/api/v1/agents")) {
+        return jsonResponse({ agents: [] });
       }
       return jsonResponse({ error: "not found" }, 404);
     });
 
-    window.history.replaceState({}, "", "/dashboard");
+    window.history.replaceState({}, "", "/agents");
     render(<AppShell />);
 
     await waitFor(() => expect(screen.getByText("Identities")).toBeInTheDocument());

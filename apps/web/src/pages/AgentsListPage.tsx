@@ -1,714 +1,265 @@
-import React, { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { BookOpen, Check, Copy, FileText, Loader2, Server, X, Zap } from "lucide-react";
-import { api, type SiteDetailResponse } from "../api";
-import {
-  Brand,
-  agentIdentityCapabilities,
-  buildIdentityReceipt,
-  buildOpenClawLinkPrompt,
-  buttonLoadingDurationMs,
-  FieldError,
-  FloatingField,
-  getErrorMessage,
-  getStaggerStyle,
-  isCompletionOnboardingStep,
-  isTimeoutLikeSetupError,
-  onboardingPanelTransitionDurationMs,
-  onboardingPanelTransitionSwapMs,
-  onboardingSetupSteps,
-  requiredFieldMessage,
-  siteProgressSteps,
-  siteStepIndexes,
-  sleep,
-  slugifyIdentityName,
-  type OpenClawConnectionMode,
-  type PanelState,
-  type SetupProgressStep,
-  type SetupStepProgress,
-  type SiteOnboardingStep,
-  type StepTransition
-} from "../legacy/shared";
-import { SetupProgressStepper } from "./AgentDetailPage";
-import { BackChevronIcon } from "./SettingsPage";
+import { Bot, Check, Copy, CreditCard, Mail, Phone, Server, X, Zap } from "lucide-react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { agentsApi } from "../api/agents";
+import type { Agent, CreateAgentResponse } from "../api/types";
+import { Brand, getErrorMessage, requiredFieldMessage, type ToastNotificationInput } from "../legacy/shared";
 
-export function SiteOnboardingScreen({
+type WizardStep = "identity" | "capabilities" | "review" | "token";
+type RuntimeChoice = "openclaw" | "hermes" | "api";
+
+const runtimeChoices: Array<{ id: RuntimeChoice; label: string; description: string; Icon: typeof Server }> = [
+  { id: "openclaw", label: "OpenClaw", description: "Connect this identity to an OpenClaw runtime.", Icon: Server },
+  { id: "hermes", label: "Hermes", description: "Use Barkan from a Hermes-capable agent.", Icon: Bot },
+  { id: "api", label: "API", description: "Use the REST API, SDK, or MCP bridge directly.", Icon: Zap }
+];
+
+const tokenStoredKeyPrefix = "barkan-token-stored:";
+
+export function AgentCreationWizard({
   onCancel,
-  onCreated
+  onCreated,
+  onNotify
 }: {
   onCancel: () => void;
-  onCreated: (detail: SiteDetailResponse) => Promise<void>;
+  onCreated: (response: CreateAgentResponse) => void;
+  onNotify: (notification: ToastNotificationInput) => void;
 }) {
-  const [step, setStep] = useState<SiteOnboardingStep>("name");
-  const [displayStep, setDisplayStep] = useState<SiteOnboardingStep>("name");
-  const [displayPanelState, setDisplayPanelState] = useState<PanelState>("active");
-  const [transition, setTransition] = useState<StepTransition | null>(null);
-  const [submittingStep, setSubmittingStep] = useState<SiteOnboardingStep | null>(null);
+  const [step, setStep] = useState<WizardStep>("identity");
   const [name, setName] = useState("");
-  const [domain, setDomain] = useState("");
-  const [openClawMode, setOpenClawMode] = useState<OpenClawConnectionMode>("existing");
-  const [error, setError] = useState("");
+  const [description, setDescription] = useState("");
+  const [runtime, setRuntime] = useState<RuntimeChoice>("openclaw");
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [phoneEnabled, setPhoneEnabled] = useState(false);
   const [nameError, setNameError] = useState("");
-  const [domainError, setDomainError] = useState("");
-  const [setupError, setSetupError] = useState("");
-  const [setupProjectId, setSetupProjectId] = useState<string | null>(null);
-  const [createdSiteDetail, setCreatedSiteDetail] = useState<SiteDetailResponse | null>(null);
-  const [createdApiKeySecret, setCreatedApiKeySecret] = useState<{ apiKeyId: string; secret: string } | null>(null);
-  const [isApiKeyCopied, setIsApiKeyCopied] = useState(false);
-  const [isPromptCopied, setIsPromptCopied] = useState(false);
-  const [isPreparingSetup, setIsPreparingSetup] = useState(false);
-  const [isSkippingSetup, setIsSkippingSetup] = useState(false);
-  const [isWaitingForAgent, setIsWaitingForAgent] = useState(false);
-  const [activeSetupStep, setActiveSetupStep] = useState<SetupProgressStep | null>(null);
-  const [completedSetupSteps, setCompletedSetupSteps] = useState<Set<SetupProgressStep>>(() => new Set());
-  const [setupStepProgress, setSetupStepProgress] = useState<SetupStepProgress>({});
-  const [isReceiptCopied, setIsReceiptCopied] = useState(false);
-  const currentStepRef = useRef<SiteOnboardingStep>("name");
-  const displayStepRef = useRef<SiteOnboardingStep>("name");
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const domainInputRef = useRef<HTMLInputElement>(null);
-  const setupHeadingRef = useRef<HTMLHeadingElement>(null);
-  const installHeadingRef = useRef<HTMLHeadingElement>(null);
-  const finishHeadingRef = useRef<HTMLHeadingElement>(null);
-  const submitTimeoutRef = useRef<number | null>(null);
-  const transitionSwapTimeoutRef = useRef<number | null>(null);
-  const transitionFinishTimeoutRef = useRef<number | null>(null);
-  const apiKeyCopiedTimeoutRef = useRef<number | null>(null);
-  const isMountedRef = useRef(true);
+  const [submitError, setSubmitError] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [created, setCreated] = useState<CreateAgentResponse | null>(null);
+  const [isTokenCopied, setIsTokenCopied] = useState(false);
+  const normalizedName = name.trim();
+  const normalizedDescription = description.trim();
 
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (submitTimeoutRef.current !== null) {
-        window.clearTimeout(submitTimeoutRef.current);
-      }
-      if (transitionSwapTimeoutRef.current !== null) {
-        window.clearTimeout(transitionSwapTimeoutRef.current);
-      }
-      if (transitionFinishTimeoutRef.current !== null) {
-        window.clearTimeout(transitionFinishTimeoutRef.current);
-      }
-      if (apiKeyCopiedTimeoutRef.current !== null) {
-        window.clearTimeout(apiKeyCopiedTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    currentStepRef.current = step;
-  }, [step]);
-
-  useEffect(() => {
-    displayStepRef.current = displayStep;
-  }, [displayStep]);
-
-  useEffect(() => {
-    if (displayStep === "name") {
-      nameInputRef.current?.focus();
-      return;
-    }
-    if (displayStep === "openclaw") {
-      domainInputRef.current?.focus();
-      return;
-    }
-    if (displayStep === "setup") {
-      setupHeadingRef.current?.focus();
-      return;
-    }
-    if (displayStep === "install") {
-      installHeadingRef.current?.focus();
-      return;
-    }
-    finishHeadingRef.current?.focus();
-  }, [displayStep]);
-
-  function transitionToStep(nextStep: SiteOnboardingStep) {
-    const currentStep = transition?.to ?? currentStepRef.current;
-    if (nextStep === currentStep) {
-      return;
-    }
-
-    if (transitionSwapTimeoutRef.current !== null) {
-      window.clearTimeout(transitionSwapTimeoutRef.current);
-    }
-    if (transitionFinishTimeoutRef.current !== null) {
-      window.clearTimeout(transitionFinishTimeoutRef.current);
-    }
-
-    currentStepRef.current = nextStep;
-    setStep(nextStep);
-    setTransition({ from: displayStepRef.current, to: nextStep });
-    setDisplayPanelState("outgoing");
-    transitionSwapTimeoutRef.current = window.setTimeout(() => {
-      displayStepRef.current = nextStep;
-      setDisplayStep(nextStep);
-      setDisplayPanelState("incoming");
-      transitionSwapTimeoutRef.current = null;
-      transitionFinishTimeoutRef.current = window.setTimeout(() => {
-        setDisplayPanelState("active");
-        setTransition(null);
-        transitionFinishTimeoutRef.current = null;
-      }, onboardingPanelTransitionDurationMs - onboardingPanelTransitionSwapMs);
-    }, onboardingPanelTransitionSwapMs);
-  }
-
-  function runStep(event: FormEvent, currentStep: SiteOnboardingStep, nextStep: SiteOnboardingStep) {
-    event.preventDefault();
-    if (submittingStep !== null || transition !== null) {
-      return;
-    }
-
-    if (currentStep === "name" && !name.trim()) {
+  function goTo(nextStep: WizardStep) {
+    if (nextStep !== "identity" && !normalizedName) {
       setNameError(requiredFieldMessage);
-      nameInputRef.current?.focus();
       return;
     }
-
-    if (submitTimeoutRef.current !== null) {
-      window.clearTimeout(submitTimeoutRef.current);
-    }
-
-    setSubmittingStep(currentStep);
-    submitTimeoutRef.current = window.setTimeout(() => {
-      setSubmittingStep(null);
-      transitionToStep(nextStep);
-      submitTimeoutRef.current = null;
-    }, buttonLoadingDurationMs);
+    setNameError("");
+    setStep(nextStep);
   }
 
-  async function startSetup(event: FormEvent) {
+  async function createAgent(event: FormEvent) {
     event.preventDefault();
-    if (submittingStep !== null || isPreparingSetup) {
+    if (!normalizedName) {
+      setNameError(requiredFieldMessage);
       return;
     }
 
-    if (openClawMode === "existing" && !domain.trim()) {
-      setDomainError(requiredFieldMessage);
-      domainInputRef.current?.focus();
-      return;
-    }
-
-    const normalizedEndpoint = openClawMode === "existing"
-      ? domain.trim()
-      : `${slugifyIdentityName(name)}.managed-openclaw.barkan.dev`;
-
-    setDomain(normalizedEndpoint);
-    setSubmittingStep("openclaw");
-    setIsPreparingSetup(true);
-    setError("");
-    setDomainError("");
-    setSetupError("");
-    let preparedProjectId = setupProjectId;
+    setIsCreating(true);
+    setSubmitError("");
     try {
-      const setupResponse = preparedProjectId ? null : await api.createSiteSetup(name.trim(), normalizedEndpoint);
-      preparedProjectId = preparedProjectId ?? setupResponse?.setup.projectId ?? null;
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      if (setupResponse) {
-        setSetupProjectId(setupResponse.setup.projectId);
-        setCreatedApiKeySecret({
-          apiKeyId: setupResponse.apiKey.id,
-          secret: setupResponse.secret
-        });
-        setIsApiKeyCopied(false);
-      }
-
-      if (!preparedProjectId) {
-        throw new Error("Could not create setup project.");
-      }
-
-      setSubmittingStep(null);
-      setIsPreparingSetup(false);
-      transitionToStep("setup");
-      if (openClawMode === "deploy") {
-        void completeManagedOpenClawSetup(preparedProjectId);
-      } else {
-        showOpenClawWaitingState();
-      }
-    } catch (setupStartError) {
-      if (preparedProjectId) {
-        setSetupProjectId(preparedProjectId);
-        setSetupError(getErrorMessage(setupStartError, "Could not prepare this OpenClaw link"));
-        transitionToStep("setup");
-      } else {
-        setError(getErrorMessage(setupStartError, "Could not create agent identity"));
-      }
-    } finally {
-      setSubmittingStep(null);
-      setIsPreparingSetup(false);
-    }
-  }
-
-  function showOpenClawWaitingState() {
-    setIsWaitingForAgent(true);
-    setActiveSetupStep("connection");
-    setCompletedSetupSteps(new Set());
-    setSetupStepProgress({
-      connection: { current: 0, total: 1, label: "Waiting for OpenClaw skill confirmation" }
-    });
-  }
-
-  async function completeManagedOpenClawSetup(projectId: string) {
-    setIsWaitingForAgent(true);
-    setActiveSetupStep("connection");
-    setCompletedSetupSteps(new Set());
-    setSetupStepProgress({
-      connection: { current: 0, total: 1, label: "Deploying managed OpenClaw instance" }
-    });
-
-    try {
-      await sleep(1400);
-      if (!isMountedRef.current) {
-        return;
-      }
-      setSetupStepProgress({
-        connection: { current: 1, total: 1, label: "Managed OpenClaw deployed" }
+      const response = await agentsApi.create({
+        name: normalizedName,
+        description: normalizedDescription || undefined,
+        runtime,
+        capabilities: {
+          email: emailEnabled,
+          phone: phoneEnabled
+        },
+        approvalMode: "always"
       });
-      setCompletedSetupSteps(new Set(["connection"]));
-      await completeIdentitySetup(projectId);
-    } catch (deployError) {
-      setSetupError(getErrorMessage(deployError, "Could not deploy managed OpenClaw"));
-      setIsWaitingForAgent(false);
+      setCreated(response);
+      setStep("token");
+      onCreated(response);
+    } catch (error) {
+      setSubmitError(getErrorMessage(error, "Could not create agent identity"));
+    } finally {
+      setIsCreating(false);
     }
   }
 
-  async function completeIdentitySetup(projectId: string) {
-    setIsSkippingSetup(true);
-    setSetupError("");
-
-    try {
-      const finalDetail = await api.completeSiteSetup(projectId);
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      setCreatedSiteDetail(finalDetail);
-      setIsWaitingForAgent(false);
-      setIsSkippingSetup(false);
-      setActiveSetupStep(null);
-      transitionToStep("install");
-    } catch (completeError) {
-      setSetupError(getErrorMessage(completeError, "Could not finish agent identity setup"));
-      setIsWaitingForAgent(false);
-      setIsSkippingSetup(false);
-    }
+  async function copyToken() {
+    if (!created) return;
+    await navigator.clipboard.writeText(created.identityToken.secret);
+    setIsTokenCopied(true);
+    onNotify({ title: "Identity token copied" });
   }
 
-  async function retryOpenClawSetup() {
-    if (!setupProjectId || isWaitingForAgent) {
-      return;
-    }
-
-    setSetupError("");
-    if (openClawMode === "deploy") {
-      await completeManagedOpenClawSetup(setupProjectId);
-      return;
-    }
-
-    showOpenClawWaitingState();
+  function confirmStored() {
+    if (!created) return;
+    window.localStorage.setItem(`${tokenStoredKeyPrefix}${created.agent.id}`, "true");
+    onCancel();
   }
-
-  async function completeExistingOpenClawSetup() {
-    if (!setupProjectId || isSkippingSetup) {
-      return;
-    }
-
-    await completeIdentitySetup(setupProjectId);
-  }
-
-  async function copyConnectCommand() {
-    if (!createdApiKeySecret) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(createdApiKeySecret.secret);
-    setIsApiKeyCopied(true);
-    if (apiKeyCopiedTimeoutRef.current !== null) {
-      window.clearTimeout(apiKeyCopiedTimeoutRef.current);
-    }
-    apiKeyCopiedTimeoutRef.current = window.setTimeout(() => {
-      setIsApiKeyCopied(false);
-      apiKeyCopiedTimeoutRef.current = null;
-    }, 1400);
-  }
-
-  async function copyOpenClawPrompt() {
-    await navigator.clipboard.writeText(buildOpenClawLinkPrompt(name, createdApiKeySecret?.secret, setupProjectId));
-    setIsPromptCopied(true);
-    window.setTimeout(() => setIsPromptCopied(false), 1400);
-  }
-
-  async function copyOnboardingReceipt() {
-    if (!createdSiteDetail) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(buildIdentityReceipt(createdSiteDetail.site));
-    setIsReceiptCopied(true);
-    window.setTimeout(() => setIsReceiptCopied(false), 1400);
-  }
-
-  async function finishOnboarding() {
-    if (!createdSiteDetail) {
-      return;
-    }
-
-    await onCreated(createdSiteDetail);
-  }
-
-  const currentProgressIndex = siteStepIndexes[step];
-  const isCompletionDisplayStep = isCompletionOnboardingStep(displayStep);
-  const completionBackdropState = displayStep === "finish" ? "active" : "hidden";
-  const flowLayoutClass = isCompletionDisplayStep
-    ? "site-onboarding-page__flow site-onboarding-page__flow--completion"
-    : "site-onboarding-page__flow site-onboarding-page__flow--compact";
-  const setupRetryLabel = setupError && isTimeoutLikeSetupError(setupError)
-    ? "Timed out - retry OpenClaw link"
-    : "Retry OpenClaw link";
-  const shouldShowSetupErrorText = Boolean(setupError) && !isTimeoutLikeSetupError(setupError);
-  const visibleConnectCommand = createdApiKeySecret ? "link token: ck_••••••••" : "Creating link token...";
-  const openClawPrompt = buildOpenClawLinkPrompt(name, createdApiKeySecret?.secret, setupProjectId);
-  const setupTitle = openClawMode === "deploy" ? "Deploying OpenClaw" : "Link existing OpenClaw";
-  const setupDescription = openClawMode === "deploy"
-    ? "We are deploying a managed OpenClaw instance and installing the Barkan identity layer."
-    : "Send this prompt to your OpenClaw instance. It installs the Barkan identity skill and confirms the link with a token.";
-  const readyReceipt = buildIdentityReceipt(createdSiteDetail?.site ?? null);
 
   return (
     <main className="site-onboarding-page" aria-label="Create agent identity">
-      <div className="site-onboarding-page__canvas">
-        <div className="site-onboarding-page__dark-plane" aria-hidden="true" />
-        <section className="site-onboarding-page__board">
-          <div className={`site-onboarding-page__completion-backdrop site-onboarding-page__completion-backdrop--${completionBackdropState}`} />
+      <button className="site-onboarding-page__close" type="button" aria-label="Close" onClick={onCancel}>
+        <X size={18} aria-hidden="true" />
+      </button>
+      <div className="site-onboarding-page__panel site-onboarding-page__panel--active">
+        <Brand />
 
-          <Brand className="site-onboarding-page__brand" />
+        {step === "identity" ? (
+          <form className="site-onboarding-page__form" onSubmit={(event) => { event.preventDefault(); goTo("capabilities"); }}>
+            <header className="site-onboarding-page__header">
+              <h1>Name this agent identity</h1>
+              <p>Choose how this AI worker will connect to Barkan.</p>
+            </header>
+            <label className="site-onboarding-page__field">
+              <span>Name</span>
+              <input value={name} onChange={(event) => { setName(event.target.value); setNameError(""); }} />
+              {nameError ? <small role="alert">{nameError}</small> : null}
+            </label>
+            <label className="site-onboarding-page__field">
+              <span>Description</span>
+              <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
+            </label>
+            <div className="site-onboarding-page__choice-grid">
+              {runtimeChoices.map(({ id, label, description: runtimeDescription, Icon }) => (
+                <button
+                  className={`site-onboarding-page__choice${runtime === id ? " site-onboarding-page__choice--selected" : ""}`}
+                  key={id}
+                  type="button"
+                  onClick={() => setRuntime(id)}
+                >
+                  <Icon size={20} aria-hidden="true" />
+                  <span>{label}</span>
+                  <small>{runtimeDescription}</small>
+                </button>
+              ))}
+            </div>
+            <button className="site-onboarding-page__submit" type="submit">Continue</button>
+          </form>
+        ) : null}
 
-          <div className="site-onboarding-page__progress" aria-label="Create agent identity progress">
-            {siteProgressSteps.map((progressStep) => (
-              <span
-                key={progressStep}
-                className={
-                  progressStep <= currentProgressIndex
-                    ? "site-onboarding-page__progress-step site-onboarding-page__progress-step--active"
-                    : "site-onboarding-page__progress-step"
-                }
-              />
-            ))}
-          </div>
-
-          <button className="site-onboarding-page__close" type="button" onClick={onCancel} aria-label="Close">
-            <X size={17} aria-hidden="true" />
-          </button>
-
-          <section className={flowLayoutClass}>
-            <div className="site-onboarding-page__stage">
-              <OnboardingPanel state={displayPanelState}>
-                {displayStep === "name" ? (
-                  <>
-                    <OnboardingHeader
-                      title="Create an agent identity"
-                      description="Give this real-world identity a name you will recognize in your dashboard."
-                    />
-                    <form className="site-onboarding-page__form" onSubmit={(event) => runStep(event, "name", "openclaw")} noValidate>
-                      <div className="site-onboarding-page__sequence-item" style={getStaggerStyle(2)}>
-                        <FloatingField
-                          ref={nameInputRef}
-                          autoComplete="off"
-                          errorMessage={nameError}
-                          label="Identity name"
-                          name="identityName"
-                          value={name}
-                          onChange={(nextName) => {
-                            setName(nextName);
-                            setNameError("");
-                          }}
-                        />
-                      </div>
-                      <OnboardingSubmitAction isLoading={submittingStep === "name"} />
-                    </form>
-                  </>
-                ) : null}
-
-                {displayStep === "openclaw" ? (
-                  <>
-                    <OnboardingHeader
-                      title="Connect OpenClaw"
-                      description="Use an existing OpenClaw instance, or let Barkan deploy one with the identity layer already installed."
-                    />
-                    <form className="site-onboarding-page__form" onSubmit={startSetup} noValidate>
-                      <div className="site-onboarding-page__sequence-item site-onboarding-page__mode-grid" style={getStaggerStyle(2)}>
-                        <button
-                          className={`site-onboarding-page__mode-card${openClawMode === "existing" ? " site-onboarding-page__mode-card--active" : ""}`}
-                          type="button"
-                          aria-pressed={openClawMode === "existing"}
-                          onClick={() => setOpenClawMode("existing")}
-                        >
-                          <Server size={18} aria-hidden="true" />
-                          <strong>Existing instance</strong>
-                          <span>Paste a prompt into OpenClaw and wait for the skill to confirm linking.</span>
-                        </button>
-                        <button
-                          className={`site-onboarding-page__mode-card${openClawMode === "deploy" ? " site-onboarding-page__mode-card--active" : ""}`}
-                          type="button"
-                          aria-pressed={openClawMode === "deploy"}
-                          onClick={() => {
-                            setOpenClawMode("deploy");
-                            setDomainError("");
-                          }}
-                        >
-                          <Zap size={18} aria-hidden="true" />
-                          <strong>Deploy for me</strong>
-                          <span>Provision a managed OpenClaw instance with the identity layer preinstalled.</span>
-                        </button>
-                      </div>
-                      <div className="site-onboarding-page__sequence-item" style={getStaggerStyle(2)}>
-                        {openClawMode === "existing" ? (
-                          <FloatingField
-                            ref={domainInputRef}
-                            autoComplete="url"
-                            errorMessage={domainError}
-                            label="OpenClaw endpoint"
-                            name="openClawEndpoint"
-                            placeholder="https://openclaw.example.com"
-                            value={domain}
-                            onChange={(nextDomain) => {
-                              setDomain(nextDomain);
-                              setDomainError("");
-                            }}
-                          />
-                        ) : (
-                          <div className="site-onboarding-page__managed-note">
-                            <Server size={16} aria-hidden="true" />
-                            <span>{`${slugifyIdentityName(name)}.managed-openclaw.barkan.dev`}</span>
-                          </div>
-                        )}
-                      </div>
-                      {error ? <p className="site-onboarding-page__submit-error">{error}</p> : null}
-                      <OnboardingSubmitAction
-                        isLoading={submittingStep === "openclaw" || isPreparingSetup}
-                        label={openClawMode === "deploy" ? "Deploy identity" : "Create link prompt"}
-                      />
-                    </form>
-                  </>
-                ) : null}
-
-                {displayStep === "setup" ? (
-                  <>
-                    <OnboardingHeader
-                      headingRef={setupHeadingRef}
-                      isProgrammaticallyFocusable
-                      title={setupTitle}
-                      description={setupDescription}
-                    />
-                    <div className="site-onboarding-page__setup">
-                      <div className="site-onboarding-page__sequence-item site-onboarding-page__secret-card" style={getStaggerStyle(2)}>
-                        <code>{visibleConnectCommand}</code>
-                        <button
-                          className="site-onboarding-page__inline-action"
-                          type="button"
-                          onClick={() => void copyConnectCommand()}
-                          disabled={!createdApiKeySecret}
-                        >
-                          {isApiKeyCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-                          <span>{isApiKeyCopied ? "Copied" : "Copy token"}</span>
-                        </button>
-                      </div>
-
-                      {openClawMode === "existing" ? (
-                        <div className="site-onboarding-page__sequence-item site-onboarding-page__prompt-card" style={getStaggerStyle(3)}>
-                          <pre>{openClawPrompt}</pre>
-                          <button
-                            className="site-onboarding-page__inline-action"
-                            type="button"
-                            onClick={() => void copyOpenClawPrompt()}
-                          >
-                            {isPromptCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-                            <span>{isPromptCopied ? "Copied" : "Copy prompt"}</span>
-                          </button>
-                        </div>
-                      ) : null}
-
-                      <div className="site-onboarding-page__sequence-item" style={getStaggerStyle(openClawMode === "existing" ? 4 : 3)}>
-                        <SetupProgressStepper
-                          activeStep={activeSetupStep}
-                          completedSteps={completedSetupSteps}
-                          stepProgress={setupStepProgress}
-                          steps={onboardingSetupSteps}
-                        />
-                      </div>
-
-                      {shouldShowSetupErrorText ? (
-                        <p className="site-onboarding-page__sequence-item site-onboarding-page__submit-error" style={getStaggerStyle(4)}>
-                          {setupError}
-                        </p>
-                      ) : null}
-                      {setupError ? (
-                        <button
-                          className="site-onboarding-page__sequence-item site-onboarding-page__inline-action site-onboarding-page__inline-action--wide"
-                          style={getStaggerStyle(5)}
-                          type="button"
-                          onClick={() => void retryOpenClawSetup()}
-                        >
-                          <FileText size={16} aria-hidden="true" />
-                          <span>{setupRetryLabel}</span>
-                        </button>
-                      ) : null}
-                      <div
-                        className="site-onboarding-page__sequence-item site-onboarding-page__action site-onboarding-page__action--form-width"
-                        style={getStaggerStyle(setupError ? 6 : 4)}
-                      >
-                        <button
-                          className={
-                            isSkippingSetup
-                              ? "site-onboarding-page__submit site-onboarding-page__submit--secondary site-onboarding-page__submit--loading"
-                              : "site-onboarding-page__submit site-onboarding-page__submit--secondary"
-                          }
-                          type="button"
-                          onClick={() => void completeExistingOpenClawSetup()}
-                          disabled={!setupProjectId || isSkippingSetup}
-                          aria-busy={isSkippingSetup}
-                        >
-                          {isSkippingSetup ? (
-                            <span className="barkan-button-loader" aria-hidden="true" />
-                          ) : (
-                            <span>{openClawMode === "existing" ? "Demo: mark linked" : "Continue"}</span>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-
-                {displayStep === "install" ? (
-                  <>
-                    <OnboardingHeader
-                      headingRef={installHeadingRef}
-                      isProgrammaticallyFocusable
-                      title="Identity ready"
-                      description="This agent identity now has a phone number, inbox, payment card, calendar, and OpenClaw link."
-                    />
-                    <div className="site-onboarding-page__ready">
-                      <div className="site-onboarding-page__sequence-item site-onboarding-page__secret-card site-onboarding-page__receipt-card" style={getStaggerStyle(2)}>
-                        <code>{createdSiteDetail ? readyReceipt : "Provisioning identity..."}</code>
-                        <button
-                          className="site-onboarding-page__inline-action"
-                          type="button"
-                          onClick={() => void copyOnboardingReceipt()}
-                          disabled={!createdSiteDetail}
-                        >
-                          {isReceiptCopied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-                          <span>{isReceiptCopied ? "Copied" : "Copy receipt"}</span>
-                        </button>
-                      </div>
-                      <div className="site-onboarding-page__sequence-item agent-identity-capabilities agent-identity-capabilities--onboarding" style={getStaggerStyle(3)}>
-                        {agentIdentityCapabilities.map(({ label, value, Icon }) => (
-                          <article className="agent-identity-capabilities__item" key={label}>
-                            <span className="agent-identity-capabilities__icon" aria-hidden="true">
-                              <Icon size={16} strokeWidth={2.2} />
-                            </span>
-                            <div>
-                              <strong>{label}</strong>
-                              <span>{value}</span>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                      <div className="site-onboarding-page__sequence-item site-onboarding-page__action" style={getStaggerStyle(3)}>
-                        <button
-                          className="site-onboarding-page__submit"
-                          type="button"
-                          onClick={() => transitionToStep("finish")}
-                          disabled={!createdSiteDetail}
-                        >
-                          <span>Continue</span>
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-
-                {displayStep === "finish" ? (
-                  <>
-                    <OnboardingHeader
-                      headingRef={finishHeadingRef}
-                      isProgrammaticallyFocusable
-                      title="You're all set"
-                      description="Return to the dashboard to manage this agent identity and its real-world tools."
-                    />
-                    <div className="site-onboarding-page__finish">
-                      <button
-                        className="site-onboarding-page__submit"
-                        type="button"
-                        onClick={() => void finishOnboarding()}
-                        disabled={!createdSiteDetail}
-                      >
-                        <span>Back to dashboard</span>
-                      </button>
-                    </div>
-                  </>
-                ) : null}
-              </OnboardingPanel>
+        {step === "capabilities" ? (
+          <section className="site-onboarding-page__form">
+            <header className="site-onboarding-page__header">
+              <h1>Choose real-world tools</h1>
+              <p>Email and phone are provisioned under owner policy. Payment cards are coming soon.</p>
+            </header>
+            <CapabilityToggle
+              checked={emailEnabled}
+              description="Provision a dedicated email address for outbound and inbound mail."
+              icon={<Mail size={20} aria-hidden="true" />}
+              label="Email"
+              onChange={setEmailEnabled}
+            />
+            <CapabilityToggle
+              checked={phoneEnabled}
+              description="Provision a phone number for calls and SMS."
+              icon={<Phone size={20} aria-hidden="true" />}
+              label="Phone"
+              onChange={setPhoneEnabled}
+            />
+            <div className="site-onboarding-page__choice site-onboarding-page__choice--disabled" title="Controlled agent spending is on the roadmap">
+              <CreditCard size={20} aria-hidden="true" />
+              <span>Payment card</span>
+              <small>Coming soon</small>
+            </div>
+            <div className="site-onboarding-page__actions">
+              <button type="button" onClick={() => goTo("identity")}>Back</button>
+              <button className="site-onboarding-page__submit" type="button" onClick={() => goTo("review")}>Review</button>
             </div>
           </section>
-        </section>
+        ) : null}
+
+        {step === "review" ? (
+          <form className="site-onboarding-page__form" onSubmit={createAgent}>
+            <header className="site-onboarding-page__header">
+              <h1>Review & create</h1>
+              <p>{normalizedName} will be created with {runtimeLabel(runtime)} instructions.</p>
+            </header>
+            <div className="site-onboarding-page__receipt">
+              <span>Name: {normalizedName}</span>
+              <span>Runtime: {runtimeLabel(runtime)}</span>
+              <span>Email: {emailEnabled ? "Enabled" : "Off"}</span>
+              <span>Phone: {phoneEnabled ? "Enabled" : "Off"}</span>
+              <span>Payment card: Coming soon</span>
+            </div>
+            {submitError ? <p className="field-error" role="alert">{submitError}</p> : null}
+            <div className="site-onboarding-page__actions">
+              <button type="button" onClick={() => goTo("capabilities")}>Back</button>
+              <button className="site-onboarding-page__submit" type="submit" disabled={isCreating}>
+                {isCreating ? "Creating..." : "Create identity"}
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {step === "token" && created ? (
+          <section className="site-onboarding-page__form">
+            <header className="site-onboarding-page__header">
+              <h1>Store this identity token</h1>
+              <p>This secret is shown once. Keep it in the agent runtime environment.</p>
+            </header>
+            <div className="site-onboarding-page__token">
+              <code>{isTokenCopied || tokenWasStored(created.agent.id) ? maskToken(created.identityToken.secret) : created.identityToken.secret}</code>
+              <button type="button" onClick={copyToken}>
+                <Copy size={16} aria-hidden="true" />
+                <span>{isTokenCopied ? "Copied" : "Copy"}</span>
+              </button>
+            </div>
+            <RuntimeInstructions agent={created.agent} tokenPrefix={created.identityToken.prefix} />
+            <button className="site-onboarding-page__submit" type="button" onClick={confirmStored}>
+              <Check size={16} aria-hidden="true" />
+              <span>I stored it</span>
+            </button>
+          </section>
+        ) : null}
       </div>
     </main>
   );
 }
 
-function OnboardingPanel({ state, children }: { state: PanelState; children: ReactNode }) {
-  return (
-    <section className={`site-onboarding-page__panel site-onboarding-page__panel--${state}`} aria-hidden={state !== "active"}>
-      {children}
-    </section>
-  );
-}
-
-function OnboardingHeader({
-  title,
+function CapabilityToggle({
+  checked,
   description,
-  headingRef,
-  isProgrammaticallyFocusable = false
+  icon,
+  label,
+  onChange
 }: {
-  title: ReactNode;
-  description: ReactNode;
-  headingRef?: React.Ref<HTMLHeadingElement>;
-  isProgrammaticallyFocusable?: boolean;
+  checked: boolean;
+  description: string;
+  icon: ReactNode;
+  label: string;
+  onChange: (checked: boolean) => void;
 }) {
   return (
-    <header className="site-onboarding-page__header">
-      <h1
-        ref={headingRef}
-        className="site-onboarding-page__sequence-item"
-        tabIndex={isProgrammaticallyFocusable ? -1 : undefined}
-        style={getStaggerStyle(0)}
-      >
-        {title}
-      </h1>
-      <p className="site-onboarding-page__sequence-item" style={getStaggerStyle(1)}>
-        {description}
-      </p>
-    </header>
+    <label className={`site-onboarding-page__choice${checked ? " site-onboarding-page__choice--selected" : ""}`}>
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      {icon}
+      <span>{label}</span>
+      <small>{description}</small>
+    </label>
   );
 }
 
-function OnboardingSubmitAction({ isLoading = false, label = "Continue" }: { isLoading?: boolean; label?: string }) {
+function RuntimeInstructions({ agent, tokenPrefix }: { agent: Agent; tokenPrefix: string }) {
+  const runtimeName = runtimeLabel(agent.runtime === "other" || agent.runtime === null ? "api" : agent.runtime);
+  const envText = useMemo(
+    () => `BARKAN_API_URL=${window.location.origin.replace(/:4888$/, ":4001")}\nBARKAN_IDENTITY_TOKEN=${tokenPrefix}_...`,
+    [tokenPrefix]
+  );
+
   return (
-    <div className="site-onboarding-page__sequence-item site-onboarding-page__action" style={getStaggerStyle(3)}>
-      <button
-        className={
-          isLoading
-            ? "site-onboarding-page__submit site-onboarding-page__submit--loading"
-            : "site-onboarding-page__submit"
-        }
-        type="submit"
-        disabled={isLoading}
-        aria-busy={isLoading}
-      >
-        {isLoading ? <span className="barkan-button-loader" aria-hidden="true" /> : <span>{label}</span>}
-      </button>
+    <div className="site-onboarding-page__receipt">
+      <strong>{runtimeName} connection</strong>
+      <code>{envText}</code>
+      <span>Skill and MCP install links land in the integration setup tasks.</span>
     </div>
   );
+}
+
+function runtimeLabel(runtime: RuntimeChoice): string {
+  if (runtime === "openclaw") return "OpenClaw";
+  if (runtime === "hermes") return "Hermes";
+  return "API";
+}
+
+function tokenWasStored(agentId: string): boolean {
+  return window.localStorage.getItem(`${tokenStoredKeyPrefix}${agentId}`) === "true";
+}
+
+function maskToken(token: string): string {
+  return `${token.slice(0, 10)}...stored`;
 }

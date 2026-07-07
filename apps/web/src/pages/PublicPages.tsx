@@ -49,7 +49,7 @@ const landingFeatureCards = [
   {
     title: "Real-world agent identity",
     description:
-      "Give each AI worker a durable identity with a phone number, inbox, payment rail, calendar, and policy controls your team can audit.",
+      "Give each AI worker a durable identity with a phone number, inbox, calendar, and policy controls your team can audit.",
     image: sitePreviewConnectOpenClaw,
     imageAlt: "Connect OpenClaw setup screen",
     imagePosition: "left"
@@ -65,7 +65,7 @@ const landingFeatureCards = [
   {
     title: "Operational tool surface",
     description:
-      "Simulate, review, and provision calls, email, payments, and scheduling from the dashboard before wiring an agent into production.",
+      "Simulate, review, and provision calls, email, and scheduling from the dashboard before wiring an agent into production.",
     image: sitePreviewIdentityReady,
     imageAlt: "Identity ready confirmation screen",
     imagePosition: "left"
@@ -90,12 +90,12 @@ const landingBenefitCards = [
   },
   {
     title: "Dashboard simulation",
-    description: "Use the dashboard chat and tool panels to test how an identity handles calls, email, payments, and scheduling.",
+    description: "Use the dashboard chat and tool panels to test how an identity handles calls, email, and scheduling.",
     Icon: Zap
   },
   {
     title: "Policy-shaped actions",
-    description: "Keep sensitive capabilities visible and bounded, from payment thresholds to communication identities.",
+    description: "Keep sensitive capabilities visible and bounded, from approval thresholds to communication identities.",
     Icon: Braces
   },
   {
@@ -110,7 +110,7 @@ const pricingPlans = [
     name: "Launch",
     price: "$300",
     priceNote: "per month, depending on usage",
-    description: "For early teams giving one agent identity real-world communication and payment tools.",
+    description: "For early teams giving one agent identity real-world communication tools.",
     features: ["1 agent identity", "Typical usage for a small customer base", "Dashboard chat and phone assistance", "OpenClaw identity linking"],
     isRecommended: false
   },
@@ -119,7 +119,7 @@ const pricingPlans = [
     price: "$900",
     priceNote: "per month, depending on usage",
     description: "For growing teams managing multiple agent identities and operational tool surfaces.",
-    features: ["Multiple agent identities", "Higher tool usage volume", "Phone, email, and payment tools", "Priority identity support"],
+    features: ["Multiple agent identities", "Higher tool usage volume", "Phone and email tools", "Priority identity support"],
     isRecommended: true
   },
   {
@@ -150,12 +150,12 @@ const pricingFaqItems = [
   {
     question: "What counts as usage?",
     answer:
-      "Typical usage includes dashboard chat, phone calls, email sends, payment requests, and the scale of connected agent identities."
+      "Typical usage includes dashboard chat, phone calls, email sends, and the scale of connected agent identities."
   },
   {
     question: "How long does setup take?",
     answer:
-      "Most teams start by creating an agent identity, linking OpenClaw, and testing phone, email, and payment tools from the dashboard."
+      "Most teams start by creating an agent identity, linking OpenClaw, and testing phone and email tools from the dashboard."
   },
   {
     question: "Can we switch plans later?",
@@ -356,7 +356,7 @@ export function PricingPage() {
             ease: [0.22, 1, 0.36, 1]
           }}
         >
-          Start with one accountable agent identity, then scale OpenClaw links, phone, email, payments, and scheduling
+          Start with one accountable agent identity, then scale OpenClaw links, phone, email, and scheduling
           as real-world usage grows.
         </motion.p>
       </motion.section>

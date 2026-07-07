@@ -1,60 +1,54 @@
-import React from "react";
-import { LogOut, Plus } from "lucide-react";
-import type { Site, SiteApiKey, SiteDetailResponse, User } from "../api";
+import { LogOut, Mail, Phone, Plus } from "lucide-react";
+import type { AgentDetailResponse, AgentListItem, IdentityToken } from "../api/types";
+import type { User } from "../api";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
-import { Brand, formatSiteRelativeTime, getProjectCardStyle, getSitePreviewImage, type DashboardSection, type SiteDetailTab, type UserSettingsSection } from "../legacy/shared";
+import { Brand, formatSiteRelativeTime, getProjectCardStyle, type DashboardSection, type SiteDetailTab, type UserSettingsSection } from "../legacy/shared";
 import { DashboardChatIcon, DashboardChatScreen, DashboardSitesIcon, getDashboardChatGreetingName } from "../pages/ChatPage";
+import { AgentDetailPage } from "../pages/AgentDetailPage";
 import { UserSettingsPage, getUserInitials } from "../pages/SettingsPage";
-import { SiteDetailOverlay } from "../pages/AgentDetailPage";
 
 export function DashboardScreen({
   error,
   user,
-  sites,
-  selectedSite,
+  agents,
+  selectedAgentDetail,
   activeSection,
   activeSiteDetailTab,
   activeUserSettingsSection,
-  selectedApiKeys,
-  onCreateSite,
+  onCreateAgent,
   onLogout,
-  onSelectSite,
+  onSelectAgent,
   onOpenDashboard,
   onOpenDashboardChat,
   onOpenProfileSettings,
   onUserSettingsSectionChange,
   onUserUpdated,
-  onSiteDetailTabChange,
-  onApiKeyCreated,
-  onApiKeyDeleted,
-  onSiteDetailLoaded,
-  onSiteUpdated,
-  onSiteDeleted,
+  onAgentDetailLoaded,
+  onAgentUpdated,
+  onAgentDeleted,
+  onTokensChanged,
   onNotify,
   onCloseDetail
 }: {
   error: string;
   user: User;
-  sites: Site[];
-  selectedSite: Site | null;
+  agents: AgentListItem[];
+  selectedAgentDetail: AgentDetailResponse | null;
   activeSection: DashboardSection;
   activeSiteDetailTab: SiteDetailTab;
   activeUserSettingsSection: UserSettingsSection;
-  selectedApiKeys: SiteApiKey[];
-  onCreateSite: () => void;
+  onCreateAgent: () => void;
   onLogout: () => void;
-  onSelectSite: (siteId: string) => void;
+  onSelectAgent: (agentId: string) => void;
   onOpenDashboard: () => void;
   onOpenDashboardChat: () => void;
   onOpenProfileSettings: () => void;
   onUserSettingsSectionChange: (section: UserSettingsSection) => void;
   onUserUpdated: (user: User) => void;
-  onSiteDetailTabChange: (siteId: string, tab: SiteDetailTab) => void;
-  onApiKeyCreated: (apiKey: SiteApiKey) => void;
-  onApiKeyDeleted: (apiKeyId: string) => void;
-  onSiteDetailLoaded: (detail: SiteDetailResponse) => void;
-  onSiteUpdated: (site: Site) => void;
-  onSiteDeleted: (siteId: string) => void;
+  onAgentDetailLoaded: (detail: AgentDetailResponse) => void;
+  onAgentUpdated: (detail: AgentDetailResponse) => void;
+  onAgentDeleted: (agentId: string) => void;
+  onTokensChanged: (tokens: IdentityToken[]) => void;
   onNotify: (notification: ToastNotificationInput) => void;
   onCloseDetail: () => void;
 }) {
@@ -80,7 +74,7 @@ export function DashboardScreen({
               <DashboardChatIcon />
               <span>Chat</span>
             </button>
-            <button className="dashboard-page__rail-button" type="button" onClick={onCreateSite}>
+            <button className="dashboard-page__rail-button" type="button" onClick={onCreateAgent}>
               <Plus size={18} aria-hidden="true" />
               <span>New identity</span>
             </button>
@@ -108,101 +102,144 @@ export function DashboardScreen({
       </aside>
 
       {activeSection === "chat" ? (
-        <DashboardChatScreen user={user} sites={sites} />
+        <DashboardChatScreen user={user} sites={agents.map(agentToChatSite)} />
       ) : activeSection === "settings" ? (
         <UserSettingsPage
           user={user}
           activeSection={activeUserSettingsSection}
-          sites={sites}
+          sites={agents.map(agentToChatSite)}
           onSectionChange={onUserSettingsSectionChange}
           onUserUpdated={onUserUpdated}
           onNotify={onNotify}
           onBack={onOpenDashboard}
           onLogout={onLogout}
         />
-      ) : selectedSite ? (
-        <SiteDetailOverlay
-          site={selectedSite}
+      ) : selectedAgentDetail ? (
+        <AgentDetailPage
+          detail={selectedAgentDetail}
           activeTab={activeSiteDetailTab}
-          apiKeys={selectedApiKeys}
-          onApiKeyCreated={onApiKeyCreated}
-          onApiKeyDeleted={onApiKeyDeleted}
-          onSiteDetailLoaded={onSiteDetailLoaded}
-          onSiteUpdated={onSiteUpdated}
-          onSiteDeleted={onSiteDeleted}
+          onAgentDetailLoaded={onAgentDetailLoaded}
+          onAgentUpdated={onAgentUpdated}
+          onAgentDeleted={onAgentDeleted}
+          onTokensChanged={onTokensChanged}
           onNotify={onNotify}
-          onTabChange={(tab) => onSiteDetailTabChange(selectedSite.id, tab)}
           onClose={onCloseDetail}
         />
       ) : (
-        <section className="dashboard-page__workspace dashboard-page__workspace--projects">
-          <div className="dashboard-page__projects-view" aria-labelledby="sitesTitle">
-            <div className="dashboard-page__projects-shell">
-              <header className="dashboard-page__projects-header">
-                <h1 id="sitesTitle" className="dashboard-page__projects-title">
-                  Agent identities
-                </h1>
-              </header>
-
-              <div className="dashboard-page__projects-grid-shell">
-                {error ? (
-                  <ProjectsState message={error} />
-                ) : sites.length === 0 ? (
-                  <button className="dashboard-page__empty-state" type="button" onClick={onCreateSite}>
-                    <Plus size={20} aria-hidden="true" />
-                    <span>Create your first agent identity</span>
-                    <small>Provision phone, email, card, calendar, and an OpenClaw link.</small>
-                  </button>
-                ) : (
-                  <div className="dashboard-page__projects-grid">
-                    <button
-                      className="dashboard-page__project-card dashboard-page__project-card--create"
-                      type="button"
-                      style={getProjectCardStyle(0)}
-                      onClick={onCreateSite}
-                    >
-                      <div className="dashboard-page__project-preview dashboard-page__project-preview--create">
-                        <Plus size={24} aria-hidden="true" />
-                      </div>
-                      <div className="dashboard-page__project-meta">
-                        <div className="dashboard-page__project-copy">
-                          <h2>New identity</h2>
-                          <p>Give an agent real-world tools</p>
-                        </div>
-                      </div>
-                    </button>
-
-                    {sites.map((site, index) => (
-                      <button
-                        key={site.id}
-                        className="dashboard-page__project-card"
-                        type="button"
-                        style={getProjectCardStyle(index + 1)}
-                        onClick={() => onSelectSite(site.id)}
-                      >
-                        <div className="dashboard-page__project-preview">
-                          <img src={getSitePreviewImage(site)} alt="" aria-hidden="true" />
-                        </div>
-                        <div className="dashboard-page__project-meta">
-                          <div className="dashboard-page__project-copy">
-                            <h2 title={site.name}>{site.name}</h2>
-                            <p>{formatSiteRelativeTime(site.updatedAt)}</p>
-                          </div>
-                          <span className="dashboard-page__project-pill">OpenClaw linked</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
+        <AgentsList
+          agents={agents}
+          error={error}
+          onCreateAgent={onCreateAgent}
+          onSelectAgent={onSelectAgent}
+        />
       )}
     </main>
   );
 }
 
-function ProjectsState({ message }: { message: string }) {
-  return <div className="dashboard-page__projects-state">{message}</div>;
+function AgentsList({
+  agents,
+  error,
+  onCreateAgent,
+  onSelectAgent
+}: {
+  agents: AgentListItem[];
+  error: string;
+  onCreateAgent: () => void;
+  onSelectAgent: (agentId: string) => void;
+}) {
+  return (
+    <section className="dashboard-page__workspace dashboard-page__workspace--projects">
+      <div className="dashboard-page__projects-view" aria-labelledby="agentsTitle">
+        <div className="dashboard-page__projects-shell">
+          <header className="dashboard-page__projects-header">
+            <h1 id="agentsTitle" className="dashboard-page__projects-title">
+              Agent identities
+            </h1>
+          </header>
+
+          <div className="dashboard-page__projects-grid-shell">
+            {error ? (
+              <div className="dashboard-page__projects-state">{error}</div>
+            ) : agents.length === 0 ? (
+              <button className="dashboard-page__empty-state" type="button" onClick={onCreateAgent}>
+                <Plus size={20} aria-hidden="true" />
+                <span>Give your agent a real phone number and email address</span>
+                <small>Create an agent identity, then connect it to OpenClaw, Hermes, or your API runtime.</small>
+              </button>
+            ) : (
+              <div className="dashboard-page__projects-grid">
+                <button
+                  className="dashboard-page__project-card dashboard-page__project-card--create"
+                  type="button"
+                  style={getProjectCardStyle(0)}
+                  onClick={onCreateAgent}
+                >
+                  <div className="dashboard-page__project-preview dashboard-page__project-preview--create">
+                    <Plus size={24} aria-hidden="true" />
+                  </div>
+                  <div className="dashboard-page__project-meta">
+                    <div className="dashboard-page__project-copy">
+                      <h2>New identity</h2>
+                      <p>Provision real-world tools</p>
+                    </div>
+                  </div>
+                </button>
+
+                {agents.map((agent, index) => (
+                  <button
+                    key={agent.id}
+                    className="dashboard-page__project-card"
+                    type="button"
+                    style={getProjectCardStyle(index + 1)}
+                    onClick={() => onSelectAgent(agent.id)}
+                  >
+                    <div className="dashboard-page__project-preview dashboard-page__project-preview--create">
+                      <span className={`dashboard-page__project-pill dashboard-page__project-pill--${agent.status}`}>{agent.status}</span>
+                    </div>
+                    <div className="dashboard-page__project-meta">
+                      <div className="dashboard-page__project-copy">
+                        <h2 title={agent.name}>{agent.name}</h2>
+                        <p>{formatSiteRelativeTime(agent.updatedAt)}</p>
+                        <small>{contactSummary(agent)}</small>
+                      </div>
+                      <span className="dashboard-page__project-pill">
+                        {agent.capabilities.email ? <Mail size={14} aria-hidden="true" /> : null}
+                        {agent.capabilities.phone ? <Phone size={14} aria-hidden="true" /> : null}
+                        {provisioningLabel(agent)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function contactSummary(agent: AgentListItem): string {
+  const contacts = [agent.emailAddress, agent.phoneE164].filter(Boolean);
+  return contacts.length > 0 ? contacts.join(" · ") : "No contact points provisioned yet";
+}
+
+function provisioningLabel(agent: AgentListItem): string {
+  if (agent.provisioning.email.state === "pending" || agent.provisioning.phone.state === "pending") {
+    return "Provisioning";
+  }
+  return agent.runtime ?? "OpenClaw";
+}
+
+function agentToChatSite(agent: AgentListItem) {
+  return {
+    id: agent.id,
+    name: agent.name,
+    domain: agent.runtime ?? "openclaw",
+    publicSiteKey: agent.slug,
+    previewImage: "site-preview-dashboard",
+    createdAt: agent.createdAt,
+    updatedAt: agent.updatedAt
+  };
 }

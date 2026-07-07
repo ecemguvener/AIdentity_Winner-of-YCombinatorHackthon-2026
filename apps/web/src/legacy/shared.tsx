@@ -1,4 +1,4 @@
-import { CalendarDays, CreditCard, Mail, Phone } from "lucide-react";
+import { CalendarDays, Mail, Phone } from "lucide-react";
 import React, { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 export type { ToastNotificationInput } from "../components/ToastNotifications";
 import {
@@ -6,8 +6,6 @@ import {
   type DashboardChatCallEmbed,
   type DashboardChatMessageInput,
   type Site,
-  type SiteApiKey,
-  type SiteDetailResponse,
   type User
 } from "../api";
 import barkanMarkDark from "../assets/barkan/brand/barkan-mark-dark.svg";
@@ -16,10 +14,10 @@ import sitePreviewAgentIdentities from "../assets/barkan/images/site-preview-age
 import sitePreviewConnectOpenClaw from "../assets/barkan/images/site-preview-connect-openclaw.jpg";
 import sitePreviewIdentityReady from "../assets/barkan/images/site-preview-identity-ready.jpg";
 
-export const dashboardPath = "/dashboard";
+export const dashboardPath = "/agents";
 export const dashboardChatPath = `${dashboardPath}/chat`;
 export const userSettingsPath = `${dashboardPath}/settings`;
-export const newSitePath = "/new-site";
+export const newSitePath = "/agents/new";
 export const signinPath = "/signin";
 export const plansPath = "/plans";
 export const profileAvatarMaxBytes = 256 * 1024;
@@ -41,7 +39,7 @@ export type DashboardChatMessage = {
     entries: Array<{ question: string; answer: string }>;
   };
 };
-export type SiteDetailTab = "credentials" | "openclaw" | "phone" | "payments" | "email";
+export type SiteDetailTab = "credentials" | "openclaw" | "phone" | "email";
 export type UserSettingsSection = "profile" | "security" | "notifications" | "billing";
 export type PanelState = "active" | "hidden" | "incoming" | "outgoing";
 export type SetupProgressStep = "connection";
@@ -97,12 +95,6 @@ export const agentIdentityCapabilities = [
     Icon: Mail
   },
   {
-    label: "Card",
-    value: "Visa •••• 4242",
-    description: "Auto-approves under £25, human approval above",
-    Icon: CreditCard
-  },
-  {
     label: "Calendar",
     value: "Managed calendar",
     description: "Availability and scheduling",
@@ -151,7 +143,7 @@ Link endpoint: ${linkEndpoint}
 Project token: ${safeProjectId}
 Confirmation token: ${safeToken}
 
-After installing the skill, call the link endpoint with the confirmation token so Barkan can attach this OpenClaw instance to the identity. Once linked, use the provisioned phone number, email inbox, payment card, calendar, and future real-world tools through the Barkan identity layer.`;
+After installing the skill, call the link endpoint with the confirmation token so Barkan can attach this OpenClaw instance to the identity. Once linked, use the provisioned phone number, email inbox, calendar, and future real-world tools through the Barkan identity layer.`;
 }
 
 export function buildIdentityReceipt(site: Site | null): string {
@@ -163,7 +155,6 @@ name=${identityName}
 openclaw=${endpoint}
 phone=+1-415-555-0198
 email=agent@identity.barkan.dev
-card=visa_4242
 calendar=managed`;
 }
 
@@ -182,7 +173,7 @@ export function isProtectedAppRoute(path: string): boolean {
 }
 
 export function isDashboardRoute(path: string): boolean {
-  return path === dashboardPath || path === `${dashboardPath}/`;
+  return path === "/" || path === dashboardPath || path === `${dashboardPath}/`;
 }
 
 export function isDashboardChatRoute(path: string): boolean {
@@ -206,7 +197,7 @@ export function isPlansRoute(path: string): boolean {
 }
 
 export function getSiteDetailPath(siteId: string, tab: SiteDetailTab = "credentials"): string {
-  return `${dashboardPath}/site/${encodeURIComponent(siteId)}?tab=${tab}`;
+  return `/agents/${encodeURIComponent(siteId)}?tab=${tab}`;
 }
 
 export function getUserSettingsPath(section: UserSettingsSection = "profile"): string {
@@ -228,7 +219,11 @@ export function navigateToPublicHome() {
 }
 
 export function getSiteDetailRoute(path: string, search = ""): { siteId: string; tab: SiteDetailTab } | null {
-  const match = /^\/dashboard\/site\/([^/]+)\/?$/.exec(path);
+  if (isNewSiteRoute(path) || isDashboardChatRoute(path) || isUserSettingsRoute(path) || isDashboardRoute(path)) {
+    return null;
+  }
+
+  const match = /^\/agents\/([^/]+)\/?$/.exec(path);
   if (!match) {
     return null;
   }
@@ -237,7 +232,6 @@ export function getSiteDetailRoute(path: string, search = ""): { siteId: string;
   const tab =
     rawTab === "openclaw" ||
     rawTab === "phone" ||
-    rawTab === "payments" ||
     rawTab === "email"
       ? rawTab
       : "credentials";

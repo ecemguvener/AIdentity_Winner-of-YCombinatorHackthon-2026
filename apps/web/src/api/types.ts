@@ -53,8 +53,10 @@ export interface AgentDetailResponse {
   provisioning: AgentProvisioningSummary;
 }
 
+export type AgentListItem = Agent & { provisioning: AgentProvisioningSummary };
+
 export interface AgentsListResponse {
-  agents: Array<Agent & { provisioning: AgentProvisioningSummary }>;
+  agents: AgentListItem[];
 }
 
 export interface CreateAgentInput {

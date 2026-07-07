@@ -23,38 +23,6 @@ export interface Site {
   updatedAt: string;
 }
 
-export interface SiteApiKey {
-  id: string;
-  name: string;
-  prefix: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-}
-
-export interface SiteDetailResponse {
-  site: Site;
-  apiKeys: SiteApiKey[];
-}
-
-export interface SiteSetup {
-  projectId: string;
-  name: string;
-  domain: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SiteSetupResponse {
-  setup: SiteSetup;
-  apiKey: SiteApiKey;
-  secret: string;
-}
-
-export interface SiteSetupState {
-  setup: SiteSetup;
-  apiKeys: SiteApiKey[];
-}
-
 export interface DashboardChatMessageInput {
   role: "user" | "assistant";
   content: string;
@@ -247,67 +215,8 @@ export const api = {
 
     throw lastError instanceof Error ? lastError : new Error("logout failed");
   },
-  listSites: () => apiRequest<{ sites: Site[] }>("/api/sites"),
-  createSiteSetup: (name: string, domain: string) =>
-    apiRequest<SiteSetupResponse>("/api/site-setups", {
-      method: "POST",
-      body: JSON.stringify({ name, domain })
-    }),
-  getSiteSetup: (projectId: string) => apiRequest<SiteSetupState>(`/api/site-setups/${projectId}`),
-  completeSiteSetup: (projectId: string) =>
-    apiRequest<SiteDetailResponse>(`/api/site-setups/${projectId}/complete`, {
-      method: "POST"
-  }),
-  getSite: (siteId: string) => apiRequest<SiteDetailResponse>(`/api/sites/${siteId}`),
-  updateSite: (siteId: string, updates: { name?: string; domain?: string }) =>
-    apiRequest<{ site: Site }>(`/api/sites/${siteId}`, {
-      method: "PATCH",
-      body: JSON.stringify(updates)
-    }),
-  deleteSite: (siteId: string) =>
-    apiRequest<{ ok: boolean }>(`/api/sites/${siteId}`, {
-      method: "DELETE"
-    }),
-  createSiteApiKey: (siteId: string) =>
-    apiRequest<{ apiKey: SiteApiKey; secret: string }>(`/api/sites/${siteId}/api-keys`, {
-      method: "POST",
-      body: JSON.stringify({ name: "CLI key" })
-    }),
-  deleteSiteApiKey: (siteId: string, apiKeyId: string) =>
-    apiRequest<{ ok: boolean }>(`/api/sites/${siteId}/api-keys/${apiKeyId}`, {
-      method: "DELETE"
-    }),
   sendDashboardChatMessage: (messages: DashboardChatMessageInput[], onEvent: (event: DashboardChatStreamEvent) => void) =>
     streamDashboardChatMessage(messages, onEvent),
-
-  // --- Payment tool (per agent identity / site, authenticated by the session) ---
-  getSitePaymentActivity: (siteId: string) =>
-    apiRequest<PaymentActivity>(`/api/sites/${siteId}/payment-activity`),
-  siteRequestPurchaseFromText: (siteId: string, prompt: string) =>
-    apiRequest<PurchaseDecision & { parsed: ParsedPurchase }>(`/api/sites/${siteId}/payments/request-purchase-from-text`, {
-      method: "POST",
-      body: JSON.stringify({ prompt })
-    }),
-  siteRequestPurchase: (siteId: string, input: PurchaseInput) =>
-    apiRequest<PurchaseDecision>(`/api/sites/${siteId}/payments/request-purchase`, {
-      method: "POST",
-      body: JSON.stringify(input)
-    }),
-  siteApprovePurchase: (siteId: string, requestId: string, note?: string) =>
-    apiRequest<PurchaseDecision>(`/api/sites/${siteId}/payments/${requestId}/approve`, {
-      method: "POST",
-      body: JSON.stringify(note ? { note } : {})
-    }),
-  siteRejectPurchase: (siteId: string, requestId: string, note?: string) =>
-    apiRequest<PurchaseDecision>(`/api/sites/${siteId}/payments/${requestId}/reject`, {
-      method: "POST",
-      body: JSON.stringify(note ? { note } : {})
-    }),
-  siteExecutePurchase: (siteId: string, requestId: string) =>
-    apiRequest<PaymentTransaction>(`/api/sites/${siteId}/payments/${requestId}/execute`, {
-      method: "POST",
-      headers: { "idempotency-key": `ui:${requestId}` }
-    }),
 
   // --- Email tool (per agent identity / site, authenticated by the session) ---
   getSiteEmailActivity: (siteId: string) =>
@@ -327,80 +236,6 @@ export const api = {
   siteResumeEmail: (siteId: string) =>
     apiRequest<EmailIdentityView>(`/api/sites/${siteId}/email/resume`, { method: "POST" })
 };
-
-export type PurchaseStatus = "pending" | "approved" | "requires_approval" | "rejected" | "executed" | "failed";
-
-export interface PurchaseDecision {
-  request_id: string;
-  status: PurchaseStatus;
-  decision_reason: string;
-}
-
-export interface ParsedPurchase {
-  merchant_name: string;
-  item: string | null;
-  merchant_url: string | null;
-  amount: number;
-  currency: string;
-  price_estimated: boolean;
-  purpose: string;
-  parsed_by: "openai" | "heuristic";
-}
-
-export interface PurchaseInput {
-  merchant_name: string;
-  merchant_url?: string;
-  amount: number;
-  currency: string;
-  purpose: string;
-}
-
-export interface PaymentPolicyView {
-  max_transaction_amount: number;
-  daily_limit: number;
-  monthly_limit: number;
-  approval_required_above: number;
-  allowed_merchants: string[];
-  blocked_merchants: string[];
-  blocked_categories: string[];
-  allow_recurring: boolean;
-}
-
-export interface PaymentRequestView {
-  id: string;
-  merchant_name: string;
-  merchant_url: string | null;
-  amount: number;
-  currency: string;
-  purpose: string;
-  item: string | null;
-  status: PurchaseStatus;
-  decision_reason: string;
-  price_estimated: boolean;
-  parsed_by: string | null;
-  created_at: string;
-}
-
-export interface PaymentTransaction {
-  transaction_id: string;
-  purchase_request_id: string;
-  provider: string;
-  provider_transaction_id: string;
-  merchant_name: string;
-  amount: number;
-  currency: string;
-  status: "successful" | "declined" | "failed";
-  decision_reason: string;
-  created_at: string;
-}
-
-export interface PaymentActivity {
-  account_id: string;
-  payment_identity: { payment_identity_id: string; provider: string; card_last4: string; status: string; created_at: string } | null;
-  policy: PaymentPolicyView | null;
-  purchase_requests: PaymentRequestView[];
-  transactions: PaymentTransaction[];
-}
 
 export interface EmailIdentityView {
   email_identity_id: string;

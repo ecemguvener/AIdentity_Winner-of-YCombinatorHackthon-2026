@@ -1,526 +1,301 @@
-import React, { useEffect, useState, type CSSProperties } from "react";
-import { Check, Copy, KeyRound, Loader2, Mail, Phone, Server } from "lucide-react";
-import { api, type Site, type SiteApiKey, type SiteDetailResponse } from "../api";
-import { EmailPanel } from "../components/EmailPanel";
-import { PaymentsPanel } from "../components/PaymentsPanel";
-import { PhonePanel } from "../components/PhonePanel";
-import {
-  Brand,
-  agentIdentityCapabilities,
-  buildIdentityReceipt,
-  formatSiteRelativeTime,
-  getErrorMessage,
-  onboardingSetupSteps,
-  sleep,
-  type SetupProgressStep,
-  type SetupStepProgress,
-  type SiteDetailTab,
-  type ToastNotificationInput
-} from "../legacy/shared";
-import { BackChevronIcon, DeleteMinusCircleIcon, SiteSettingsCategoryIcon } from "./SettingsPage";
+import { Copy, KeyRound, Loader2, Mail, Phone, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { agentsApi } from "../api/agents";
+import type { AgentDetailResponse, IdentityToken } from "../api/types";
+import type { ToastNotificationInput } from "../components/ToastNotifications";
+import { Brand, getErrorMessage, type SiteDetailTab } from "../legacy/shared";
+import { BackChevronIcon, SiteSettingsCategoryIcon } from "./SettingsPage";
 
-export function SiteDetailOverlay({
-  site,
+const pollIntervalMs = 3000;
+
+export function AgentDetailPage({
+  detail,
   activeTab,
-  apiKeys,
-  onApiKeyCreated,
-  onApiKeyDeleted,
-  onSiteDetailLoaded,
-  onSiteUpdated,
-  onSiteDeleted,
+  onAgentDetailLoaded,
+  onAgentUpdated,
+  onAgentDeleted,
+  onTokensChanged,
   onNotify,
-  onTabChange,
   onClose
 }: {
-  site: Site;
+  detail: AgentDetailResponse;
   activeTab: SiteDetailTab;
-  apiKeys: SiteApiKey[];
-  onApiKeyCreated: (apiKey: SiteApiKey) => void;
-  onApiKeyDeleted: (apiKeyId: string) => void;
-  onSiteDetailLoaded: (detail: SiteDetailResponse) => void;
-  onSiteUpdated: (site: Site) => void;
-  onSiteDeleted: (siteId: string) => void;
+  onAgentDetailLoaded: (detail: AgentDetailResponse) => void;
+  onAgentUpdated: (detail: AgentDetailResponse) => void;
+  onAgentDeleted: (agentId: string) => void;
+  onTokensChanged: (tokens: IdentityToken[]) => void;
   onNotify: (notification: ToastNotificationInput) => void;
-  onTabChange: (tab: SiteDetailTab) => void;
   onClose: () => void;
 }) {
-  const [draftName, setDraftName] = useState(site.name);
-  const [draftDomain, setDraftDomain] = useState(site.domain);
-  const [draftDescription, setDraftDescription] = useState("");
-  const [isSavingSite, setIsSavingSite] = useState(false);
-  const [siteSaveError, setSiteSaveError] = useState("");
-  const [createdApiKeySecret, setCreatedApiKeySecret] = useState<{
-    apiKeyId: string;
-    secret: string;
-  } | null>(null);
-  const [apiKeyError, setApiKeyError] = useState("");
-  const [isCreatingApiKey, setIsCreatingApiKey] = useState(false);
-  const [deletingApiKeyId, setDeletingApiKeyId] = useState<string | null>(null);
-  const [copiedApiKeyId, setCopiedApiKeyId] = useState<string | null>(null);
-  const [isDeletingSite, setIsDeletingSite] = useState(false);
-  const [siteDeleteError, setSiteDeleteError] = useState("");
-  useEffect(() => {
-    setDraftName(site.name);
-    setDraftDomain(site.domain);
-    setSiteSaveError("");
-  }, [site.id, site.name, site.domain]);
+  const { agent, tokens, provisioning } = detail;
+  const [error, setError] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [newTokenSecret, setNewTokenSecret] = useState<string | null>(null);
+  const [tokenName, setTokenName] = useState("runtime token");
+  const isProvisioning = provisioning.email.state === "pending" || provisioning.phone.state === "pending";
 
   useEffect(() => {
-    setDraftDescription("");
-  }, [site.id]);
-
-  async function copySnippet() {
-    await navigator.clipboard.writeText(buildIdentityReceipt(site));
-    onNotify({
-      title: "Identity receipt copied"
-    });
-  }
-
-  async function saveSiteSettings() {
-    const nextName = draftName.trim();
-    const nextDomain = draftDomain.trim();
-
-    if (!nextName || !nextDomain) {
-      setSiteSaveError("Identity name and OpenClaw endpoint are required.");
-      return;
-    }
-
-    const updates: { name?: string; domain?: string } = {};
-    if (nextName !== site.name) {
-      updates.name = nextName;
-    }
-    if (nextDomain !== site.domain) {
-      updates.domain = nextDomain;
-    }
-
-    if (Object.keys(updates).length === 0) {
-      setSiteSaveError("");
-      return;
-    }
-
-    setIsSavingSite(true);
-    setSiteSaveError("");
-
-    try {
-      const [response] = await Promise.all([
-        api.updateSite(site.id, updates),
-        sleep(500)
-      ]);
-      onSiteUpdated(response.site);
-      onNotify({
-        title: "Identity settings saved"
-      });
-    } catch (saveError) {
-      setSiteSaveError(getErrorMessage(saveError, "Could not save identity settings"));
-    } finally {
-      setIsSavingSite(false);
-    }
-  }
-
-  async function createApiKey() {
-    setApiKeyError("");
-    setIsCreatingApiKey(true);
-
-    try {
-      const response = await api.createSiteApiKey(site.id);
-      setCreatedApiKeySecret({
-        apiKeyId: response.apiKey.id,
-        secret: response.secret
-      });
-      onApiKeyCreated(response.apiKey);
-      onNotify({
-        title: "Link token created"
-      });
-    } catch (createError) {
-      setApiKeyError(getErrorMessage(createError, "Could not create link token"));
-    } finally {
-      setIsCreatingApiKey(false);
-    }
-  }
-
-  async function copyApiKey(apiKeyId: string, secret: string) {
-    await navigator.clipboard.writeText(secret);
-    setCopiedApiKeyId(apiKeyId);
-    onNotify({
-      title: "Link token copied"
-    });
-    window.setTimeout(() => setCopiedApiKeyId(null), 1400);
-  }
-
-  async function deleteApiKey(apiKeyId: string) {
-    setApiKeyError("");
-    setDeletingApiKeyId(apiKeyId);
-
-    try {
-      await api.deleteSiteApiKey(site.id, apiKeyId);
-      if (createdApiKeySecret?.apiKeyId === apiKeyId) {
-        setCreatedApiKeySecret(null);
+    if (!isProvisioning) return;
+    const intervalId = window.setInterval(async () => {
+      try {
+        onAgentDetailLoaded(await agentsApi.get(agent.id));
+      } catch {
+        // Polling is best-effort; explicit actions surface errors.
       }
-      onApiKeyDeleted(apiKeyId);
-      onNotify({
-        title: "Link token deleted"
-      });
-    } catch (deleteError) {
-      setApiKeyError(getErrorMessage(deleteError, "Could not delete link token"));
-    } finally {
-      setDeletingApiKeyId(null);
-    }
+    }, pollIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [agent.id, isProvisioning, onAgentDetailLoaded]);
+
+  async function refreshDetail() {
+    const nextDetail = await agentsApi.get(agent.id);
+    onAgentUpdated(nextDetail);
+    return nextDetail;
   }
 
-  async function deleteSite() {
-    const shouldDelete = window.confirm(`Delete ${site.name}? This cannot be undone.`);
-    if (!shouldDelete) {
-      return;
-    }
-
-    setSiteDeleteError("");
-    setIsDeletingSite(true);
-
+  async function runAction(label: string, action: () => Promise<void>) {
+    setBusyAction(label);
+    setError("");
     try {
-      await api.deleteSite(site.id);
-      onSiteDeleted(site.id);
-      onNotify({
-        title: "Agent identity deleted"
-      });
-    } catch (deleteError) {
-      setSiteDeleteError(getErrorMessage(deleteError, "Could not delete agent identity"));
-      setIsDeletingSite(false);
+      await action();
+    } catch (actionError) {
+      setError(getErrorMessage(actionError, "Action failed"));
+    } finally {
+      setBusyAction(null);
     }
   }
 
-  const normalizedDraftName = draftName.trim();
-  const normalizedDraftDomain = draftDomain.trim();
-  const hasSiteDraftChanges = normalizedDraftName !== site.name || normalizedDraftDomain !== site.domain;
-  const isSaveDisabled = isSavingSite || !normalizedDraftName || !normalizedDraftDomain || !hasSiteDraftChanges;
-  const previewDescription = draftDescription.trim() || "This OpenClaw agent can call, email, pay, schedule, and receive real-world events.";
+  async function toggleCapability(capability: "email" | "phone", enabled: boolean) {
+    if (!enabled) {
+      const warning =
+        capability === "phone"
+          ? "Disable phone? This may release the phone number once live provisioning is enabled."
+          : "Disable email for this agent identity?";
+      if (!window.confirm(warning)) return;
+    }
+    await runAction(`${capability}-${enabled ? "enable" : "disable"}`, async () => {
+      if (enabled) {
+        await agentsApi.enableCapability(agent.id, capability);
+      } else {
+        await agentsApi.disableCapability(agent.id, capability);
+      }
+      onAgentDetailLoaded(await agentsApi.get(agent.id));
+    });
+  }
+
+  async function createToken() {
+    await runAction("token-create", async () => {
+      const createdToken = await agentsApi.createToken(agent.id, tokenName.trim() || "runtime token");
+      setNewTokenSecret(createdToken.secret);
+      onTokensChanged([{ id: createdToken.id, name: createdToken.name, prefix: createdToken.prefix, status: "active", lastUsedAt: null, createdAt: new Date().toISOString() }, ...tokens]);
+      onNotify({ title: "Identity token created" });
+    });
+  }
+
+  async function revokeToken(tokenId: string) {
+    await runAction(`token-${tokenId}`, async () => {
+      await agentsApi.revokeToken(agent.id, tokenId);
+      const nextDetail = await agentsApi.get(agent.id);
+      onTokensChanged(nextDetail.tokens);
+      onNotify({ title: "Identity token revoked" });
+    });
+  }
+
+  async function pauseOrResume() {
+    await runAction("status", async () => {
+      const nextStatus = agent.status === "paused" ? "active" : "paused";
+      await agentsApi.update(agent.id, { status: nextStatus });
+      await refreshDetail();
+      onNotify({ title: nextStatus === "paused" ? "Agent paused" : "Agent resumed" });
+    });
+  }
+
+  async function deleteAgent() {
+    const typedName = window.prompt(`Type ${agent.name} to delete this agent identity.`);
+    if (typedName !== agent.name) return;
+    await runAction("delete", async () => {
+      await agentsApi.delete(agent.id);
+      onAgentDeleted(agent.id);
+      onNotify({ title: "Agent identity deleted" });
+    });
+  }
+
+  const visibleTab = activeTab === "email" || activeTab === "phone" ? activeTab : "credentials";
 
   return (
-    <section className="site-detail-page dashboard-page__workspace" aria-labelledby="siteDetailTitle">
-      <div className="site-detail-page__shell">
-        <aside className="site-detail-page__sidebar" aria-label="Agent identity sections">
-          <button className="site-detail-page__back" type="button" onClick={onClose} aria-label="Back to identities">
-            <BackChevronIcon />
+    <section className="site-detail-page" aria-labelledby="agentDetailTitle">
+      <aside className="site-detail-page__sidebar">
+        <button className="site-detail-page__back" type="button" onClick={onClose}>
+          <BackChevronIcon />
+          <span>Back</span>
+        </button>
+        <Brand className="site-detail-page__brand" />
+        <nav className="site-detail-page__tabs" role="tablist" aria-label="Agent detail">
+          <DetailTab active={visibleTab === "credentials"} icon="general" label="Overview" />
+          <DetailTab active={visibleTab === "email"} icon="email" label="Email" />
+          <DetailTab active={visibleTab === "phone"} icon="phone" label="Phone" />
+          <button className="site-detail-page__tab" type="button" disabled title="Controlled agent spending is on the roadmap">
+            <SiteSettingsCategoryIcon icon="billing" />
+            <span>Payment card</span>
+            <small>Coming soon</small>
           </button>
+        </nav>
+      </aside>
 
-          <nav className="site-detail-page__tabs" role="tablist" aria-label="Agent identity details">
-            <button
-              className="site-detail-page__tab"
-              id="site-detail-credentials-tab"
-              type="button"
-              role="tab"
-              aria-label="Credentials"
-              aria-selected={activeTab === "credentials"}
-              aria-controls="site-detail-credentials-panel"
-              onClick={() => onTabChange("credentials")}
-            >
-              <SiteSettingsCategoryIcon icon="general" />
-              <span>General</span>
-            </button>
-            <button
-              className="site-detail-page__tab"
-              id="site-detail-openclaw-tab"
-              type="button"
-              role="tab"
-              aria-label="OpenClaw"
-              aria-selected={activeTab === "openclaw"}
-              aria-controls="site-detail-openclaw-panel"
-              onClick={() => onTabChange("openclaw")}
-            >
-              <SiteSettingsCategoryIcon icon="openclaw" />
-              <span>OpenClaw</span>
-            </button>
-            <button
-              className="site-detail-page__tab"
-              id="site-detail-phone-tab"
-              type="button"
-              role="tab"
-              aria-label="Phone"
-              aria-selected={activeTab === "phone"}
-              aria-controls="site-detail-phone-panel"
-              onClick={() => onTabChange("phone")}
-            >
-              <SiteSettingsCategoryIcon icon="phone" />
-              <span>Phone</span>
-            </button>
-            <button
-              className="site-detail-page__tab"
-              id="site-detail-payments-tab"
-              type="button"
-              role="tab"
-              aria-label="Payments"
-              aria-selected={activeTab === "payments"}
-              aria-controls="site-detail-payments-panel"
-              onClick={() => onTabChange("payments")}
-            >
-              <SiteSettingsCategoryIcon icon="act-on-behalf" />
-              <span>Payments</span>
-            </button>
-            <button
-              className="site-detail-page__tab"
-              id="site-detail-email-tab"
-              type="button"
-              role="tab"
-              aria-label="Email"
-              aria-selected={activeTab === "email"}
-              aria-controls="site-detail-email-panel"
-              onClick={() => onTabChange("email")}
-            >
-              <SiteSettingsCategoryIcon icon="email" />
-              <span>Email</span>
-            </button>
-          </nav>
-        </aside>
+      <div className="site-detail-page__content">
+        <header className="site-detail-page__header">
+          <div>
+            <h1 id="agentDetailTitle">{agent.name}</h1>
+            <p>{agent.description || "Agent identity linked to real-world tools."}</p>
+          </div>
+          <span className={`dashboard-page__project-pill dashboard-page__project-pill--${agent.status}`}>{agent.status}</span>
+        </header>
 
-        <div
-          className="site-detail-page__content"
-          key={activeTab}
-          id={`site-detail-${activeTab}-panel`}
-          role="tabpanel"
-          aria-labelledby={`site-detail-${activeTab}-tab`}
-        >
-          {activeTab === "payments" ? (
-            <PaymentsPanel siteId={site.id} siteName={site.name} />
-          ) : activeTab === "email" ? (
-            <EmailPanel siteId={site.id} siteName={site.name} />
-          ) : activeTab === "phone" ? (
-            <PhonePanel siteName={site.name} />
-          ) : activeTab === "credentials" ? (
-            <>
-              <header className="site-detail-page__header">
-                <div>
-                  <h1 id="siteDetailTitle">Identity</h1>
-                </div>
-                <button
-                  className={`site-detail-page__save${isSavingSite ? " site-detail-page__save--saving" : ""}`}
-                  type="button"
-                  onClick={() => void saveSiteSettings()}
-                  disabled={isSaveDisabled}
-                  aria-label={isSavingSite ? "Saving identity settings" : "Save identity settings"}
-                >
-                  {isSavingSite ? <Loader2 size={15} strokeWidth={3.2} aria-hidden="true" /> : <span>Save</span>}
-                </button>
-              </header>
+        {error ? <p className="field-error" role="alert">{error}</p> : null}
+        {visibleTab === "credentials" ? (
+          <>
+            <section className="site-detail-page__section">
+              <h2>Contact points</h2>
+              <ContactPoint label="Email" value={agent.emailAddress} icon={<Mail size={16} aria-hidden="true" />} />
+              <ContactPoint label="Phone" value={agent.phoneE164} icon={<Phone size={16} aria-hidden="true" />} />
+            </section>
 
-              <div className="site-detail-page__form-grid">
-                <label className="site-detail-page__field">
-                  <span>Identity name</span>
-                  <input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
-                </label>
-
-                <label className="site-detail-page__field">
-                  <span>OpenClaw endpoint</span>
-                  <input value={draftDomain} onChange={(event) => setDraftDomain(event.target.value)} />
-                </label>
-
-                <label className="site-detail-page__field site-detail-page__field--textarea">
-                  <span>Description</span>
-                  <textarea
-                    value={draftDescription}
-                    onChange={(event) => setDraftDescription(event.target.value)}
-                    placeholder="What this agent is allowed to do"
-                  />
-                </label>
-
-                <div className="site-detail-page__preview" aria-label="Agent identity preview">
-                  <span>Identity bundle</span>
-                  <div className="site-detail-page__preview-card">
-                    <Brand
-                      className="site-detail-page__preview-brand"
-                      label={normalizedDraftDomain || site.domain}
-                      theme="light"
-                    />
-                    <strong>{normalizedDraftName || site.name}</strong>
-                    <p>{previewDescription}</p>
-                  </div>
-                </div>
+            <section className="site-detail-page__section">
+              <h2>Capabilities</h2>
+              <CapabilityRow
+                capability="email"
+                enabled={agent.capabilities.email}
+                isBusy={busyAction === "email-enable" || busyAction === "email-disable"}
+                provisioning={provisioning.email}
+                onToggle={toggleCapability}
+              />
+              <CapabilityRow
+                capability="phone"
+                enabled={agent.capabilities.phone}
+                isBusy={busyAction === "phone-enable" || busyAction === "phone-disable"}
+                provisioning={provisioning.phone}
+                onToggle={toggleCapability}
+              />
+              <div className="site-detail-page__info-row">
+                <span>Payment card</span>
+                <strong>Coming soon</strong>
               </div>
+            </section>
 
-              <section className="site-detail-page__section agent-identity-capabilities" aria-label="Provisioned real-world tools">
-                {agentIdentityCapabilities.map(({ label, value, description, Icon }) => (
-                  <article className="agent-identity-capabilities__item" key={label}>
-                    <span className="agent-identity-capabilities__icon" aria-hidden="true">
-                      <Icon size={17} strokeWidth={2.2} />
-                    </span>
-                    <div>
-                      <strong>{label}</strong>
-                      <span>{value}</span>
-                      <small>{description}</small>
-                    </div>
-                  </article>
-                ))}
-              </section>
-
-              {siteSaveError ? <p className="site-detail-panel__error">{siteSaveError}</p> : null}
-
-              <section className="site-detail-panel__danger site-detail-page__section">
-                <div>
-                  <h3>Danger Zone</h3>
-                  <p>Delete this identity, OpenClaw link tokens, API keys, generated docs, and interaction logs.</p>
-                  {siteDeleteError ? <p className="site-detail-panel__error">{siteDeleteError}</p> : null}
-                </div>
-                <button
-                  className="site-detail-panel__delete-site"
-                  type="button"
-                  onClick={() => void deleteSite()}
-                  disabled={isDeletingSite}
-                >
-                  {isDeletingSite ? (
-                    <Loader2 size={17} aria-hidden="true" />
-                  ) : (
-                    <DeleteMinusCircleIcon className="site-detail-page__delete-icon" />
-                  )}
-                  <span>{isDeletingSite ? "Deleting" : "Delete identity"}</span>
-                </button>
-              </section>
-            </>
-          ) : activeTab === "openclaw" ? (
-            <>
-              <header className="site-detail-page__header">
-                <div>
-                  <h1 id="siteDetailTitle">OpenClaw link</h1>
-                </div>
-              </header>
-
-              <section className="site-detail-panel__receipt site-detail-page__section">
-                <div className="site-detail-page__section-heading">
-                  <div>
-                    <h3>Identity layer receipt</h3>
-                    <p>Use this demo receipt to verify the real-world tools attached to {site.name}.</p>
-                  </div>
-                  <div className="site-detail-page__section-actions">
-                    <button
-                      className="site-detail-page__section-action"
-                      type="button"
-                      onClick={copySnippet}
-                    >
-                      Copy receipt
-                    </button>
-                  </div>
-                </div>
-                <textarea readOnly value={buildIdentityReceipt(site)} spellCheck={false} />
-              </section>
-
-              <section className="site-detail-panel__api-key site-detail-page__section">
-                <div className="site-detail-page__section-heading">
-                  <div>
-                    <h3>OpenClaw linking tokens</h3>
-                    <p>Create a scoped token for an OpenClaw instance to confirm the Barkan identity skill install.</p>
-                  </div>
-                  <button
-                    className="site-detail-page__section-action"
-                    type="button"
-                    onClick={createApiKey}
-                    disabled={isCreatingApiKey}
-                  >
-                    {isCreatingApiKey ? "Creating" : createdApiKeySecret ? "Create another token" : "Create link token"}
+            <section className="site-detail-page__section">
+              <div className="site-detail-page__section-heading">
+                <h2>Identity tokens</h2>
+                <KeyRound size={17} aria-hidden="true" />
+              </div>
+              {newTokenSecret ? (
+                <div className="site-detail-panel__secret">
+                  <code>{newTokenSecret}</code>
+                  <button type="button" onClick={() => void copyText(newTokenSecret, onNotify)}>
+                    <Copy size={15} aria-hidden="true" />
+                    <span>Copy</span>
                   </button>
                 </div>
-                {apiKeys.length > 0 ? (
-                  <div className="site-detail-panel__api-key-list">
-                    {apiKeys.map((apiKey) => (
-                      <div className="site-detail-panel__api-key-row" key={apiKey.id}>
-                        <div>
-                          <strong>{apiKey.name}</strong>
-                          <span>{apiKey.prefix}••••••••••••</span>
-                        </div>
-                        <small>
-                          {apiKey.lastUsedAt ? `Used ${formatSiteRelativeTime(apiKey.lastUsedAt)}` : "Never used"}
-                        </small>
-                        <div className="site-detail-panel__api-key-row-actions">
-                          {createdApiKeySecret?.apiKeyId === apiKey.id ? (
-                            <button
-                              className="site-detail-panel__copy-key"
-                              type="button"
-                              onClick={() => void copyApiKey(apiKey.id, createdApiKeySecret.secret)}
-                            >
-                              {copiedApiKeyId === apiKey.id ? (
-                                <Check size={16} aria-hidden="true" />
-                              ) : (
-                                <Copy size={16} aria-hidden="true" />
-                              )}
-                              <span>{copiedApiKeyId === apiKey.id ? "Copied" : "Copy token"}</span>
-                            </button>
-                          ) : null}
-                          <button
-                            className="site-detail-panel__delete-key"
-                            type="button"
-                            aria-label={`Delete ${apiKey.name}`}
-                            title="Delete link token"
-                            onClick={() => void deleteApiKey(apiKey.id)}
-                            disabled={deletingApiKeyId === apiKey.id}
-                          >
-                            {deletingApiKeyId === apiKey.id ? (
-                              <Loader2 size={16} aria-hidden="true" />
-                            ) : (
-                              <DeleteMinusCircleIcon className="site-detail-page__delete-icon" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+              ) : null}
+              <div className="site-detail-page__token-form">
+                <input value={tokenName} onChange={(event) => setTokenName(event.target.value)} aria-label="Token name" />
+                <button type="button" disabled={busyAction === "token-create"} onClick={() => void createToken()}>
+                  {busyAction === "token-create" ? <Loader2 size={15} aria-hidden="true" /> : <KeyRound size={15} aria-hidden="true" />}
+                  <span>Create token</span>
+                </button>
+              </div>
+              <div className="site-detail-page__token-list">
+                {tokens.map((token) => (
+                  <div className="site-detail-page__info-row" key={token.id}>
+                    <span>{token.name} · {token.prefix}... · {token.lastUsedAt ? `last used ${new Date(token.lastUsedAt).toLocaleDateString()}` : "never used"}</span>
+                    <button type="button" disabled={token.status === "revoked" || busyAction === `token-${token.id}`} onClick={() => void revokeToken(token.id)}>
+                      {token.status === "revoked" ? "Revoked" : "Revoke"}
+                    </button>
                   </div>
-                ) : null}
-                {apiKeyError ? <p className="site-detail-panel__error">{apiKeyError}</p> : null}
-              </section>
-            </>
-          ) : null}
-        </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="site-detail-page__section site-detail-page__section--danger">
+              <h2>Danger zone</h2>
+              <button type="button" onClick={() => void pauseOrResume()}>
+                {agent.status === "paused" ? "Resume agent" : "Pause agent"}
+              </button>
+              <button type="button" onClick={() => void deleteAgent()}>
+                <Trash2 size={15} aria-hidden="true" />
+                <span>Delete agent identity</span>
+              </button>
+            </section>
+          </>
+        ) : (
+          <section className="site-detail-page__section">
+            <h2>{visibleTab === "email" ? "Email" : "Phone"}</h2>
+            <p>{visibleTab === "email" ? "Email inbox and policy UI lands in task 020." : "Phone panel lands in task 029."}</p>
+          </section>
+        )}
       </div>
     </section>
   );
 }
 
-export function SetupProgressStepper({
-  activeStep,
-  completedSteps,
-  stepProgress,
-  steps = onboardingSetupSteps
-}: {
-  activeStep: SetupProgressStep | null;
-  completedSteps: Set<SetupProgressStep>;
-  stepProgress: SetupStepProgress;
-  steps?: Array<{ id: SetupProgressStep; label: string }>;
-}) {
-  const currentStepIndex = activeStep
-    ? steps.findIndex((step) => step.id === activeStep)
-    : Math.max(0, completedSteps.size - 1);
-  const lineProgress = steps.length <= 1 ? (completedSteps.size > 0 ? 1 : 0) : Math.min(completedSteps.size, steps.length - 1) / (steps.length - 1);
-
+function DetailTab({ active, icon, label }: { active: boolean; icon: "general" | "email" | "phone"; label: string }) {
   return (
-    <div
-      className="setup-progress"
-      style={
-        {
-          "--setup-progress-step-count": steps.length,
-          "--setup-progress-line-progress": lineProgress
-        } as CSSProperties
-      }
-      aria-label="Setup progress"
-    >
-      {steps.map((step, index) => {
-        const isCompleted = completedSteps.has(step.id);
-        const isActive = activeStep === step.id;
-        const state = isCompleted ? "complete" : isActive ? "active" : index < currentStepIndex ? "complete" : "pending";
-        const progress = stepProgress[step.id];
-        const circleProgress = isCompleted
-          ? 1
-          : progress && progress.total > 0
-            ? Math.max(0, Math.min(1, progress.current / progress.total))
-            : 0;
+    <button className="site-detail-page__tab" type="button" role="tab" aria-selected={active}>
+      <SiteSettingsCategoryIcon icon={icon} />
+      <span>{label}</span>
+    </button>
+  );
+}
 
-        return (
-          <div className={`setup-progress__step setup-progress__step--${state}`} key={step.id}>
-            <div
-              className="setup-progress__circle"
-              style={{ "--setup-progress-circle-progress": `${circleProgress}turn` } as CSSProperties}
-            >
-              {isCompleted ? <Check size={15} aria-hidden="true" /> : <span>{index + 1}</span>}
-            </div>
-            <span className="setup-progress__label">{step.label}</span>
-            {progress?.label ? <small className="setup-progress__detail">{progress.label}</small> : null}
-          </div>
-        );
-      })}
+function ContactPoint({ icon, label, value }: { icon: ReactNode; label: string; value: string | null }) {
+  return (
+    <div className="site-detail-page__info-row">
+      <span>{icon}{label}</span>
+      {value ? (
+        <button type="button" onClick={() => void navigator.clipboard.writeText(value)}>
+          <strong>{value}</strong>
+          <Copy size={14} aria-hidden="true" />
+        </button>
+      ) : (
+        <strong>Not provisioned</strong>
+      )}
     </div>
   );
+}
+
+function CapabilityRow({
+  capability,
+  enabled,
+  isBusy,
+  provisioning,
+  onToggle
+}: {
+  capability: "email" | "phone";
+  enabled: boolean;
+  isBusy: boolean;
+  provisioning: AgentDetailResponse["provisioning"]["email"];
+  onToggle: (capability: "email" | "phone", enabled: boolean) => Promise<void>;
+}) {
+  return (
+    <div className="site-detail-page__info-row">
+      <span>{capability === "email" ? "Email" : "Phone"}</span>
+      <label className="user-settings-page__toggle">
+        <input
+          type="checkbox"
+          aria-label={`Enable ${capability}`}
+          checked={enabled}
+          disabled={isBusy}
+          onChange={(event) => void onToggle(capability, event.target.checked)}
+        />
+        <span className="user-settings-page__toggle-control" aria-hidden="true" />
+        <span>
+          <strong>{provisioning.state}</strong>
+          <small>{provisioning.detail || (enabled ? "Enabled" : "Off")}</small>
+        </span>
+      </label>
+    </div>
+  );
+}
+
+async function copyText(value: string, onNotify: (notification: ToastNotificationInput) => void) {
+  await navigator.clipboard.writeText(value);
+  onNotify({ title: "Copied" });
 }
