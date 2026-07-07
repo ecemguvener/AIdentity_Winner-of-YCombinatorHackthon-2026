@@ -114,6 +114,15 @@ Agents use bearer-token phone SMS APIs:
 
 `latest-code` scans recent inbound SMS bodies for 4-8 digit verification codes and returns the newest match.
 
+Owners use session-authenticated dashboard routes:
+
+- `GET /api/v1/agents/:agentId/phone`
+- `GET /api/v1/agents/:agentId/phone/calls`
+- `GET /api/v1/agents/:agentId/phone/calls/:callId`
+- `POST /api/v1/agents/:agentId/phone/call`
+- `GET /api/v1/agents/:agentId/phone/sms`
+- `POST /api/v1/agents/:agentId/phone/sms`
+
 Owner-managed phone policy lives at `GET/PUT /api/v1/agents/:agentId/policies/phone`. It controls:
 
 - Approval gates for outbound calls and SMS: `always`, `new_recipients`, or `never`.

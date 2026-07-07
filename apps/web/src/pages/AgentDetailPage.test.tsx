@@ -63,6 +63,33 @@ describe("Agent detail page", () => {
 
     expect(await screen.findByText("maya@agents.barkan.dev")).toBeInTheDocument();
   });
+
+  it("renders the real phone panel from the Phone tab", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/agents/agent_1/phone")) {
+        return jsonResponse({ phone: { number: { id: "phone_1", e164: "+15005550001", country: "US", status: "active", capabilities: { voice: true, sms: true }, created_at: new Date().toISOString() }, capability_enabled: true }, policy: phonePolicy() });
+      }
+      if (url.endsWith("/api/v1/agents/agent_1/phone/calls")) return jsonResponse({ calls: [], next_cursor: null });
+      if (url.endsWith("/api/v1/agents/agent_1/phone/sms")) return jsonResponse({ conversations: [], next_cursor: null });
+      return jsonResponse({ error: "not found" }, 404);
+    });
+
+    render(
+      <AgentDetailPage
+        detail={detail({ email: false, phone: true })}
+        activeTab="phone"
+        onAgentDetailLoaded={vi.fn()}
+        onAgentUpdated={vi.fn()}
+        onAgentDeleted={vi.fn()}
+        onTokensChanged={vi.fn()}
+        onNotify={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText(/\+1 \(500\) 555-0001/)).toBeInTheDocument();
+  });
 });
 
 function detail(capabilities: { email: boolean; phone?: boolean }): AgentDetailResponse {
@@ -117,5 +144,20 @@ function emailThreadsResponse() {
     },
     threads: [],
     nextCursor: null
+  };
+}
+
+function phonePolicy() {
+  return {
+    requireApprovalOutboundCall: "always",
+    requireApprovalSms: "new_recipients",
+    allowedCountries: [],
+    blockedCallers: [],
+    inboundEnabled: true,
+    inboundInstructions: "Answer naturally.",
+    dailyCallLimit: 20,
+    dailySmsLimit: 50,
+    quietHours: { start: "22:00", end: "08:00", timezone: "Europe/Paris" },
+    storeTranscripts: true
   };
 }

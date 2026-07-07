@@ -74,6 +74,73 @@ export interface PhonePolicy {
   storeTranscripts: boolean;
 }
 
+export interface AgentPhoneNumber {
+  id: string;
+  e164: string;
+  country: string;
+  status: "provisioning" | "active" | "releasing" | "released";
+  capabilities: { voice: boolean; sms: boolean };
+  created_at: string;
+}
+
+export interface AgentPhoneOverviewResponse {
+  phone: {
+    number: AgentPhoneNumber | null;
+    capability_enabled: boolean;
+  };
+  policy: PhonePolicy;
+}
+
+export interface AgentPhoneCall {
+  id: string;
+  agent_id: string;
+  phone_number_id: string;
+  direction: "inbound" | "outbound";
+  counterparty_e164: string;
+  task: string | null;
+  status: "queued" | "ringing" | "in_progress" | "completed" | "failed" | "no_answer";
+  provider_call_id: string | null;
+  elevenlabs_conversation_id: string | null;
+  duration_secs: number | null;
+  transcript: Array<{ role: string; message: string; timeInCallSecs: number | null }>;
+  summary: string | null;
+  cost_cents: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentPhoneCallsResponse {
+  calls: AgentPhoneCall[];
+  next_cursor: string | null;
+}
+
+export interface AgentSmsMessage {
+  id: string;
+  direction: "inbound" | "outbound";
+  counterparty_e164: string;
+  body: string;
+  status: "queued" | "sent" | "delivered" | "received" | "failed" | "undelivered";
+  twilio_message_sid: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentSmsConversation {
+  counterparty_e164: string;
+  last_message: AgentSmsMessage;
+  message_count: number;
+}
+
+export interface AgentSmsConversationsResponse {
+  conversations: AgentSmsConversation[];
+  next_cursor: string | null;
+}
+
+export interface AgentSmsThreadResponse {
+  messages: AgentSmsMessage[];
+  next_cursor: string | null;
+}
+
 export interface AgentEmailIdentity {
   email_identity_id: string;
   email_address: string;

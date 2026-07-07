@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { agentsApi } from "../api/agents";
 import type { AgentDetailResponse, IdentityToken } from "../api/types";
 import { EmailPanel } from "../components/EmailPanel";
+import { PhonePanel } from "../components/PhonePanel";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
 import { Brand, getErrorMessage, type SiteDetailTab } from "../legacy/shared";
 import { BackChevronIcon, SiteSettingsCategoryIcon } from "./SettingsPage";
@@ -229,10 +230,12 @@ export function AgentDetailPage({
         ) : visibleTab === "email" ? (
           <EmailPanel agent={agent} onNotify={onNotify} />
         ) : (
-          <section className="site-detail-page__section">
-            <h2>Phone</h2>
-            <p>Phone panel lands in task 029.</p>
-          </section>
+          <PhonePanel
+            agent={agent}
+            provisioning={provisioning.phone}
+            onEnablePhone={() => toggleCapability("phone", true)}
+            onNotify={onNotify}
+          />
         )}
       </div>
     </section>

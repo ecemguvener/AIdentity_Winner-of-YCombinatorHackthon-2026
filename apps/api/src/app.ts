@@ -20,6 +20,7 @@ import { createEmailProvider } from "./providers/email-provider.js";
 import { registerEmailProvisioner } from "./email-provisioning.js";
 import { registerIdentityRoutes } from "./identity.js";
 import { registerPaymentRoutes, registerSitePaymentRoutes } from "./payments.js";
+import { registerPhoneRoutes } from "./phone.js";
 import { registerPolicyRoutes } from "./policies.js";
 import { registerPhoneProvisioner } from "./phone-provisioning.js";
 import { registerPhoneApprovalExecutor } from "./phone-service.js";
@@ -176,6 +177,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerSiteEmailRoutes(app, collections, config, emailProvider);
   registerIdentityRoutes(app, collections, config);
   registerPaymentRoutes(app, collections, config);
+  registerPhoneRoutes(app, collections, config);
   registerPolicyRoutes(app, collections, config);
   registerSitePaymentRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);

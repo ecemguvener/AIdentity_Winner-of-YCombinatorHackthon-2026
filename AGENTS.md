@@ -49,6 +49,12 @@ The Node API exposes:
 - `GET /api/v1/agents/:agentId/email/threads/:threadId/attachments/:attachmentId`
 - `POST /api/v1/agents/:agentId/email/send`
 - `POST /api/v1/agents/:agentId/email/pause|resume`
+- `GET /api/v1/agents/:agentId/phone`
+- `GET /api/v1/agents/:agentId/phone/calls`
+- `GET /api/v1/agents/:agentId/phone/calls/:callId`
+- `POST /api/v1/agents/:agentId/phone/call`
+- `GET /api/v1/agents/:agentId/phone/sms`
+- `POST /api/v1/agents/:agentId/phone/sms`
 - Deprecated legacy adapters over `agents` (respond with `deprecation: true` header): `GET/POST /api/sites`, `POST /api/site-setups`, `GET /api/site-setups/:projectId`, `POST /api/site-setups/:projectId/complete`, `GET/PATCH/DELETE /api/sites/:siteId`, `POST /api/sites/:siteId/api-keys`, `DELETE /api/sites/:siteId/api-keys/:apiKeyId`
 - `POST /api/dashboard/chat`
 - `POST /api/identity/init`
@@ -81,7 +87,8 @@ The Node API exposes:
 |------|---------|
 | `apps/web/src/App.tsx` | Dashboard, auth, identity onboarding, and settings UI |
 | `apps/web/src/api.ts` | Browser API client |
-| `apps/web/src/components/PhonePanel.tsx` | Phone capability UI |
+| `apps/web/src/api/phone.ts` | Browser API client for owner phone/SMS routes |
+| `apps/web/src/components/PhonePanel.tsx` | Real phone/SMS tab: number, calls, transcripts, SMS threads, and policy UI |
 | `apps/web/src/components/EmailPanel.tsx` | Real email inbox, threads, compose, and policy UI |
 | `apps/web/src/components/PaymentsPanel.tsx` | Payment capability UI |
 | `apps/api/src/app.ts` | Fastify app wiring |
@@ -92,6 +99,7 @@ The Node API exposes:
 | `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
+| `apps/api/src/phone.ts` | Owner-facing phone overview, call, and SMS routes |
 | `apps/api/src/phone-service.ts` | Per-agent outbound phone call service, policy/approval gating, call persistence, mock lifecycle, and call serializers |
 | `apps/api/src/phone-policy.ts` | Phone/SMS country allowlist, quiet-hours, and local-day policy helpers |
 | `apps/api/src/phone-post-call.ts` | ElevenLabs post-call webhook finalization, transcript storage, call cost, and usage metering |
