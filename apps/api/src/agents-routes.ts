@@ -16,7 +16,7 @@ import {
   registerStubProvisioners,
   type CapabilityName
 } from "./provisioning.js";
-import { defaultEmailPolicy } from "./policies.js";
+import { defaultEmailPolicy, defaultPhonePolicy } from "./policies.js";
 
 // ---------------------------------------------------------------------------
 // Owner-facing agents REST API (v1). Replaces the legacy sites/site-setups
@@ -78,7 +78,7 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
       _id: new ObjectId(),
       agentId: agent._id,
       email: defaultEmailPolicy(agent.approvalMode),
-      phone: {},
+      phone: defaultPhonePolicy(),
       createdAt: now,
       updatedAt: now
     });

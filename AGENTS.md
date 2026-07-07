@@ -62,6 +62,7 @@ The Node API exposes:
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
 - `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
+- `POST /webhooks/elevenlabs/personalization` (ElevenLabs signed inbound-call personalization; returns conversation initiation data)
 - Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
 
 ## Key Files
@@ -83,7 +84,9 @@ The Node API exposes:
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |
 | `apps/api/src/phone.ts` | Phone call integration/mock fallback |
 | `apps/api/src/phone-provisioning.ts` | Twilio number purchase + ElevenLabs voice-agent phone capability provisioner |
+| `apps/api/src/phone-personalization.ts` | ElevenLabs inbound-call personalization webhook and call row creation |
 | `apps/api/src/phone-numbers.ts` | Twilio phone number persistence and lifecycle helpers |
+| `apps/api/src/lib/phone.ts` | Shared E.164 phone normalization helper |
 | `apps/api/src/providers/twilio-numbers.ts` | Twilio/mock number search, purchase, release, and audit listing |
 | `apps/api/src/providers/elevenlabs-phone.ts` | ElevenLabs Conversational AI phone number import/assign/remove provider |
 | `apps/api/src/email.ts` | Email routes, drafting helpers, and email activity serializers |

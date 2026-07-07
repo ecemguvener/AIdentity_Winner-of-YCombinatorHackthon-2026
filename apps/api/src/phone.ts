@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config.js";
 import { ApiError, type ApiErrorCode } from "./errors.js";
+import { normalizeE164PhoneNumber } from "./lib/phone.js";
 
 const callConversationGuidance =
   "Call naturally and keep the conversation moving. Do not repeatedly ask for confirmation; only confirm final details that affect the outcome, like time, price, address, availability, or cancellation policy.";
@@ -51,7 +52,7 @@ export class PhoneCallError extends ApiError {
 }
 
 export async function placeAgentPhoneCall(request: PhoneCallRequest, config: AppConfig): Promise<PhoneCallResult> {
-  const toNumber = normalizePhoneNumber(request.toNumber);
+  const toNumber = normalizeE164PhoneNumber(request.toNumber);
   if (!toNumber) {
     throw new PhoneCallError("The phone number must be an E.164-style number, for example +14155550198.", 400, "validation_failed");
   }
@@ -344,28 +345,6 @@ function questionToStatement(value: string): string {
 
 function punctuate(value: string): string {
   return /[.!?]$/.test(value) ? value : `${value}.`;
-}
-
-function normalizePhoneNumber(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const normalized = trimmed
-    .replace(/^00/, "+")
-    .replace(/[^\d+]/g, "")
-    .replace(/(?!^)\+/g, "");
-
-  if (/^\+\d{7,15}$/.test(normalized)) {
-    return normalized;
-  }
-
-  if (/^\d{7,15}$/.test(normalized)) {
-    return `+${normalized}`;
-  }
-
-  return null;
 }
 
 function readString(value: unknown): string | null {

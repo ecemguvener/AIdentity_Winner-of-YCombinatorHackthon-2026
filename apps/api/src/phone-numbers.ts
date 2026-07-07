@@ -5,6 +5,7 @@ import { ApiError } from "./errors.js";
 import { recordAudit } from "./audit.js";
 import type { PurchasedTwilioNumber } from "./providers/twilio-numbers.js";
 import { purchaseNumber, releaseNumber } from "./providers/twilio-numbers.js";
+import { normalizeE164PhoneNumber } from "./lib/phone.js";
 
 export interface ReserveNumberInput {
   agent: AgentDocument;
@@ -210,7 +211,7 @@ async function recordPhoneNumberAudit(
 }
 
 function normalizeE164(value: string): string {
-  return value.trim();
+  return normalizeE164PhoneNumber(value) ?? value.trim();
 }
 
 function toObjectId(value: ObjectId | string): ObjectId {

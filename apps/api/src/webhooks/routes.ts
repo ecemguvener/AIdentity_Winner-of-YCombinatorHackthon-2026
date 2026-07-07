@@ -5,6 +5,11 @@ import type { Collections, WebhookEventDocument } from "../db.js";
 import { requireAuth } from "../auth.js";
 import { AUDIT_ACTIONS, recordAudit } from "../audit.js";
 import { ingestResendReceivedEmail } from "../email-service.js";
+import {
+  handleElevenLabsPersonalization,
+  replayElevenLabsPersonalization,
+  validateElevenLabsPersonalizationPayload
+} from "../phone-personalization.js";
 import { createEmailInboundClient } from "../providers/email-provider.js";
 import {
   WEBHOOK_PROVIDERS,
@@ -28,6 +33,17 @@ export function registerWebhookRoutes(app: FastifyInstance, collections: Collect
     extractEventId: (payload) => (isRecord(payload) && typeof payload.id === "string" ? payload.id : null),
     extractEventType: (payload) => (isRecord(payload) && typeof payload.type === "string" ? payload.type : "unknown"),
     handle: (payload) => handleResendWebhook(payload, collections, config, inboundClient)
+  });
+
+  registerWebhookRoute(app, collections, config, {
+    path: "/webhooks/elevenlabs/personalization",
+    provider: "elevenlabs",
+    verify: providerVerifier("elevenlabs"),
+    validatePayload: validateElevenLabsPersonalizationPayload,
+    extractEventId: (payload) => (isRecord(payload) && typeof payload.call_sid === "string" ? payload.call_sid : null),
+    extractEventType: () => "conversation.personalization",
+    handle: (payload) => handleElevenLabsPersonalization(collections, payload),
+    handleReplay: (payload) => replayElevenLabsPersonalization(collections, payload)
   });
 
   // Ops visibility into the dead-letter queue (e.g. ?status=failed). Session

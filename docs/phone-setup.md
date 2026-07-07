@@ -41,6 +41,11 @@ Recommended system prompt template:
 ```text
 You are {{agent_identity_name}}, a real-world AI agent making a phone call on behalf of the Barkan user.
 
+Owner: {{owner_name}}
+Role: {{agent_role}}
+Inbound guidance: {{inbound_guidance}}
+Barkan call id: {{barkan_call_id}}
+
 Recipient: {{recipient_name}}
 Task: {{task}}
 Opening: {{call_opening}}
@@ -48,10 +53,22 @@ Guidance: {{call_guidance}}
 Context: {{context}}
 Source URL: {{source_url}}
 
-Be concise, identify yourself as an AI agent when appropriate, complete only the requested task, and do not invent authority or personal details.
+For inbound calls, answer using the provided first message and follow inbound guidance.
+For outbound calls, complete only the requested task.
+Be concise, identify yourself as an AI agent when appropriate, and do not invent authority or personal details.
 ```
 
-In the ElevenLabs Security tab, allow runtime overrides for the first message and system prompt. Task 024 uses these dynamic variables:
+In the ElevenLabs Security tab, allow runtime overrides for the first message and system prompt.
+
+Inbound personalization uses:
+
+- `agent_identity_name`
+- `owner_name`
+- `agent_role`
+- `inbound_guidance`
+- `barkan_call_id`
+
+Outbound calls use:
 
 - `agent_identity_name`
 - `recipient_name`
@@ -61,7 +78,11 @@ In the ElevenLabs Security tab, allow runtime overrides for the first message an
 - `context`
 - `source_url`
 
-Configure the ElevenLabs workspace webhook secret in Barkan as `ELEVENLABS_WORKSPACE_WEBHOOK_SECRET` before enabling live webhook verification.
+Configure the ElevenLabs workspace webhook secret in Barkan as `ELEVENLABS_WORKSPACE_WEBHOOK_SECRET` before enabling live webhook verification. In ElevenLabs workspace settings, set the Twilio personalization webhook URL to:
+
+```text
+https://api.example.com/webhooks/elevenlabs/personalization
+```
 
 ## Twilio Scope
 
@@ -84,7 +105,10 @@ npm --workspace @barkan/api run twilio:audit
 4. Enable phone in the dashboard.
 5. Poll agent detail until provisioning reports `active` and shows an E.164 number.
 6. Confirm the number exists in Twilio and is imported in ElevenLabs.
-7. Disable phone.
-8. Confirm Twilio number release, ElevenLabs number removal, local row `released`, and audit entries:
+7. Configure ElevenLabs personalization webhook to the API URL above.
+8. Call the number from a real phone and confirm the greeting says the agent name and owner attribution.
+9. Disable phone.
+10. Confirm Twilio number release, ElevenLabs number removal, local row `released`, and audit entries:
    - `phone.provisioned`
+   - `phone.call.inbound`
    - `phone.released`

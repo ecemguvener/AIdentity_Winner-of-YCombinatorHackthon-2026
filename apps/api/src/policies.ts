@@ -3,7 +3,8 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
 import { requireAuth } from "./auth.js";
-import type { AgentDocument, Collections, EmailPolicy } from "./db.js";
+import type { AgentDocument, Collections, EmailPolicy, PhonePolicy } from "./db.js";
+import { normalizeE164PhoneNumber } from "./lib/phone.js";
 import { ApiError } from "./errors.js";
 import type { AppConfig } from "./config.js";
 
@@ -16,6 +17,15 @@ const emailPolicySchema = z.object({
   blockedRecipients: z.array(z.string().min(1).max(320)).max(200).default([]),
   dailySendLimit: z.number().int().min(0).max(10_000).default(defaultDailySendLimit),
   maxRecipientsPerMessage: z.number().int().min(1).max(50).default(defaultMaxRecipientsPerMessage)
+});
+
+const defaultInboundInstructions =
+  "Answer naturally as the agent identity. Be helpful, concise, and collect the caller's name, reason for calling, and any callback details.";
+
+const phonePolicySchema = z.object({
+  inboundEnabled: z.boolean().default(true),
+  blockedCallers: z.array(z.string().min(1).max(32)).max(500).default([]),
+  inboundInstructions: z.string().max(2000).default(defaultInboundInstructions)
 });
 
 export function defaultEmailPolicy(approvalMode: AgentDocument["approvalMode"]): EmailPolicy {
@@ -37,6 +47,43 @@ export function normalizeEmailPolicy(value: unknown, approvalMode: AgentDocument
     allowedRecipients: normalizeRecipientPatterns(parsed.allowedRecipients ?? defaults.allowedRecipients),
     blockedRecipients: normalizeRecipientPatterns(parsed.blockedRecipients ?? defaults.blockedRecipients)
   };
+}
+
+export function defaultPhonePolicy(): PhonePolicy {
+  return {
+    inboundEnabled: true,
+    blockedCallers: [],
+    inboundInstructions: defaultInboundInstructions
+  };
+}
+
+export function normalizePhonePolicy(value: unknown): PhonePolicy {
+  const defaults = defaultPhonePolicy();
+  const parsed = phonePolicySchema.partial().parse(value ?? {});
+  return {
+    ...defaults,
+    ...parsed,
+    blockedCallers: normalizePhonePatterns(parsed.blockedCallers ?? defaults.blockedCallers),
+    inboundInstructions: parsed.inboundInstructions?.trim() || defaults.inboundInstructions
+  };
+}
+
+export async function getPhonePolicy(collections: Collections, agent: AgentDocument): Promise<PhonePolicy> {
+  const policy = await collections.policies.findOne({ agentId: agent._id });
+  if (!policy) {
+    const now = new Date();
+    const phone = defaultPhonePolicy();
+    await collections.policies.insertOne({
+      _id: new ObjectId(),
+      agentId: agent._id,
+      email: defaultEmailPolicy(agent.approvalMode),
+      phone,
+      createdAt: now,
+      updatedAt: now
+    });
+    return phone;
+  }
+  return normalizePhonePolicy(policy.phone);
 }
 
 export async function getEmailPolicy(collections: Collections, agent: AgentDocument): Promise<EmailPolicy> {
@@ -125,6 +172,10 @@ function normalizeRecipientPatterns(patterns: string[]): string[] {
 
 function normalizeRecipientPattern(pattern: string): string {
   return pattern.trim().toLowerCase();
+}
+
+function normalizePhonePatterns(patterns: string[]): string[] {
+  return [...new Set(patterns.map((pattern) => normalizeE164PhoneNumber(pattern)).filter((value): value is string => Boolean(value)))];
 }
 
 function normalizeEmail(email: string): string {

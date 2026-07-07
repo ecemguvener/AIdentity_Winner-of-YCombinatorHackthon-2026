@@ -260,12 +260,18 @@ export interface EmailPolicy {
   maxRecipientsPerMessage: number;
 }
 
-// Per-agent policy configuration (phone shape defined in task 028).
+export interface PhonePolicy {
+  inboundEnabled: boolean;
+  blockedCallers: string[];
+  inboundInstructions: string;
+}
+
+// Per-agent policy configuration.
 export interface PolicyDocument extends Document {
   _id: ObjectId;
   agentId: ObjectId;
   email: EmailPolicy;
-  phone: Record<string, unknown>;
+  phone: PhonePolicy | Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -417,6 +423,7 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.phoneNumbers.createIndex({ e164: 1 }, { unique: true }),
     collections.phoneNumbers.createIndex({ agentId: 1 }),
     collections.calls.createIndex({ agentId: 1, createdAt: -1 }),
+    collections.calls.createIndex({ providerCallId: 1 }, { sparse: true, unique: true }),
     collections.calls.createIndex({ elevenLabsConversationId: 1 }, { sparse: true }),
     collections.smsMessages.createIndex({ agentId: 1, createdAt: -1 }),
     collections.smsMessages.createIndex({ twilioMessageSid: 1 }, { sparse: true, unique: true }),

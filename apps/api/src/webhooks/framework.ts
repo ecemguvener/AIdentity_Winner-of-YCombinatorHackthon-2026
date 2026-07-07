@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { MongoServerError, ObjectId } from "mongodb";
+import { ZodError } from "zod";
 import type { AppConfig } from "../config.js";
 import type { Collections, WebhookEventDocument } from "../db.js";
 import { ApiError } from "../errors.js";
@@ -50,9 +51,11 @@ export interface WebhookRouteOptions {
   path: string;
   provider: WebhookProvider;
   verify: WebhookVerifyFn;
+  validatePayload?: (payload: unknown) => void;
   extractEventId: (payload: unknown, request: FastifyRequest) => string | null;
   extractEventType: (payload: unknown) => string;
-  handle: (payload: unknown, event: WebhookEventDocument) => Promise<void> | void;
+  handle: (payload: unknown, event: WebhookEventDocument) => Promise<unknown> | unknown;
+  handleReplay?: (payload: unknown, event: WebhookEventDocument) => Promise<unknown> | unknown;
 }
 
 /**
@@ -113,6 +116,16 @@ export function registerWebhookRoute(
     }
 
     const payload = request.body;
+    if (options.validatePayload) {
+      try {
+        options.validatePayload(payload);
+      } catch (error) {
+        if (error instanceof ZodError) {
+          throw new ApiError(400, "validation_failed", error.issues[0]?.message ?? "invalid webhook payload");
+        }
+        throw error;
+      }
+    }
     const providerEventId = options.extractEventId(payload, request);
     if (!providerEventId) {
       throw new ApiError(400, "validation_failed", "missing provider event id");
@@ -125,11 +138,18 @@ export function registerWebhookRoute(
       payloadHash: crypto.createHash("sha256").update(rawBody).digest("hex")
     });
     if (!claim.claimed) {
+      if (options.handleReplay) {
+        const replayPayload = await options.handleReplay(payload, claim.event);
+        if (replayPayload !== undefined) {
+          return reply.code(200).send(replayPayload);
+        }
+      }
       return reply.code(200).send({ skipped: true });
     }
 
+    let responsePayload: unknown;
     try {
-      await options.handle(payload, claim.event);
+      responsePayload = await options.handle(payload, claim.event);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await collections.webhookEvents.updateOne(
@@ -144,7 +164,7 @@ export function registerWebhookRoute(
       { _id: claim.event._id },
       { $set: { status: "processed", processedAt: new Date(), updatedAt: new Date() }, $unset: { error: "" } }
     );
-    return reply.code(200).send({ ok: true, event_id: providerEventId });
+    return reply.code(200).send(responsePayload !== undefined ? responsePayload : { ok: true, event_id: providerEventId });
   });
 }
 
