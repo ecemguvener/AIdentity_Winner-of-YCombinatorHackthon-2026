@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
-import type { AgentDocument, Collections, EmailMessageDocument } from "./db.js";
+import type { AgentDocument, ApprovalDocument, Collections, EmailMessageDocument } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { authenticateAgentRequest } from "./agent-auth.js";
 import { ApiError, codeForStatus, type ApiErrorCode } from "./errors.js";
@@ -11,7 +11,7 @@ import {
   getAgentEmailThread,
   listAgentEmailThreads,
   replyToAgentEmailThread,
-  sendAgentEmail
+  sendAgentEmailWithPolicy
 } from "./email-service.js";
 import { createEmailInboundClient, createEmailProvider, type EmailProvider } from "./providers/email-provider.js";
 
@@ -76,6 +76,11 @@ const replySchema = z.object({
   idempotencyKey: z.string().min(1).max(200).optional()
 });
 
+const sendQuerySchema = z.object({
+  wait: z.coerce.number().int().min(1).max(300).optional(),
+  mode: z.enum(["async"]).optional()
+});
+
 // ---------------------------------------------------------------------------
 // Natural-language drafting + reply summaries: OpenAI Responses API → heuristic
 // ---------------------------------------------------------------------------
@@ -101,13 +106,13 @@ export async function sendSiteEmailFromText(
   if (!recipient) {
     throw new EmailError(422, `couldn't find a recipient email in: "${prompt}". Add the recipient's email address.`);
   }
-  const result = await sendAgentEmail(collections, config, provider, {
+  const result = await sendAgentEmailWithPolicy(collections, config, provider, {
     agent,
     to: recipient,
     subject: generated.subject,
     text: generated.body,
     parsedBy: generated.parsedBy
-  });
+  }, { async: true });
   return { ...result, parsed: { ...generated, to: recipient } };
 }
 
@@ -432,10 +437,11 @@ export function registerEmailRoutes(
   const handleSend = async (request: FastifyRequest, reply: FastifyReply) => {
     const context = await loadAgentEmailContext(request, collections);
     const payload = sendSchema.parse(request.body ?? {});
+    const query = readSendApprovalQuery(request);
     const messageText = payload.text ?? payload.body!;
     const idempotencyKey = payload.idempotencyKey ?? readIdempotencyHeader(request);
     return runEmail(reply, async () => {
-      const { message, replayed } = await sendAgentEmail(collections, config, provider, {
+      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
         agent: context.agent,
         to: payload.to,
         cc: payload.cc,
@@ -444,8 +450,11 @@ export function registerEmailRoutes(
         html: payload.html,
         threadId: payload.threadId,
         idempotencyKey
-      });
-      return reply.code(replayed ? 200 : 201).send(serializePersistentSend(message));
+      }, query);
+      if (result.approvalRequired) {
+        return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
+      }
+      return reply.code(result.replayed ? 200 : 201).send(serializePersistentSend(result.message));
     });
   };
 
@@ -461,15 +470,18 @@ export function registerEmailRoutes(
           `couldn't find a recipient email in: "${payload.request}". Ask the user for the recipient's email address, then pass it as "to".`
         );
       }
-      const { message, replayed } = await sendAgentEmail(collections, config, provider, {
+      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
         agent: context.agent,
         to,
         subject: generated.subject,
         text: generated.body,
         idempotencyKey: readIdempotencyHeader(request),
         parsedBy: generated.parsedBy
-      });
-      return reply.code(replayed ? 200 : 201).send({ ...serializePersistentSend(message), parsed: serializeParsed({ ...generated, to }) });
+      }, readSendApprovalQuery(request));
+      if (result.approvalRequired) {
+        return reply.code(202).send({ ...serializeApprovalPending(result.approval, result.decision), parsed: serializeParsed({ ...generated, to }) });
+      }
+      return reply.code(result.replayed ? 200 : 201).send({ ...serializePersistentSend(result.message), parsed: serializeParsed({ ...generated, to }) });
     });
   });
 
@@ -502,13 +514,16 @@ export function registerEmailRoutes(
     const context = await loadAgentEmailContext(request, collections);
     const { threadId } = request.params as { threadId: string };
     const payload = replySchema.parse(request.body ?? {});
-    const { message, replayed } = await replyToAgentEmailThread(collections, config, provider, {
+    const result = await replyToAgentEmailThread(collections, config, provider, {
       agent: context.agent,
       threadId,
       text: payload.text,
       idempotencyKey: payload.idempotencyKey ?? readIdempotencyHeader(request)
     });
-    return reply.code(replayed ? 200 : 201).send(serializePersistentSend(message));
+    if (result.approvalRequired) {
+      return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
+    }
+    return reply.code(result.replayed ? 200 : 201).send(serializePersistentSend(result.message));
   });
 
   app.get("/api/v1/agent/email/threads/:threadId/attachments/:attachmentId", async (request, reply) => {
@@ -596,14 +611,17 @@ export function registerSiteEmailRoutes(
       if (!to) {
         throw new EmailError(422, `couldn't find a recipient email in: "${payload.request}". Add the recipient's email address.`);
       }
-      const { message } = await sendAgentEmail(collections, config, provider, {
+      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
         agent,
         to,
         subject: generated.subject,
         text: generated.body,
         parsedBy: generated.parsedBy
       });
-      return reply.code(201).send({ ...serializePersistentSend(message), parsed: serializeParsed({ ...generated, to }) });
+      if (result.approvalRequired) {
+        return reply.code(202).send({ ...serializeApprovalPending(result.approval, result.decision), parsed: serializeParsed({ ...generated, to }) });
+      }
+      return reply.code(201).send({ ...serializePersistentSend(result.message), parsed: serializeParsed({ ...generated, to }) });
     });
   });
 
@@ -612,7 +630,7 @@ export function registerSiteEmailRoutes(
     if (!agent) return;
     const payload = sendSchema.parse(request.body ?? {});
     return runEmail(reply, async () => {
-      const { message } = await sendAgentEmail(collections, config, provider, {
+      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
         agent,
         to: payload.to,
         cc: payload.cc,
@@ -622,7 +640,10 @@ export function registerSiteEmailRoutes(
         threadId: payload.threadId,
         idempotencyKey: payload.idempotencyKey
       });
-      return reply.code(201).send(serializePersistentSend(message));
+      if (result.approvalRequired) {
+        return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
+      }
+      return reply.code(201).send(serializePersistentSend(result.message));
     });
   });
 
@@ -735,6 +756,22 @@ function serializePersistentSend(message: EmailMessageDocument) {
   };
 }
 
+function serializeApprovalPending(approval: ApprovalDocument, decision: "pending" | "timeout" | "expired") {
+  return {
+    ok: false,
+    status: "approval_required",
+    decision,
+    approval_id: approval._id.toHexString(),
+    approval: {
+      id: approval._id.toHexString(),
+      status: approval.status,
+      payloadSummary: approval.payloadSummary,
+      executionResult: approval.executionResult ?? null,
+      executionError: approval.executionError ?? null
+    }
+  };
+}
+
 function serializeParsed(parsed: GeneratedEmail) {
   return {
     to: parsed.to,
@@ -774,6 +811,14 @@ function serializePersistentMessage(message: EmailMessageDocument) {
 function readIdempotencyHeader(request: FastifyRequest): string | undefined {
   const value = request.headers["idempotency-key"];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readSendApprovalQuery(request: FastifyRequest) {
+  const query = sendQuerySchema.parse(request.query ?? {});
+  return {
+    async: query.mode === "async",
+    waitMs: query.wait ? query.wait * 1000 : undefined
+  };
 }
 
 function serializeEmailAccount(

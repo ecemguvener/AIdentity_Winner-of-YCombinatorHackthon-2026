@@ -143,6 +143,10 @@ async function initAgent(name: string): Promise<{ token: string; id: string; ema
   });
   expect(response.statusCode).toBe(201);
   const body = response.json<{ identity_token: string; agent_id: string; email: string }>();
+  await database.collections.policies.updateOne(
+    { agentId: new ObjectId(body.agent_id) },
+    { $set: { "email.requireApproval": "never" } }
+  );
   return { token: body.identity_token, id: body.agent_id, email: body.email };
 }
 

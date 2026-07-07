@@ -527,7 +527,11 @@ async function runChatEmail(text: string, sites: ChatAgentIdentity[], collection
     if (!agent) {
       return "I couldn't find that agent identity anymore.";
     }
-    const { message, parsed } = await sendSiteEmailFromText(collections, config, createEmailProvider(config), agent, text);
+    const result = await sendSiteEmailFromText(collections, config, createEmailProvider(config), agent, text);
+    if (result.approvalRequired) {
+      return `Email needs approval before sending. Review it in the approvals inbox.`;
+    }
+    const { message, parsed } = result;
     const draftedBy = parsed?.parsedBy === "openai" ? "" : " _(templated draft)_";
     const quotedBody = message.textBody.split("\n").join("\n> ");
     const header = `✉️ **Email ${message.status === "sent" ? "sent" : "failed"}** from **${site.name}** (\`${message.fromEmail}\`)`;

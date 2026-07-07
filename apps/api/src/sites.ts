@@ -8,6 +8,7 @@ import { requireAuth } from "./auth.js";
 import { recordAudit } from "./audit.js";
 import { findOwnedLegacyAgent, issueOwnerToken, revokeAgentAndTokens } from "./agents-routes.js";
 import { identityTokenMode, reserveAgentSlug } from "./identity.js";
+import { defaultEmailPolicy } from "./policies.js";
 import { createAtlasProjectId, isAtlasProjectId, serializeSite } from "./security.js";
 import { issueIdentityToken } from "./agent-auth.js";
 
@@ -84,7 +85,7 @@ export function registerSiteRoutes(
       await collections.policies.insertOne({
         _id: new ObjectId(),
         agentId: agent._id,
-        email: {},
+        email: defaultEmailPolicy(agent.approvalMode),
         phone: {},
         createdAt: now,
         updatedAt: now

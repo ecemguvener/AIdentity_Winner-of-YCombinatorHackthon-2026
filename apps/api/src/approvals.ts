@@ -13,6 +13,7 @@ type ApprovalDecision = "approved" | "rejected";
 type WaitDecision = ApprovalDecision | "expired" | "timeout";
 type ApprovalEventName = "approval.requested" | "approval.decided" | "approval.expired";
 type OwnerEvent = { ownerUserId: ObjectId; name: string; payload: unknown };
+type ApprovalExecutor = (approval: ApprovalDocument) => Promise<Record<string, unknown> | void>;
 
 export interface RequestApprovalInput {
   agentId: ObjectId | string;
@@ -42,6 +43,11 @@ const agentApprovalQuerySchema = z.object({
 
 const bus = new EventEmitter();
 bus.setMaxListeners(500);
+const executors = new Map<ApprovalDocument["kind"], ApprovalExecutor>();
+
+export function registerApprovalExecutor(kind: ApprovalDocument["kind"], executor: ApprovalExecutor): void {
+  executors.set(kind, executor);
+}
 
 export async function requestApproval(
   collections: Collections,
@@ -108,19 +114,24 @@ export async function decideApproval(
     throw new ApiError(409, "validation_failed", `approval is already ${existing.status}`);
   }
 
+  let finalApproval = updated;
+  if (decision === "approved") {
+    finalApproval = await executeApproval(collections, updated);
+  }
+
   await recordAudit(collections, {
-    agentId: updated.agentId,
-    ownerUserId: updated.ownerUserId,
+    agentId: finalApproval.agentId,
+    ownerUserId: finalApproval.ownerUserId,
     actor: "owner",
     action: decision === "approved" ? AUDIT_ACTIONS.approval.approved : AUDIT_ACTIONS.approval.rejected,
     status: decision === "approved" ? "allowed" : "blocked",
-    detail: `${updated.payloadSummary}${note?.trim() ? ` (${note.trim()})` : ""}`,
+    detail: `${finalApproval.payloadSummary}${note?.trim() ? ` (${note.trim()})` : ""}`,
     resourceType: "approval",
-    resourceId: updated._id.toHexString(),
-    metadata: { kind: updated.kind }
+    resourceId: finalApproval._id.toHexString(),
+    metadata: { kind: finalApproval.kind }
   });
-  emitApproval("approval.decided", updated);
-  return updated;
+  emitApproval("approval.decided", finalApproval);
+  return finalApproval;
 }
 
 export async function waitForDecision(
@@ -307,6 +318,40 @@ async function expirePendingApprovals(collections: Collections): Promise<number>
   return expiredCount;
 }
 
+async function executeApproval(collections: Collections, approval: ApprovalDocument): Promise<ApprovalDocument> {
+  const executor = executors.get(approval.kind);
+  if (!executor) {
+    return approval;
+  }
+  try {
+    const executionResult = await executor(approval);
+    const updated = await collections.approvals.findOneAndUpdate(
+      { _id: approval._id },
+      {
+        $set: {
+          executionResult: executionResult ?? {},
+          updatedAt: new Date()
+        },
+        $unset: { executionError: "" }
+      },
+      { returnDocument: "after" }
+    );
+    return updated ?? approval;
+  } catch (error) {
+    const updated = await collections.approvals.findOneAndUpdate(
+      { _id: approval._id },
+      {
+        $set: {
+          executionError: (error as Error).message,
+          updatedAt: new Date()
+        }
+      },
+      { returnDocument: "after" }
+    );
+    return updated ?? { ...approval, executionError: (error as Error).message };
+  }
+}
+
 async function serializeApprovals(collections: Collections, approvals: ApprovalDocument[]) {
   const agentIds = [...new Set(approvals.map((approval) => approval.agentId.toHexString()))].map((id) => new ObjectId(id));
   const agents = await collections.agents.find({ _id: { $in: agentIds } }).project<{ _id: ObjectId; name: string }>({ name: 1 }).toArray();
@@ -327,6 +372,8 @@ function serializeApproval(approval: ApprovalDocument) {
     payloadSummary: approval.payloadSummary,
     payload: approval.payload,
     decisionNote: approval.decisionNote ?? null,
+    executionResult: approval.executionResult ?? null,
+    executionError: approval.executionError ?? null,
     decidedAt: approval.decidedAt?.toISOString() ?? null,
     expiresAt: approval.expiresAt.toISOString(),
     createdAt: approval.createdAt.toISOString(),

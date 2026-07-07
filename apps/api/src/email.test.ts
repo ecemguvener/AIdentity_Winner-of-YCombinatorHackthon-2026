@@ -50,6 +50,10 @@ async function initEmailAgent(app: Awaited<ReturnType<typeof buildTestApp>>, req
   expect(response.statusCode).toBe(201);
   const body = response.json();
   expect(body.email).toMatch(/^ava(?:-\d+)?@agents\.barkan\.dev$/);
+  await database.collections.policies.updateOne(
+    { agentId: new ObjectId(body.agent_id) },
+    { $set: { "email.requireApproval": "never" } }
+  );
   const activity = await app.inject({
     method: "GET",
     url: `/api/identity/${body.agent_id}/email-activity`,

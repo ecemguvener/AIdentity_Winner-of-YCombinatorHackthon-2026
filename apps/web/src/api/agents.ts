@@ -6,6 +6,7 @@ import type {
   CreateAgentInput,
   CreateAgentResponse,
   CreateTokenResponse,
+  EmailPolicy,
   UpdateAgentInput
 } from "./types";
 
@@ -45,5 +46,12 @@ export const agentsApi = {
     requestJson<{ provisioning: { state: "pending"; capability: "email" | "phone" } }>(
       `/api/v1/agents/${encodeURIComponent(agentId)}/capabilities/${capability}/disable`,
       { method: "POST" }
-    )
+    ),
+  getEmailPolicy: (agentId: string) =>
+    requestJson<{ policy: EmailPolicy }>(`/api/v1/agents/${encodeURIComponent(agentId)}/policies/email`),
+  updateEmailPolicy: (agentId: string, policy: EmailPolicy) =>
+    requestJson<{ policy: EmailPolicy }>(`/api/v1/agents/${encodeURIComponent(agentId)}/policies/email`, {
+      method: "PUT",
+      body: JSON.stringify(policy)
+    })
 };

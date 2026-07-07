@@ -15,6 +15,7 @@ import { slugify } from "./lib/slug.js";
 import { normalizeEmail } from "./security.js";
 import { getProvisioner } from "./provisioning.js";
 import { registerEmailProvisioner } from "./email-provisioning.js";
+import { defaultEmailPolicy } from "./policies.js";
 
 type ToolName = "email" | "phone" | "calendar" | "payment";
 type PermissionName = "email.send" | "phone.call" | "calendar.create" | "payment.purchase";
@@ -120,11 +121,10 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
     };
     await collections.agents.insertOne(agent);
 
-    // Default policies row; the email/phone policy shapes land in tasks 019/028.
     const policy: PolicyDocument = {
       _id: new ObjectId(),
       agentId: agent._id,
-      email: {},
+      email: defaultEmailPolicy(agent.approvalMode),
       phone: {},
       createdAt: now,
       updatedAt: now

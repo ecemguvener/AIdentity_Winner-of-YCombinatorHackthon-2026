@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AppConfig } from "./config.js";
 import { connectDatabase, type Database } from "./db.js";
+import { defaultEmailPolicy } from "./policies.js";
 
 let mongoServer: MongoMemoryServer;
 let database: Database;
@@ -176,7 +177,7 @@ describe("uniqueness constraints", () => {
     const agentId = new ObjectId();
     const base = {
       agentId,
-      email: {},
+      email: defaultEmailPolicy("policy"),
       phone: {},
       createdAt: new Date(),
       updatedAt: new Date()

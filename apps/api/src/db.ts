@@ -135,6 +135,8 @@ export interface ApprovalDocument extends Document {
   payloadSummary: string;
   payload: Record<string, unknown>;
   decisionNote?: string;
+  executionResult?: Record<string, unknown>;
+  executionError?: string;
   decidedAt?: Date;
   expiresAt: Date;
   createdAt: Date;
@@ -248,11 +250,19 @@ export interface SmsMessageDocument extends Document {
   updatedAt: Date;
 }
 
-// Per-agent policy configuration (email/phone shapes defined in tasks 019/028).
+export interface EmailPolicy {
+  requireApproval: "always" | "new_recipients" | "never";
+  allowedRecipients: string[];
+  blockedRecipients: string[];
+  dailySendLimit: number;
+  maxRecipientsPerMessage: number;
+}
+
+// Per-agent policy configuration (phone shape defined in task 028).
 export interface PolicyDocument extends Document {
   _id: ObjectId;
   agentId: ObjectId;
-  email: Record<string, unknown>;
+  email: EmailPolicy;
   phone: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;

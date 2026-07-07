@@ -38,6 +38,61 @@ describe("Agent detail page", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/capabilities/email/enable"), expect.anything()));
   });
+
+  it("loads and saves email policy from the Email tab", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/policies/email") && init?.method === "PUT") {
+        expect(JSON.parse(String(init.body))).toMatchObject({
+          requireApproval: "never",
+          allowedRecipients: ["alice@example.com"],
+          dailySendLimit: 25
+        });
+        return jsonResponse({
+          policy: {
+            requireApproval: "never",
+            allowedRecipients: ["alice@example.com"],
+            blockedRecipients: [],
+            dailySendLimit: 25,
+            maxRecipientsPerMessage: 5
+          }
+        });
+      }
+      if (url.endsWith("/policies/email")) {
+        return jsonResponse({
+          policy: {
+            requireApproval: "always",
+            allowedRecipients: [],
+            blockedRecipients: [],
+            dailySendLimit: 50,
+            maxRecipientsPerMessage: 5
+          }
+        });
+      }
+      return jsonResponse({ error: "not found" }, 404);
+    });
+
+    render(
+      <AgentDetailPage
+        detail={detail({ email: true })}
+        activeTab="email"
+        onAgentDetailLoaded={vi.fn()}
+        onAgentUpdated={vi.fn()}
+        onAgentDeleted={vi.fn()}
+        onTokensChanged={vi.fn()}
+        onNotify={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    await screen.findByDisplayValue("50");
+    fireEvent.click(screen.getByLabelText("Never"));
+    fireEvent.change(screen.getByLabelText("Allowed recipients"), { target: { value: "alice@example.com" } });
+    fireEvent.change(screen.getByLabelText("Daily limit"), { target: { value: "25" } });
+    fireEvent.click(screen.getByRole("button", { name: /save policy/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/policies/email"), expect.objectContaining({ method: "PUT" })));
+  });
 });
 
 function detail(capabilities: { email: boolean; phone?: boolean }): AgentDetailResponse {

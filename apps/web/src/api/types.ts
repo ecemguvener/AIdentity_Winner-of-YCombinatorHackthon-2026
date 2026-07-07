@@ -53,6 +53,14 @@ export interface AgentDetailResponse {
   provisioning: AgentProvisioningSummary;
 }
 
+export interface EmailPolicy {
+  requireApproval: "always" | "new_recipients" | "never";
+  allowedRecipients: string[];
+  blockedRecipients: string[];
+  dailySendLimit: number;
+  maxRecipientsPerMessage: number;
+}
+
 export type AgentListItem = Agent & { provisioning: AgentProvisioningSummary };
 
 export interface AgentsListResponse {

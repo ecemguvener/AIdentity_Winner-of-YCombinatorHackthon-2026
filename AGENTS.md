@@ -41,6 +41,7 @@ The Node API exposes:
 - `POST /api/v1/agents/:agentId/tokens` (max 5 active)
 - `DELETE /api/v1/agents/:agentId/tokens/:tokenId`
 - `POST /api/v1/agents/:agentId/capabilities/:capability/enable|disable` (email|phone; card returns 400 "coming soon")
+- `GET/PUT /api/v1/agents/:agentId/policies/email`
 - Deprecated legacy adapters over `agents` (respond with `deprecation: true` header): `GET/POST /api/sites`, `POST /api/site-setups`, `GET /api/site-setups/:projectId`, `POST /api/site-setups/:projectId/complete`, `GET/PATCH/DELETE /api/sites/:siteId`, `POST /api/sites/:siteId/api-keys`, `DELETE /api/sites/:siteId/api-keys/:apiKeyId`
 - `POST /api/dashboard/chat`
 - `POST /api/identity/init`
@@ -70,6 +71,7 @@ The Node API exposes:
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
+| `apps/api/src/policies.ts` | Agent policy defaults, email recipient pattern matching, and policy routes |
 | `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |
 | `apps/api/src/dashboard-chat.ts` | Simulated OpenClaw dashboard chat |
 | `apps/api/src/identity.ts` | Bearer-token agent identity and tool endpoints |

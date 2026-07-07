@@ -1,10 +1,11 @@
 import { MongoServerError, ObjectId } from "mongodb";
 import type { AppConfig } from "./config.js";
-import type { AgentDocument, Collections, EmailMessageDocument, EmailThreadDocument } from "./db.js";
+import type { AgentDocument, ApprovalDocument, Collections, EmailMessageDocument, EmailThreadDocument } from "./db.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
-import { emitOwnerEvent } from "./approvals.js";
+import { emitOwnerEvent, registerApprovalExecutor, requestApproval, waitForDecision } from "./approvals.js";
 import { ApiError } from "./errors.js";
 import type { EmailAttachmentInput, EmailInboundClient, EmailProvider, ReceivedEmailContent } from "./providers/email-provider.js";
+import { getEmailPolicy, isRecipientAllowedByPatterns } from "./policies.js";
 
 export interface SendAgentEmailInput {
   agent: AgentDocument;
@@ -20,11 +21,20 @@ export interface SendAgentEmailInput {
   parsedBy?: "openai" | "heuristic" | null;
 }
 
+export interface EmailApprovalOptions {
+  waitMs?: number;
+  async?: boolean;
+}
+
 export interface SendAgentEmailResult {
   message: EmailMessageDocument;
   thread: EmailThreadDocument;
   replayed: boolean;
 }
+
+export type PolicySendAgentEmailResult =
+  | ({ approvalRequired: false } & SendAgentEmailResult)
+  | { approvalRequired: true; approval: ApprovalDocument; decision: "pending" | "timeout" | "expired" };
 
 export interface IngestResendEmailResult {
   status: "received" | "skipped";
@@ -163,6 +173,81 @@ export async function sendAgentEmail(
   }
 }
 
+export async function sendAgentEmailWithPolicy(
+  collections: Collections,
+  config: AppConfig,
+  provider: EmailProvider,
+  input: SendAgentEmailInput,
+  approvalOptions: EmailApprovalOptions = {}
+): Promise<PolicySendAgentEmailResult> {
+  const policyDecision = await evaluateEmailPolicy(collections, input);
+  if (policyDecision.type === "blocked") {
+    await auditEmailBlocked(collections, input.agent, policyDecision.reason);
+    throw new ApiError(403, "policy_blocked", policyDecision.reason);
+  }
+  if (policyDecision.type === "allowed") {
+    return { approvalRequired: false, ...(await sendAgentEmail(collections, config, provider, input)) };
+  }
+  if (!input.agent.ownerUserId) {
+    const reason = "email approval requires an owner user";
+    await auditEmailBlocked(collections, input.agent, reason);
+    throw new ApiError(403, "policy_blocked", reason);
+  }
+
+  const approval = await requestApproval(collections, {
+    agentId: input.agent._id,
+    ownerUserId: input.agent.ownerUserId,
+    kind: "email.send",
+    payloadSummary: `Send email to ${normalizeEmailAddress(input.to)}: ${input.subject}`,
+    payload: serializeSendPayload(input)
+  });
+  if (approvalOptions.async) {
+    return { approvalRequired: true, approval, decision: "pending" };
+  }
+
+  const decision = await waitForDecision(collections, approval._id, {
+    timeoutMs: approvalOptions.waitMs ?? 90_000
+  });
+  const updated = await collections.approvals.findOne({ _id: approval._id }) ?? approval;
+  if (decision === "approved" && updated.executionResult) {
+    const messageId = updated.executionResult.messageId;
+    const message = typeof messageId === "string" && ObjectId.isValid(messageId)
+      ? await collections.emailMessages.findOne({ _id: new ObjectId(messageId), agentId: input.agent._id })
+      : null;
+    const thread = message
+      ? await collections.emailThreads.findOne({ _id: message.threadId, agentId: input.agent._id })
+      : null;
+    if (message && thread) {
+      return { approvalRequired: false, message, thread, replayed: false };
+    }
+  }
+  if (decision === "rejected") {
+    throw new ApiError(403, "approval_required", "email send was rejected");
+  }
+  if (decision === "expired") {
+    throw new ApiError(403, "approval_required", "email send approval expired");
+  }
+  return { approvalRequired: true, approval: updated, decision: decision === "timeout" ? "timeout" : "pending" };
+}
+
+export function registerEmailApprovalExecutor(collections: Collections, config: AppConfig, provider: EmailProvider): void {
+  registerApprovalExecutor("email.send", async (approval) => {
+    const agent = await collections.agents.findOne({ _id: approval.agentId, status: { $ne: "revoked" } });
+    if (!agent) {
+      throw new Error("agent not found");
+    }
+    const input = parseApprovalSendPayload(agent, approval.payload);
+    const { message, thread } = await sendAgentEmail(collections, config, provider, input);
+    return {
+      messageId: message._id.toHexString(),
+      threadId: thread._id.toHexString(),
+      status: message.status,
+      to: message.toEmail,
+      subject: message.subject
+    };
+  });
+}
+
 export async function ingestResendReceivedEmail(
   collections: Collections,
   config: AppConfig,
@@ -292,7 +377,7 @@ export async function replyToAgentEmailThread(
     headers["In-Reply-To"] = messageId;
     headers.References = [lastInbound?.headers?.references, messageId].filter(Boolean).join(" ");
   }
-  return sendAgentEmail(collections, config, provider, {
+  return sendAgentEmailWithPolicy(collections, config, provider, {
     agent: input.agent,
     to: thread.counterpartyEmail,
     subject: thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`,
@@ -301,6 +386,95 @@ export async function replyToAgentEmailThread(
     idempotencyKey: input.idempotencyKey,
     headers
   });
+}
+
+async function evaluateEmailPolicy(
+  collections: Collections,
+  input: SendAgentEmailInput
+): Promise<{ type: "allowed" } | { type: "approval_required" } | { type: "blocked"; reason: string }> {
+  const policy = await getEmailPolicy(collections, input.agent);
+  const recipients = [input.to, ...(input.cc ?? [])].map(normalizeEmailAddress);
+  if (recipients.length > policy.maxRecipientsPerMessage) {
+    return { type: "blocked", reason: `email has ${recipients.length} recipients; limit is ${policy.maxRecipientsPerMessage}` };
+  }
+  const blocked = recipients.find((recipient) => isRecipientAllowedByPatterns(recipient, policy.blockedRecipients));
+  if (blocked) {
+    return { type: "blocked", reason: `${blocked} is blocked by email policy` };
+  }
+  if (policy.allowedRecipients.length > 0) {
+    const disallowed = recipients.find((recipient) => !isRecipientAllowedByPatterns(recipient, policy.allowedRecipients));
+    if (disallowed) {
+      return { type: "blocked", reason: `${disallowed} is not in the allowed recipients policy` };
+    }
+  }
+  const todaySent = await collections.emailMessages.countDocuments({
+    agentId: input.agent._id,
+    direction: "outbound",
+    status: { $in: ["sent", "delivered"] },
+    createdAt: { $gte: startOfUtcDay(new Date()) }
+  });
+  if (todaySent >= policy.dailySendLimit) {
+    return { type: "blocked", reason: `daily email send limit of ${policy.dailySendLimit} reached` };
+  }
+  if (policy.requireApproval === "never") {
+    return { type: "allowed" };
+  }
+  if (policy.requireApproval === "always") {
+    return { type: "approval_required" };
+  }
+  const knownRecipientCount = await collections.emailMessages.countDocuments({
+    agentId: input.agent._id,
+    direction: "outbound",
+    toEmail: normalizeEmailAddress(input.to),
+    status: { $in: ["sent", "delivered"] }
+  });
+  return knownRecipientCount > 0 ? { type: "allowed" } : { type: "approval_required" };
+}
+
+async function auditEmailBlocked(collections: Collections, agent: AgentDocument, reason: string): Promise<void> {
+  await recordAudit(collections, {
+    agentId: agent._id,
+    ownerUserId: agent.ownerUserId,
+    actor: "agent",
+    action: AUDIT_ACTIONS.email.blocked,
+    status: "blocked",
+    detail: reason
+  });
+}
+
+function serializeSendPayload(input: SendAgentEmailInput): Record<string, unknown> {
+  return {
+    to: input.to,
+    cc: input.cc ?? [],
+    subject: input.subject,
+    text: input.text,
+    ...(input.html ? { html: input.html } : {}),
+    ...(input.threadId ? { threadId: input.threadId } : {}),
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    ...(input.headers ? { headers: input.headers } : {})
+  };
+}
+
+function parseApprovalSendPayload(agent: AgentDocument, payload: Record<string, unknown>): SendAgentEmailInput {
+  const to = String(payload.to ?? "");
+  const subject = String(payload.subject ?? "");
+  const text = String(payload.text ?? "");
+  if (!to || !subject || !text) {
+    throw new Error("approval payload is missing email send fields");
+  }
+  return {
+    agent,
+    to,
+    cc: Array.isArray(payload.cc) ? payload.cc.map(String) : undefined,
+    subject,
+    text,
+    html: typeof payload.html === "string" ? payload.html : undefined,
+    threadId: typeof payload.threadId === "string" ? payload.threadId : undefined,
+    idempotencyKey: typeof payload.idempotencyKey === "string" ? payload.idempotencyKey : undefined,
+    headers: payload.headers && typeof payload.headers === "object" && !Array.isArray(payload.headers)
+      ? payload.headers as Record<string, string>
+      : undefined
+  };
 }
 
 async function resolveThread(
@@ -454,6 +628,10 @@ function formatFrom(name: string, address: string): string {
 
 function normalizeEmailAddress(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function startOfUtcDay(value: Date): Date {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
 
 function readAttachmentSize(attachment: EmailAttachmentInput): number {

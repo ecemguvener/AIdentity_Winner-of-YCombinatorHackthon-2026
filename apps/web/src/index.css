@@ -3142,6 +3142,63 @@ button:disabled {
   padding-top: 0;
 }
 
+.agent-email-policy {
+  display: grid;
+  gap: 14px;
+}
+
+.agent-email-policy__modes,
+.agent-email-policy__numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.agent-email-policy__numbers {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agent-email-policy__mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  color: #111111;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.agent-email-policy__mode input {
+  accent-color: #111111;
+}
+
+.agent-email-policy__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 26px;
+}
+
+.agent-email-policy__chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(12, 98, 145, 0.09);
+  color: #111111;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.agent-email-policy__chip--danger {
+  background: rgba(186, 48, 48, 0.1);
+}
+
 .site-detail-page__theme-section h3,
 .site-detail-page__theme-section p {
   margin: 0;

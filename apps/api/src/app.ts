@@ -15,9 +15,12 @@ import { registerAuthRoutes } from "./auth.js";
 import { requireAuth } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
 import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
+import { registerEmailApprovalExecutor } from "./email-service.js";
+import { createEmailProvider } from "./providers/email-provider.js";
 import { registerEmailProvisioner } from "./email-provisioning.js";
 import { registerIdentityRoutes } from "./identity.js";
 import { registerPaymentRoutes, registerSitePaymentRoutes } from "./payments.js";
+import { registerPolicyRoutes } from "./policies.js";
 import { registerSiteRoutes } from "./sites.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
 import { registerWebhookRoutes } from "./webhooks/routes.js";
@@ -148,6 +151,8 @@ export async function buildApp(config: AppConfig, collections: Collections) {
 
   app.get("/api/health", async () => ({ ok: true }));
   registerEmailProvisioner(collections, config);
+  const emailProvider = createEmailProvider(config);
+  registerEmailApprovalExecutor(collections, config, emailProvider);
   app.get("/api/v1/ops/email-domain", async (request, reply) => {
     await requireAuth(request, reply, collections, config);
     const status = config.PROVIDER_MODE_EMAIL === "live"
@@ -161,10 +166,11 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerAuditRoutes(app, collections, config);
   registerAuthRoutes(app, collections, config);
   registerDashboardChatRoutes(app, collections, config);
-  registerEmailRoutes(app, collections, config);
-  registerSiteEmailRoutes(app, collections, config);
+  registerEmailRoutes(app, collections, config, emailProvider);
+  registerSiteEmailRoutes(app, collections, config, emailProvider);
   registerIdentityRoutes(app, collections, config);
   registerPaymentRoutes(app, collections, config);
+  registerPolicyRoutes(app, collections, config);
   registerSitePaymentRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
