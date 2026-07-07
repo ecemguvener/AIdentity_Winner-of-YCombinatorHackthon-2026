@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { Stripe } from "../providers/stripe-client.js";
 
 // ---------------------------------------------------------------------------
 // Per-provider webhook signature verifiers. All are pure functions over the
@@ -7,44 +8,21 @@ import crypto from "node:crypto";
 // result into a 401.
 // ---------------------------------------------------------------------------
 
-const STRIPE_TOLERANCE_SECONDS = 300;
 const SVIX_TOLERANCE_SECONDS = 300;
 const ELEVENLABS_TOLERANCE_SECONDS = 30 * 60;
 
-/**
- * Stripe `Stripe-Signature` header: `t=<ts>,v1=<hex hmac>,v1=...` where each
- * v1 is HMAC-SHA256(secret, `${t}.${rawBody}`) in hex, tolerance 300s.
- * (Real captured format: `t=1714000000,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd`.)
- * Task 031 may swap this for stripe.webhooks.constructEvent; the wire format
- * is identical so fixtures stay valid.
- */
 export function verifyStripeSignature(secret: string, headers: Record<string, unknown>, rawBody: string): boolean {
   const header = asString(headers["stripe-signature"]);
   if (!header) {
     return false;
   }
 
-  let timestamp: string | undefined;
-  const signatures: string[] = [];
-  for (const part of header.split(",")) {
-    const separatorIndex = part.indexOf("=");
-    if (separatorIndex === -1) {
-      continue;
-    }
-    const key = part.slice(0, separatorIndex).trim();
-    const value = part.slice(separatorIndex + 1).trim();
-    if (key === "t") {
-      timestamp = value;
-    } else if (key === "v1") {
-      signatures.push(value);
-    }
-  }
-  if (!timestamp || signatures.length === 0 || !isFreshTimestampSeconds(timestamp, STRIPE_TOLERANCE_SECONDS)) {
+  try {
+    Stripe.webhooks.constructEvent(rawBody, header, secret);
+    return true;
+  } catch {
     return false;
   }
-
-  const expected = crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
-  return signatures.some((signature) => timingSafeEqualStrings(signature, expected));
 }
 
 /**

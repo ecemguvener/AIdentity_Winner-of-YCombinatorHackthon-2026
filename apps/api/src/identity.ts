@@ -29,13 +29,11 @@ import {
   serializeSmsMessage
 } from "./sms-service.js";
 
-type ToolName = "email" | "phone" | "calendar" | "payment";
-type PermissionName = "email.send" | "phone.call" | "calendar.create" | "payment.purchase";
+type ToolName = "email" | "phone" | "calendar";
+type PermissionName = "email.send" | "phone.call" | "calendar.create";
 
-// Compatibility view over a persisted agent, consumed by the email/payment
-// tool modules (whose own stores are still in-memory and keyed by the agent's
-// hex id). Calendar/payment capability flags land in later tasks; until then
-// those demo tools gate only on agent status + approval mode.
+// Compatibility view over a persisted agent, consumed by legacy tool routes.
+// Calendar remains demo-scoped until the real integration lands.
 export interface AgentIdentity {
   id: string;
   name: string;
@@ -54,7 +52,6 @@ export function agentIdentityView(agent: AgentDocument): AgentIdentity {
       "email.send": agent.capabilities.email,
       "phone.call": agent.capabilities.phone,
       "calendar.create": true,
-      "payment.purchase": true,
       requiresHumanApproval: agent.approvalMode !== "autonomous"
     }
   };
@@ -74,15 +71,14 @@ const initIdentitySchema = z.object({
   use_case: z.string().min(1).max(120).default("automation"),
   owner_email: z.string().email().optional(),
   tools: z
-    .array(z.enum(["email", "phone", "calendar", "payment"]))
+    .array(z.enum(["email", "phone", "calendar"]))
     .min(1)
-    .default(["email", "phone", "calendar", "payment"]),
+    .default(["email", "phone", "calendar"]),
   permissions: z
     .object({
       "email.send": z.boolean().optional(),
       "phone.call": z.boolean().optional(),
       "calendar.create": z.boolean().optional(),
-      "payment.purchase": z.boolean().optional(),
       requires_human_approval: z.boolean().optional()
     })
     .optional()
@@ -205,7 +201,7 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       status: agent.status,
       runtime: agent.runtime,
       use_case: agent.description,
-      // Real phone provisioning lands in a later task; card is deferred.
+      // Card is deferred.
       email: emailAddress,
       phone: null,
       payment: null,
@@ -224,9 +220,6 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
         email_activity: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/email-activity`,
         phone_call: `${config.PUBLIC_API_URL}/api/tools/phone/call`,
         calendar_book: `${config.PUBLIC_API_URL}/api/tools/calendar/book`,
-        payment_request_purchase: `${config.PUBLIC_API_URL}/api/tools/payments/request-purchase`,
-        payment_request_purchase_from_text: `${config.PUBLIC_API_URL}/api/tools/payments/request-purchase-from-text`,
-        payment_activity: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/payment-activity`,
         audit_log: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/audit-log`,
         token_rotate: `${config.PUBLIC_API_URL}/api/identity/tokens/rotate`
       }
@@ -566,7 +559,6 @@ function serializePermissions(identity: AgentIdentity) {
     "email.send": identity.permissions["email.send"],
     "phone.call": identity.permissions["phone.call"],
     "calendar.create": identity.permissions["calendar.create"],
-    "payment.purchase": identity.permissions["payment.purchase"],
     requires_human_approval: identity.permissions.requiresHumanApproval
   };
 }

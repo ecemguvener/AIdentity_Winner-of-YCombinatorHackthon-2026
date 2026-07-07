@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "seed:demo": "tsx src/seed-demo.ts",
+    "stripe:listen": "stripe listen --forward-to localhost:4001/webhooks/stripe",
     "twilio:audit": "tsx src/scripts/twilio-audit.ts",
     "migrate": "tsx src/migrations/run.ts",
     "test": "vitest run"
@@ -21,6 +22,7 @@
     "fastify": "^5.8.5",
     "mongodb": "^6.9.0",
     "resend": "^6.17.1",
+    "stripe": "^22.3.0",
     "twilio": "^6.0.2",
     "zod": "^3.23.8"
   },

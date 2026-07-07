@@ -9,13 +9,13 @@ This repo contains the web-based Barkan product for issuing real-world identitie
 - **Web dashboard**: React + Vite + TypeScript in `apps/web`
 - **Node API**: Fastify + MongoDB backend in `apps/api`
 
-The current product lets a user sign up, create an agent identity, link it to an OpenClaw instance, and manage real-world tools such as phone, email, payments, and calendar. The old embeddable website assistant, browser widget, Action Mode, route documentation generator, and codebase-scanning CLI have been removed.
+The current product lets a user sign up, create an agent identity, link it to an OpenClaw instance, and manage real-world tools such as phone, email, and calendar. Payment cards are coming soon; Stripe is used for SaaS billing only. The old embeddable website assistant, browser widget, Action Mode, route documentation generator, and codebase-scanning CLI have been removed.
 
 ## Architecture
 
 ### Web app
 
-- **Dashboard**: auth, identity list/detail, OpenClaw setup, dashboard chat, settings, phone/email/payment panels
+- **Dashboard**: auth, identity list/detail, OpenClaw setup, dashboard chat, settings, phone/email panels, card coming-soon surfaces
 - **UI**: Tailwind with shadcn-style local components
 - **Auth**: classic email/password, bcrypt password hashes, HTTP-only cookie sessions
 - **Identity setup**: user creates a named identity, chooses an OpenClaw endpoint or managed deployment, copies a link prompt/token, then completes setup
@@ -70,11 +70,11 @@ The Node API exposes:
 - `GET /api/v1/agent/phone/sms`
 - `GET /api/v1/agent/phone/sms/latest-code`
 - `POST /api/tools/calendar/book`
-- Payment tool routes under `/api/tools/payments/*`
 - Email tool routes under `/api/tools/email/*` and `/api/sites/:siteId/email/*`
 - Agent email routes: `GET /api/v1/agent/email/address`, `POST /api/v1/agent/email/send`, `GET /api/v1/agent/email/threads`, `GET /api/v1/agent/email/threads/:threadId`, `POST /api/v1/agent/email/threads/:threadId/reply`, `GET /api/v1/agent/email/threads/:threadId/attachments/:attachmentId`
 - `GET /api/v1/webhook-events` (session-authed ops listing of provider webhook deliveries)
 - `GET /api/v1/ops/email-domain` (session-authed Resend DNS/domain status)
+- `POST /webhooks/stripe` (registered only when `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` are configured; SaaS billing only)
 - `POST /webhooks/resend` (Resend Svix-signed email lifecycle + inbound receive webhook)
 - `POST /webhooks/elevenlabs/personalization` (ElevenLabs signed inbound-call personalization; returns conversation initiation data)
 - `POST /webhooks/elevenlabs/post-call` (ElevenLabs signed post-call transcript/status/cost finalization)
@@ -91,7 +91,6 @@ The Node API exposes:
 | `apps/web/src/api/phone.ts` | Browser API client for owner phone/SMS routes |
 | `apps/web/src/components/PhonePanel.tsx` | Real phone/SMS tab: number, calls, transcripts, SMS threads, and policy UI |
 | `apps/web/src/components/EmailPanel.tsx` | Real email inbox, threads, compose, and policy UI |
-| `apps/web/src/components/PaymentsPanel.tsx` | Payment capability UI |
 | `apps/api/src/app.ts` | Fastify app wiring |
 | `apps/api/src/auth.ts` | Auth routes and session helpers |
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
@@ -119,9 +118,11 @@ The Node API exposes:
 | `docs/api/email.md` | Frozen agent-facing email API contract |
 | `docs/api/phone.md` | Frozen agent-facing phone/SMS API contract |
 | `docs/phone-setup.md` | Live phone provisioning and ElevenLabs setup guide |
-| `apps/api/src/payments.ts` | Payment capability and policy engine |
+| `apps/api/src/providers/stripe-client.ts` | Stripe Billing SDK singleton |
+| `apps/api/src/stripe-webhooks.ts` | Stripe Billing webhook dispatcher |
 | `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |
 | `apps/api/src/webhooks/verify.ts` | Stripe/Svix/Twilio/ElevenLabs signature verifiers |
+| `docs/payments-setup.md` | Stripe CLI billing webhook setup guide |
 
 ## Build & Run
 

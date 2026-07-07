@@ -230,8 +230,8 @@ async function claimWebhookEvent(
 /**
  * Local/CI escape hatch: `x-mock-signature: allow` replaces verification only
  * when the relevant provider mode is mock AND no secret is configured — never
- * in live mode. Stripe has no PROVIDER_MODE_* yet (billing lands in task 031),
- * so it is gated on non-production without a configured webhook secret.
+ * in live mode. Stripe billing is optional in development, so its ping route
+ * is gated on non-production without a configured webhook secret.
  */
 export function mockSignatureAllowed(provider: WebhookProvider, config: AppConfig): boolean {
   switch (provider) {

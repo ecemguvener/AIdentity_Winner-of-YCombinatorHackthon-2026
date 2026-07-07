@@ -6,7 +6,6 @@ import type { AgentDocument, Collections } from "./db.js";
 import { requireAuth } from "./auth.js";
 import { buildTrustedDashboardCorsHeaders } from "./cors.js";
 import { ApiError } from "./errors.js";
-import { createPurchaseFromPrompt, formatPurchaseAmount, PaymentError, provisionPaymentIdentity } from "./payments.js";
 import { EmailError, sendSiteEmailFromText } from "./email.js";
 import { createEmailProvider } from "./providers/email-provider.js";
 import {
@@ -32,7 +31,7 @@ You are a simulated OpenClaw agent running inside the Barkan dashboard.
 
 Identity:
 - You are not the base dashboard assistant. You are the user's fake OpenClaw runtime with an Barkan real-world identity.
-- Your available real-world tools include phone calls, email, payments, calendar, and dashboard context.
+- Your available real-world tools include phone calls, email, calendar, and dashboard context. Payment cards are coming soon.
 - Phone calls are a normal part of your tool belt. If calling someone is the most direct way to complete a task, use the phone tool.
 
 Phone behavior:
@@ -75,12 +74,9 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
       domain: agent.legacyDomain ?? "",
     }));
 
-    // If the latest message is a shopping instruction, drive the payment tool
-    // directly and stream a confirmation instead of a normal chat reply.
     const latestUserMessage = [...payload.messages].reverse().find((message) => message.role === "user");
     if (latestUserMessage && isPurchaseIntent(latestUserMessage.content)) {
-      const message = await runChatPurchase(latestUserMessage.content, sites, config);
-      streamChatMessage(request, reply, config, message);
+      streamChatMessage(request, reply, config, "Card capability is coming soon.");
       return;
     }
 
@@ -461,47 +457,9 @@ function hasPhoneOrSchedulingIntent(text: string): boolean {
   return /\b(?:call|phone|ring|dial|appointment|reservation|book|schedule|reschedule|barber|doctor|dentist)\b/i.test(text);
 }
 
-function resolvePurchaseSite(text: string, sites: ChatAgentIdentity[]): ChatAgentIdentity | null {
+function resolveAgentFromText(text: string, sites: ChatAgentIdentity[]): ChatAgentIdentity | null {
   const lowered = text.toLowerCase();
   return sites.find((site) => site.name && lowered.includes(site.name.toLowerCase())) ?? sites[0] ?? null;
-}
-
-async function runChatPurchase(
-  text: string,
-  sites: ChatAgentIdentity[],
-  config: AppConfig
-): Promise<string> {
-  const site = resolvePurchaseSite(text, sites);
-  if (!site) {
-    return "You don't have an agent identity yet. Create one first, then I can shop on its behalf.";
-  }
-
-  const accountId = site._id.toHexString();
-  provisionPaymentIdentity(accountId);
-
-  try {
-    const { purchase, parsed } = await createPurchaseFromPrompt(accountId, text, config);
-    const merchant = parsed.merchantUrl ? `[${parsed.merchantName}](${parsed.merchantUrl})` : parsed.merchantName;
-    const amount = formatPurchaseAmount(parsed.amount, parsed.currency);
-    const estimated = parsed.priceEstimated ? " _(estimated)_" : "";
-    const header = `🛒 **${merchant}** — ${amount}${estimated} for **${site.name}**`;
-
-    if (purchase.status === "approved") {
-      return `${header}\n\n✅ **Approved** automatically (${purchase.decisionReason}). Open the **Payments** tab on **${site.name}** and hit **Execute** to pay.`;
-    }
-    if (purchase.status === "requires_approval") {
-      return `${header}\n\n⏳ **Needs your approval** — ${purchase.decisionReason}. Review it in the **Payments** tab on **${site.name}**.`;
-    }
-    if (purchase.status === "rejected") {
-      return `${header}\n\n⛔ **Rejected** — ${purchase.decisionReason}.`;
-    }
-    return `${header}\n\nStatus: **${purchase.status}** — ${purchase.decisionReason}.`;
-  } catch (error) {
-    if (error instanceof PaymentError) {
-      return `I couldn't complete that purchase: ${error.message}`;
-    }
-    throw error;
-  }
 }
 
 function isEmailIntent(text: string): boolean {
@@ -509,7 +467,7 @@ function isEmailIntent(text: string): boolean {
 }
 
 async function runChatEmail(text: string, sites: ChatAgentIdentity[], collections: Collections, config: AppConfig): Promise<string> {
-  const site = resolvePurchaseSite(text, sites);
+  const site = resolveAgentFromText(text, sites);
   if (!site) {
     return "You don't have an agent identity yet. Create one first, then I can send email on its behalf.";
   }

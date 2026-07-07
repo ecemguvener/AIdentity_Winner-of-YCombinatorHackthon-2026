@@ -13,6 +13,12 @@ import {
   validateElevenLabsPersonalizationPayload
 } from "../phone-personalization.js";
 import { createEmailInboundClient } from "../providers/email-provider.js";
+import { hasStripeBillingConfig } from "../providers/stripe-client.js";
+import {
+  dispatchStripeWebhook,
+  readStripeEventId,
+  readStripeEventType
+} from "../stripe-webhooks.js";
 import {
   WEBHOOK_PROVIDERS,
   mockSignatureAllowed,
@@ -28,6 +34,17 @@ const webhookEventsQuerySchema = z.object({
 
 export function registerWebhookRoutes(app: FastifyInstance, collections: Collections, config: AppConfig): void {
   const inboundClient = config.RESEND_API_KEY ? createEmailInboundClient(config) : null;
+  if (hasStripeBillingConfig(config)) {
+    registerWebhookRoute(app, collections, config, {
+      path: "/webhooks/stripe",
+      provider: "stripe",
+      verify: providerVerifier("stripe"),
+      extractEventId: readStripeEventId,
+      extractEventType: readStripeEventType,
+      handle: (payload, event) => dispatchStripeWebhook(payload, event)
+    });
+  }
+
   registerWebhookRoute(app, collections, config, {
     path: "/webhooks/resend",
     provider: "resend",

@@ -19,7 +19,7 @@ const demoIdentities = [
     chatTheme: "light" as const,
     createdDaysAgo: 14,
     keyNames: ["Production OpenClaw link", "Demo operator token"],
-    origins: ["dashboard.chat", "phone.booking", "email.assistant", "payments.policy"]
+    origins: ["dashboard.chat", "phone.booking", "email.assistant", "billing.plan"]
   },
   {
     slug: "nova-ops",
@@ -39,7 +39,7 @@ const demoIdentities = [
     chatTheme: "system" as const,
     createdDaysAgo: 3,
     keyNames: ["Finance sandbox token"],
-    origins: ["dashboard.chat", "payments.purchase", "payments.approval"]
+    origins: ["dashboard.chat", "billing.usage", "billing.subscription"]
   }
 ];
 
@@ -51,7 +51,7 @@ try {
   await resetDemoData(user._id);
   const sites = await seedDemoIdentities(user._id);
   await seedInteractionLogs(sites);
-  await seedLiveToolActivity(sites);
+  await seedLiveEmailActivity(sites);
 
   console.log("Demo account ready.");
   console.log(`Email: ${demoEmail}`);
@@ -185,11 +185,11 @@ async function seedInteractionLogs(sites: SiteDocument[]) {
   }
 }
 
-async function seedLiveToolActivity(sites: SiteDocument[]) {
+async function seedLiveEmailActivity(sites: SiteDocument[]) {
   const apiBaseUrl = config.PUBLIC_API_URL.replace(/\/$/, "");
   const healthResponse = await fetchJson(`${apiBaseUrl}/api/health`, { method: "GET" }).catch(() => null);
   if (!healthResponse?.ok) {
-    console.log(`Live email/payment activity skipped because ${apiBaseUrl} is not running.`);
+    console.log(`Live email activity skipped because ${apiBaseUrl} is not running.`);
     return;
   }
 
@@ -200,55 +200,19 @@ async function seedLiveToolActivity(sites: SiteDocument[]) {
     signal: AbortSignal.timeout(1500)
   });
   if (!loginResponse.ok) {
-    console.log("Live email/payment activity skipped because demo login failed.");
+    console.log("Live email activity skipped because demo login failed.");
     return;
   }
 
   const cookie = readSessionCookie(loginResponse);
   if (!cookie) {
-    console.log("Live email/payment activity skipped because no session cookie was returned.");
+    console.log("Live email activity skipped because no session cookie was returned.");
     return;
   }
 
   const primarySite = sites[0];
-  const financeSite = sites[2];
   if (primarySite) {
     await seedSiteEmailActivity(apiBaseUrl, cookie, primarySite);
-    await seedSitePaymentActivity(apiBaseUrl, cookie, primarySite, [
-      {
-        merchant_name: "Uber",
-        merchant_url: "https://www.uber.com",
-        amount: 18.5,
-        currency: "GBP",
-        purpose: "Client transfer after appointment confirmation"
-      },
-      {
-        merchant_name: "The Breakfast Club",
-        merchant_url: "https://thebreakfastclubcafes.com",
-        amount: 42,
-        currency: "GBP",
-        purpose: "Team brunch reservation deposit"
-      }
-    ]);
-  }
-
-  if (financeSite) {
-    await seedSitePaymentActivity(apiBaseUrl, cookie, financeSite, [
-      {
-        merchant_name: "Notion",
-        merchant_url: "https://www.notion.so",
-        amount: 96,
-        currency: "GBP",
-        purpose: "Quarterly workspace seats for the ops team"
-      },
-      {
-        merchant_name: "CryptoExchange",
-        merchant_url: "https://example.com/crypto",
-        amount: 50,
-        currency: "GBP",
-        purpose: "Blocked crypto purchase demo"
-      }
-    ]);
   }
 }
 
@@ -275,42 +239,6 @@ async function seedSiteEmailActivity(apiBaseUrl: string, cookie: string, site: S
       approved: true
     })
   }).catch(() => null);
-}
-
-async function seedSitePaymentActivity(
-  apiBaseUrl: string,
-  cookie: string,
-  site: SiteDocument,
-  purchases: Array<{ merchant_name: string; merchant_url: string; amount: number; currency: string; purpose: string }>
-) {
-  const activity = await fetchJson(`${apiBaseUrl}/api/sites/${String(site._id)}/payment-activity`, {
-    method: "GET",
-    headers: { cookie }
-  }).catch(() => null);
-  if (Array.isArray(activity?.purchase_requests) && activity.purchase_requests.length > 0) {
-    return;
-  }
-
-  for (const purchase of purchases) {
-    const created = await fetchJson(`${apiBaseUrl}/api/sites/${String(site._id)}/payments/request-purchase`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie
-      },
-      body: JSON.stringify(purchase)
-    }).catch(() => null);
-
-    if (created?.status === "approved" && typeof created.request_id === "string") {
-      await fetchJson(`${apiBaseUrl}/api/sites/${String(site._id)}/payments/${created.request_id}/execute`, {
-        method: "POST",
-        headers: {
-          "idempotency-key": `demo-${demoHash}-${created.request_id}`,
-          cookie
-        }
-      }).catch(() => null);
-    }
-  }
 }
 
 async function fetchJson(url: string, init: RequestInit): Promise<Record<string, unknown> | null> {

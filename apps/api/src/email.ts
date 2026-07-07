@@ -24,7 +24,7 @@ import { createEmailInboundClient, createEmailProvider, type EmailProvider } fro
 // receive *real* email as a personal assistant. The existing agent is the
 // brain; this exposes tools it calls.
 //
-// Like payments, the store is keyed by an opaque account id so one engine
+// The store is keyed by an opaque account id so one engine
 // serves two front doors:
 //   - agent-facing routes, authenticated with a Bearer identity token
 //     (account = the in-memory agent identity id)
