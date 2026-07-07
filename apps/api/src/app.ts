@@ -34,6 +34,7 @@ import { registerSiteRoutes } from "./sites.js";
 import { registerSmsApprovalExecutor } from "./sms-service.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
 import { registerWebhookRoutes } from "./webhooks/routes.js";
+import { registerWaitlistRoutes } from "./waitlist.js";
 import { ensureAgentDomain, getDomainStatus } from "./providers/resend-domain.js";
 import { startAlertingLoop } from "./alerting.js";
 import { registerHealthRoutes } from "./health.js";
@@ -229,6 +230,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerSiteRoutes(app, collections, config);
   registerUsageRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
+  registerWaitlistRoutes(app, collections);
   startAlertingLoop(collections, config);
   startRetentionLoop(collections, config);
 

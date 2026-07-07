@@ -1,13 +1,13 @@
 # Barkan
 
-Barkan is a web product for issuing real-world identities to AI agents. Each agent identity can be linked to an OpenClaw instance and provisioned with a phone number, email address, payment card, calendar, and other real-world tools.
+Barkan is a web product for issuing real-world identities to AI agents. Each agent identity can be linked to an OpenClaw instance and provisioned with a phone number, email address, and governed real-world tools. Payment cards are coming soon; Stripe is used for SaaS billing.
 
 The dashboard supports the current agent identity flow:
 
 - Create a new agent identity.
 - Choose an existing OpenClaw instance or a managed OpenClaw deployment.
 - Copy a prompt into OpenClaw so it can install the Barkan identity skill and confirm linking through a tokenized endpoint.
-- Manage identity details, OpenClaw link tokens, dashboard chat, phone, email, and payment tools.
+- Manage identity details, OpenClaw link tokens, dashboard chat, phone, email, billing, and card waitlist surfaces.
 
 The backend still keeps the original `sites` and `site-setups` route names internally for speed during the hackathon. The user-facing product language is agent identities.
 
@@ -94,7 +94,7 @@ npm run deploy:barkan-web
 
 ## Payment Tool
 
-The payment tool gives an agent identity a real-world spending capability, alongside email/phone/calendar. It follows the same pattern as the other tools: in-memory store, bearer identity-token auth, and every decision written to the identity audit log. The agent never sees card details; it can only request a purchase, and the policy engine decides approve, reject, or requires approval.
+The legacy payment tool remains in the API for hackathon compatibility, but product-facing payment cards are not yet live. Current production payment work is SaaS billing through Stripe; agent spending cards are waitlist-only.
 
 Agent-facing endpoints use `Authorization: Bearer <identity_token>`:
 

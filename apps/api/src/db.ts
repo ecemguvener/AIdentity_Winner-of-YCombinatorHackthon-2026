@@ -397,6 +397,15 @@ export interface AccountExportDocument extends Document {
   downloadedAt?: Date;
 }
 
+export interface WaitlistDocument extends Document {
+  _id: ObjectId;
+  email: string;
+  feature: "card";
+  ip: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Collections {
   users: Collection<UserDocument>;
   sessions: Collection<SessionDocument>;
@@ -422,6 +431,7 @@ export interface Collections {
   pairingRequests: Collection<PairingRequestDocument>;
   opsStatus: Collection<OpsStatusDocument>;
   accountExports: Collection<AccountExportDocument>;
+  waitlist: Collection<WaitlistDocument>;
   migrations: Collection<MigrationDocument>;
 }
 
@@ -460,6 +470,7 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     pairingRequests: db.collection<PairingRequestDocument>("pairingRequests"),
     opsStatus: db.collection<OpsStatusDocument>("opsStatus"),
     accountExports: db.collection<AccountExportDocument>("accountExports"),
+    waitlist: db.collection<WaitlistDocument>("waitlist"),
     migrations: db.collection<MigrationDocument>("migrations")
   };
 
@@ -527,6 +538,8 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.opsStatus.createIndex({ key: 1 }, { unique: true }),
     collections.accountExports.createIndex({ ownerUserId: 1, createdAt: -1 }),
     collections.accountExports.createIndex({ expiresAt: 1 }),
+    collections.waitlist.createIndex({ email: 1, feature: 1 }, { unique: true }),
+    collections.waitlist.createIndex({ ip: 1, createdAt: -1 }),
     collections.migrations.createIndex({ name: 1 }, { unique: true })
   ]);
 

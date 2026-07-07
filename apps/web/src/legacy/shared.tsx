@@ -23,6 +23,7 @@ export const newSitePath = "/agents/new";
 export const pairPath = "/pair";
 export const signinPath = "/signin";
 export const plansPath = "/plans";
+export const docsSitePath = "/docs-site";
 export const profileAvatarMaxBytes = 256 * 1024;
 export const profileAvatarAcceptedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
@@ -178,7 +179,7 @@ export function isProtectedAppRoute(path: string): boolean {
 }
 
 export function isDashboardRoute(path: string): boolean {
-  return path === "/" || path === dashboardPath || path === `${dashboardPath}/`;
+  return path === dashboardPath || path === `${dashboardPath}/`;
 }
 
 export function isDashboardChatRoute(path: string): boolean {
@@ -207,6 +208,10 @@ export function isSigninRoute(path: string): boolean {
 
 export function isPlansRoute(path: string): boolean {
   return path === plansPath || path === `${plansPath}/`;
+}
+
+export function isDocsSiteRoute(path: string): boolean {
+  return path === docsSitePath || path === `${docsSitePath}/` || path.startsWith(`${docsSitePath}/`);
 }
 
 export function getSiteDetailPath(siteId: string, tab: SiteDetailTab = "credentials"): string {

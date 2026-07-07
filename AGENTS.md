@@ -10,12 +10,13 @@ This repo contains the web-based Barkan product for issuing real-world identitie
 - **Node API**: Fastify + MongoDB backend in `apps/api`
 - **MCP stdio bridge**: publishable `@barkan/mcp` package in `packages/mcp`
 
-The current product lets a user sign up, create an agent identity, link it to an OpenClaw instance, and manage real-world tools such as phone, email, and calendar. Payment cards are coming soon; Stripe is used for SaaS billing only. The old embeddable website assistant, browser widget, Action Mode, route documentation generator, and codebase-scanning CLI have been removed.
+The current product lets a user sign up, create an agent identity, link it to an OpenClaw instance, and manage real-world tools such as phone and email. Payment cards are coming soon; Stripe is used for SaaS billing only. The public web surface includes the logged-out landing page, pricing page, and markdown docs site. The old embeddable website assistant, browser widget, Action Mode, route documentation generator, and codebase-scanning CLI have been removed.
 
 ## Architecture
 
 ### Web app
 
+- **Public pages**: logged-out landing page, pricing, `/docs-site` markdown docs, SEO metadata, sitemap/robots output, and card waitlist CTA
 - **Dashboard**: auth, identity list/detail, OpenClaw setup, dashboard chat, settings, phone/email panels, card coming-soon surfaces
 - **UI**: Tailwind with shadcn-style local components
 - **Auth**: classic email/password, bcrypt password hashes, HTTP-only cookie sessions
@@ -37,6 +38,7 @@ The Node API exposes:
 - `POST /api/v1/account/export`
 - `GET /api/v1/account/export/:exportId/download` (signed one-time URL)
 - `DELETE /api/v1/account` (password + typed confirmation; queued checkpoint deletion job)
+- `POST /api/v1/waitlist` (public card waitlist; email + feature)
 - `POST /api/v1/agents`
 - `GET /api/v1/agents`
 - `GET /api/v1/agents/:agentId`
@@ -109,6 +111,8 @@ The Node API exposes:
 |------|---------|
 | `apps/web/src/App.tsx` | Dashboard, auth, identity onboarding, and settings UI |
 | `apps/web/src/api.ts` | Browser API client |
+| `apps/web/src/pages/PublicPages.tsx` | Logged-out landing page, pricing page, and `/docs-site` markdown renderer |
+| `apps/web/src/docs/manifest.ts` | Docs-site markdown import manifest and slug lookup |
 | `apps/web/src/api/billing.ts` | Browser API client for billing and ops status |
 | `apps/web/src/api/phone.ts` | Browser API client for owner phone/SMS routes |
 | `apps/web/src/api/pairing.ts` | Browser API client for runtime pairing confirmation |
@@ -125,6 +129,7 @@ The Node API exposes:
 | `apps/api/src/health.ts` | Shallow and deep health endpoints |
 | `apps/api/src/sentry.ts` | API Sentry initialization and event scrubber |
 | `apps/api/src/account.ts` | Account export ZIPs, signed download URLs, and deletion checkpoint job |
+| `apps/api/src/waitlist.ts` | Public card waitlist endpoint with dedupe and IP rate limiting |
 | `apps/api/src/retention.ts` | Daily data retention sweep for transcripts, email bodies, webhooks, usage, approvals, pairing, audit, and tombstones |
 | `apps/api/src/backup-retention.ts` | Pure backup archive pruning helper used by tests/runbooks |
 | `apps/web/src/sentry.ts` | Web Sentry initialization and event scrubber |

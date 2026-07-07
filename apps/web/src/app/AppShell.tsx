@@ -6,11 +6,11 @@ import { getApiBaseUrl } from "../api/client";
 import type { AgentDetailResponse, AgentListItem, Approval, CreateAgentResponse, IdentityToken } from "../api/types";
 import { api, type User } from "../api";
 import { ToastNotifications, type ToastNotification, type ToastNotificationInput } from "../components/ToastNotifications";
-import { approvalsPath, dashboardChatPath, dashboardPath, getCurrentLocation, getErrorMessage, getSiteDetailPath, getSiteDetailRoute, getUserSettingsPath, getUserSettingsSection, isAppRoute, isApprovalsRoute, isDashboardChatRoute, isNewSiteRoute, isPairRoute, isPlansRoute, isProtectedAppRoute, isSigninRoute, isUserSettingsRoute, navigateToPublicHome, newSitePath, signinPath, type DashboardSection } from "../legacy/shared";
+import { approvalsPath, dashboardChatPath, dashboardPath, getCurrentLocation, getErrorMessage, getSiteDetailPath, getSiteDetailRoute, getUserSettingsPath, getUserSettingsSection, isAppRoute, isApprovalsRoute, isDashboardChatRoute, isDocsSiteRoute, isNewSiteRoute, isPairRoute, isPlansRoute, isProtectedAppRoute, isSigninRoute, isUserSettingsRoute, navigateToPublicHome, newSitePath, signinPath, type DashboardSection } from "../legacy/shared";
 import { AuthScreen } from "../pages/AuthPage";
 import { AgentCreationWizard } from "../pages/AgentsListPage";
 import { PairingPage } from "../pages/PairingPage";
-import { LandingPage, PricingPage } from "../pages/PublicPages";
+import { DocsSitePage, LandingPage, PricingPage } from "../pages/PublicPages";
 import { DashboardScreen } from "./DashboardScreen";
 
 interface PlanLimitNotice {
@@ -329,6 +329,7 @@ export function AppShell() {
   ) : null;
 
   if (isPlansRoute(currentPath)) return <PricingPage />;
+  if (isDocsSiteRoute(currentPath)) return <DocsSitePage path={currentPath} />;
   if (!isAppRoute(currentPath)) return <LandingPage />;
 
   if (isLoading) {

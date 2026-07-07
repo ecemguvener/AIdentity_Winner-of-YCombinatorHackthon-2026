@@ -54,6 +54,7 @@ describe("connectDatabase", () => {
       "pairingRequests",
       "opsStatus",
       "accountExports",
+      "waitlist",
       "migrations"
     ] as const;
     for (const collectionName of expectedCollectionNames) {
