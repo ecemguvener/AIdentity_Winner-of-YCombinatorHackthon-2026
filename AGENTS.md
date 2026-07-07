@@ -63,6 +63,7 @@ The Node API exposes:
 - `GET /api/identity/:agentId/audit-log`
 - `POST /api/tools/phone/call`
 - `POST /api/v1/agent/phone/call`
+- `GET /api/v1/agent/phone/number`
 - `GET /api/v1/agent/phone/calls`
 - `GET /api/v1/agent/phone/calls/:callId`
 - `POST /api/v1/agent/phone/sms`
@@ -116,6 +117,7 @@ The Node API exposes:
 | `apps/api/src/email-service.ts` | Persistent outbound/inbound email threads, idempotency, and replies |
 | `apps/api/src/providers/email-provider.ts` | Resend/mock outbound email provider and Resend inbound client |
 | `docs/api/email.md` | Frozen agent-facing email API contract |
+| `docs/api/phone.md` | Frozen agent-facing phone/SMS API contract |
 | `docs/phone-setup.md` | Live phone provisioning and ElevenLabs setup guide |
 | `apps/api/src/payments.ts` | Payment capability and policy engine |
 | `apps/api/src/webhooks/framework.ts` | Webhook pipeline: raw-body capture, signature verification, exactly-once processing |

@@ -6,7 +6,7 @@ import { issueIdentityToken } from "./agent-auth.js";
 import type { AppConfig } from "./config.js";
 import { connectDatabase, type AgentDocument, type Database, type PhoneNumberDocument, type UserDocument } from "./db.js";
 import { defaultEmailPolicy, defaultPhonePolicy } from "./policies.js";
-import { findLatestSmsCode, sendAgentSms } from "./sms-service.js";
+import { findLatestSmsCode, ingestInboundSms, sendAgentSms } from "./sms-service.js";
 import { sendSms, type TwilioSmsClient } from "./providers/twilio-sms.js";
 
 const config = {
@@ -121,6 +121,53 @@ describe("SMS provider and service", () => {
     expect(list.json().messages).toHaveLength(1);
   });
 
+  it("rejects invalid SMS recipients before provider work", async () => {
+    const { token } = await insertFixture();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent/phone/sms",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { to: "not-a-number", body: "Hi" }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: { code: "validation_failed" },
+      message: "to must be an E.164 phone number"
+    });
+    expect(await database.collections.smsMessages.countDocuments()).toBe(0);
+  });
+
+  it("allows known SMS recipients when policy gates only new recipients", async () => {
+    const { agent, phoneNumber, token } = await insertFixture();
+    await database.collections.policies.updateOne(
+      { agentId: agent._id },
+      { $set: { "phone.requireApprovalSms": "new_recipients", updatedAt: new Date() } }
+    );
+    await database.collections.smsMessages.insertOne({
+      _id: new ObjectId(),
+      agentId: agent._id,
+      phoneNumberId: phoneNumber._id,
+      direction: "outbound",
+      counterpartyE164: "+33612345678",
+      body: "Earlier",
+      status: "delivered",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent/phone/sms",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { to: "+33612345678", body: "Back again" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().message).toMatchObject({ status: "sent", counterparty_e164: "+33612345678" });
+  });
+
   it("ingests inbound SMS as TwiML and dedupes MessageSid retries", async () => {
     const { agent } = await insertFixture();
     const params = { MessageSid: "SMinbound1", From: "+33612345678", To: "+15005550001", Body: "Your code is 482913" };
@@ -134,6 +181,14 @@ describe("SMS provider and service", () => {
     expect(second.payload).toBe("<Response/>");
     expect(await database.collections.smsMessages.countDocuments({ agentId: agent._id, twilioMessageSid: "SMinbound1" })).toBe(1);
     expect(await database.collections.auditLogs.findOne({ action: "sms.receive" })).toMatchObject({ status: "allowed" });
+  });
+
+  it("ignores malformed inbound webhook payloads", async () => {
+    await insertFixture();
+
+    await expect(ingestInboundSms(database.collections, null)).resolves.toBe("<Response/>");
+    await expect(ingestInboundSms(database.collections, ["bad"])).resolves.toBe("<Response/>");
+    expect(await database.collections.smsMessages.countDocuments()).toBe(0);
   });
 
   it("returns TwiML for unknown numbers without storing a message", async () => {
@@ -172,6 +227,20 @@ describe("SMS provider and service", () => {
     expect(failed.statusCode).toBe(200);
     expect(await database.collections.smsMessages.findOne({ _id: message!._id })).toMatchObject({ status: "undelivered" });
     expect(await database.collections.auditLogs.findOne({ status: "blocked", action: "sms.send" })).toMatchObject({ detail: "SMS undelivered (30007)." });
+  });
+
+  it("maps unknown Twilio delivery statuses to sent", async () => {
+    const { agent } = await insertFixture();
+    await sendAgentSms(database.collections, config, { agent, to: "+33612345678", body: "Hello" });
+    const message = await database.collections.smsMessages.findOne({ direction: "outbound" });
+
+    const response = await deliverTwilioForm("/webhooks/twilio/status", {
+      MessageSid: message!.twilioMessageSid!,
+      MessageStatus: "accepted"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(await database.collections.smsMessages.findOne({ _id: message!._id })).toMatchObject({ status: "sent" });
   });
 
   it("rejects unsigned Twilio webhooks", async () => {

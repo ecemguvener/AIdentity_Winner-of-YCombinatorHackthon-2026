@@ -299,6 +299,23 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
     };
   });
 
+  app.get("/api/v1/agent/phone/number", async (request) => {
+    const agentContext = await authenticateAgentRequest(request, collections);
+    if (!agentContext) {
+      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
+    }
+    const phoneNumber = await collections.phoneNumbers.findOne({ agentId: agentContext.agent._id, status: "active" });
+    if (!phoneNumber) {
+      throw new ApiError(409, "policy_blocked", "phone capability not provisioned");
+    }
+    return {
+      e164: phoneNumber.e164,
+      country: phoneNumber.country,
+      capabilities: { voice: phoneNumber.capabilitiesVoice, sms: phoneNumber.capabilitiesSms },
+      status: phoneNumber.status
+    };
+  });
+
   app.get("/api/v1/agent/phone/calls/:callId", async (request) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
