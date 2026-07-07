@@ -34,6 +34,9 @@ The Node API exposes:
 - `PATCH /api/auth/me`
 - `PATCH /api/auth/me/notifications`
 - `POST /api/auth/me/password`
+- `POST /api/v1/account/export`
+- `GET /api/v1/account/export/:exportId/download` (signed one-time URL)
+- `DELETE /api/v1/account` (password + typed confirmation; queued checkpoint deletion job)
 - `POST /api/v1/agents`
 - `GET /api/v1/agents`
 - `GET /api/v1/agents/:agentId`
@@ -121,6 +124,9 @@ The Node API exposes:
 | `apps/api/src/alerting.ts` | Webhook/provider/approval alert evaluator and optional alert webhook |
 | `apps/api/src/health.ts` | Shallow and deep health endpoints |
 | `apps/api/src/sentry.ts` | API Sentry initialization and event scrubber |
+| `apps/api/src/account.ts` | Account export ZIPs, signed download URLs, and deletion checkpoint job |
+| `apps/api/src/retention.ts` | Daily data retention sweep for transcripts, email bodies, webhooks, usage, approvals, pairing, audit, and tombstones |
+| `apps/api/src/backup-retention.ts` | Pure backup archive pruning helper used by tests/runbooks |
 | `apps/web/src/sentry.ts` | Web Sentry initialization and event scrubber |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
 | `apps/api/src/mcp/server.ts` | MCP Streamable HTTP server, agent-token auth, capability-scoped tools, and resources |
@@ -129,6 +135,9 @@ The Node API exposes:
 | `apps/api/src/agents-routes.ts` | Owner-facing /api/v1/agents REST API |
 | `docs/security.md` | Threat model, hardening checklist, and provider key rotation/freeze guidance |
 | `docs/operations.md` | Observability, alerts, health checks, metrics, and PM2 log rotation runbook |
+| `docs/privacy-operations.md` | GDPR data inventory, export/delete behavior, retention windows, and subprocessors |
+| `scripts/backup-mongo.sh` | Mongo dump, marker write, local prune, optional rclone upload |
+| `scripts/restore-mongo.sh` | Safe restore to a separate target database |
 | `apps/api/src/provisioning.ts` | Capability provisioner registry (stubs until email/phone tasks) |
 | `apps/api/src/policies.ts` | Agent policy defaults, email/phone policy normalization, and policy routes |
 | `apps/api/src/sites.ts` | Deprecated legacy site routes as adapters over agents |

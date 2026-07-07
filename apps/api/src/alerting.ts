@@ -4,6 +4,7 @@ import { captureOperationalAlert } from "./sentry.js";
 import { providerErrorRates } from "./metrics.js";
 
 const fiveMinutesMs = 5 * 60 * 1000;
+const backupStaleMs = 26 * 60 * 60 * 1000;
 const oldApprovalMs = 55 * 60 * 1000;
 const dedupeMs = 60 * 1000;
 const lastAlerts = new Map<string, number>();
@@ -47,6 +48,15 @@ export async function evaluateAlertRules(
       key: "approvals.pending_old",
       message: "pending approvals older than 55 minutes",
       detail: { oldPendingApprovals }
+    });
+  }
+
+  const backupStatus = await collections.opsStatus.findOne({ key: "backup.mongo" });
+  if (backupStatus && now.getTime() - backupStatus.updatedAt.getTime() > backupStaleMs) {
+    alerts.push({
+      key: "backup.mongo_stale",
+      message: "mongo backup completion marker is stale",
+      detail: { lastBackupAt: backupStatus.updatedAt.toISOString() }
     });
   }
 

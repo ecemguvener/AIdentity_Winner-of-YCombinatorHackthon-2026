@@ -130,6 +130,18 @@ const paths: Record<string, PathItem> = {
   "/api/v1/billing/portal": {
     post: owner("billing", "Create Stripe billing portal session")
   },
+  "/api/v1/account/export": {
+    post: owner("privacy", "Request account export", undefined, accepted)
+  },
+  "/api/v1/account/export/{exportId}/download": {
+    get: {
+      ...owner("privacy", "Download account export", undefined, response("ZIP archive", { type: "string", format: "binary" }), [pathParam("exportId"), queryParam("token")]),
+      security: []
+    }
+  },
+  "/api/v1/account": {
+    delete: owner("privacy", "Delete account", { schema: objectSchema({ password: { type: "string" }, confirm: { type: "string", enum: ["DELETE"] } }) }, accepted)
+  },
   "/api/v1/approvals": {
     get: owner("approvals", "List owner approvals")
   },
@@ -178,6 +190,7 @@ export function buildOpenApiDocument(config: AppConfig) {
       { name: "email", description: "Agent email address, threads, sends, and replies." },
       { name: "phone", description: "Agent phone number, calls, SMS, and verification-code helpers." },
       { name: "agents", description: "Owner-managed agent identities and tokens." },
+      { name: "privacy", description: "Account export and deletion." },
       { name: "approvals", description: "Owner approval requests for gated agent actions." },
       { name: "billing", description: "Plans, checkout, usage, and billing portal." }
     ],

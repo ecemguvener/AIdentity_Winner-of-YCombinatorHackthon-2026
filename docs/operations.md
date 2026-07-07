@@ -17,6 +17,24 @@ Internal-only checks:
 
 Both internal routes are intended for localhost/VPC callers only.
 
+## Backups And Restore
+
+`scripts/backup-mongo.sh` runs `mongodump --archive --gzip` into `BACKUP_DIR` and writes a `backup.mongo` marker to `opsStatus`. Set `BACKUP_REMOTE` to an rclone remote to upload the archive after the local dump.
+
+Daily cron:
+
+```powershell
+0 3 * * * cd /srv/barkan && BACKUP_DIR=/var/backups/barkan ./scripts/backup-mongo.sh
+```
+
+Restore only to a separate database:
+
+```powershell
+bash scripts/restore-mongo.sh backups/barkan-2026-07-07T030000Z.archive.gz --target barkan-restore-test
+```
+
+Monthly drill: restore the latest archive into `barkan-restore-test`, compare key row counts (`users`, `agents`, `auditLogs`), spot-check one account export, then drop the restore database. Alerts fire if an existing `backup.mongo` marker is older than 26 hours.
+
 ## Alerts
 
 The API evaluates alerts every 60 seconds outside tests. It emits fatal Sentry messages and optionally posts JSON to `ALERT_WEBHOOK_URL` for:

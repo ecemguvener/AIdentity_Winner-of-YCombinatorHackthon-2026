@@ -4,6 +4,7 @@ import type { AppConfig } from "./config.js";
 export interface UserDocument extends Document {
   _id: ObjectId;
   email: string;
+  emailHash?: string;
   displayName?: string;
   avatarUrl?: string | null;
   notificationPreferences?: {
@@ -15,6 +16,7 @@ export interface UserDocument extends Document {
   loginFailedCount?: number;
   loginFirstFailedAt?: Date;
   loginLockedUntil?: Date;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt?: Date;
 }
@@ -369,6 +371,32 @@ export interface PairingRequestDocument extends Document {
   updatedAt: Date;
 }
 
+export interface OpsStatusDocument extends Document {
+  _id: ObjectId;
+  key: string;
+  kind: "backup" | "retention" | "account_deletion" | "account_export" | "alert";
+  status: "ok" | "pending" | "error";
+  message?: string;
+  data?: Record<string, unknown>;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AccountExportDocument extends Document {
+  _id: ObjectId;
+  ownerUserId: ObjectId;
+  status: "pending" | "ready" | "failed" | "downloaded" | "expired";
+  tokenHash: string;
+  downloadPath?: string;
+  error?: string;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date;
+  downloadedAt?: Date;
+}
+
 export interface Collections {
   users: Collection<UserDocument>;
   sessions: Collection<SessionDocument>;
@@ -392,6 +420,8 @@ export interface Collections {
   usageEvents: Collection<UsageEventDocument>;
   usageReports: Collection<UsageReportDocument>;
   pairingRequests: Collection<PairingRequestDocument>;
+  opsStatus: Collection<OpsStatusDocument>;
+  accountExports: Collection<AccountExportDocument>;
   migrations: Collection<MigrationDocument>;
 }
 
@@ -428,11 +458,14 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     usageEvents: db.collection<UsageEventDocument>("usageEvents"),
     usageReports: db.collection<UsageReportDocument>("usageReports"),
     pairingRequests: db.collection<PairingRequestDocument>("pairingRequests"),
+    opsStatus: db.collection<OpsStatusDocument>("opsStatus"),
+    accountExports: db.collection<AccountExportDocument>("accountExports"),
     migrations: db.collection<MigrationDocument>("migrations")
   };
 
   await Promise.all([
     collections.users.createIndex({ email: 1 }, { unique: true }),
+    collections.users.createIndex({ emailHash: 1 }, { sparse: true }),
     collections.sessions.createIndex({ tokenHash: 1 }, { unique: true }),
     collections.sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     collections.sessions.createIndex({ idleExpiresAt: 1 }),
@@ -491,6 +524,9 @@ export async function connectDatabase(config: AppConfig): Promise<Database> {
     collections.usageReports.createIndex({ ownerUserId: 1, periodKey: 1, meter: 1 }, { unique: true }),
     collections.pairingRequests.createIndex({ code: 1 }, { unique: true }),
     collections.pairingRequests.createIndex({ status: 1, expiresAt: 1 }),
+    collections.opsStatus.createIndex({ key: 1 }, { unique: true }),
+    collections.accountExports.createIndex({ ownerUserId: 1, createdAt: -1 }),
+    collections.accountExports.createIndex({ expiresAt: 1 }),
     collections.migrations.createIndex({ name: 1 }, { unique: true })
   ]);
 

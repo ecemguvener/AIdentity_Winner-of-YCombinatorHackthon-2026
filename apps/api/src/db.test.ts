@@ -50,7 +50,11 @@ describe("connectDatabase", () => {
       "webhookEvents",
       "billingAccounts",
       "usageEvents",
-      "usageReports"
+      "usageReports",
+      "pairingRequests",
+      "opsStatus",
+      "accountExports",
+      "migrations"
     ] as const;
     for (const collectionName of expectedCollectionNames) {
       expect(database.collections[collectionName].collectionName).toBe(collectionName);

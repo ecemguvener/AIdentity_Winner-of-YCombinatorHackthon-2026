@@ -5,6 +5,7 @@ import type { AppConfig } from "./config.js";
 import type { Collections, UserDocument } from "./db.js";
 import { ensureBillingAccount } from "./billing.js";
 import { ApiError } from "./errors.js";
+import { deletedEmailHash, deletedEmailHoldExpiresAt } from "./privacy.js";
 import {
   createSessionExpiry,
   createSessionIdleExpiry,
@@ -65,7 +66,12 @@ export function registerAuthRoutes(
   app.post("/api/auth/check-email", async (request) => {
     const payload = emailLookupSchema.parse(request.body);
     const email = normalizeEmail(payload.email);
-    const existingUser = await collections.users.findOne({ email }, { projection: { _id: 1 } });
+    const existingUser = await collections.users.findOne({
+      $or: [
+        { email },
+        { emailHash: deletedEmailHash(email, config), deletedAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }
+      ]
+    }, { projection: { _id: 1 } });
 
     return { exists: Boolean(existingUser) };
   });
@@ -81,6 +87,10 @@ export function registerAuthRoutes(
     const existingUser = await collections.users.findOne({ email });
     if (existingUser) {
       throw new ApiError(409, "validation_failed", "email is already registered");
+    }
+    const tombstone = await collections.users.findOne({ emailHash: deletedEmailHash(email, config), deletedAt: { $exists: true } });
+    if (tombstone?.deletedAt && deletedEmailHoldExpiresAt(tombstone.deletedAt).getTime() > Date.now()) {
+      throw new ApiError(409, "validation_failed", "email is temporarily unavailable after account deletion");
     }
 
     const now = new Date();

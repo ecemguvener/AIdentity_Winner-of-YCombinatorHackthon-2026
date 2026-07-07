@@ -54,6 +54,14 @@ const rawEnvironmentSchema = z.object({
   EMAIL_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
   SENTRY_DSN: optionalNonEmptyStringSchema,
   ALERT_WEBHOOK_URL: optionalNonEmptyStringSchema,
+  ACCOUNT_EXPORT_DIR: z.string().min(1).default("/tmp/barkan-account-exports"),
+  RETENTION_CALL_TRANSCRIPT_DAYS: z.coerce.number().int().positive().default(180),
+  RETENTION_EMAIL_BODY_DAYS: z.coerce.number().int().positive().default(365),
+  RETENTION_WEBHOOK_EVENT_DAYS: z.coerce.number().int().positive().default(90),
+  RETENTION_USAGE_REPORTED_DAYS: z.coerce.number().int().positive().default(400),
+  RETENTION_EXPIRED_PAYLOAD_DAYS: z.coerce.number().int().positive().default(90),
+  RETENTION_AUDIT_LOG_DAYS: z.coerce.number().int().positive().default(730),
+  RETENTION_TOMBSTONE_DAYS: z.coerce.number().int().positive().default(30),
   API_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300)
 });
 

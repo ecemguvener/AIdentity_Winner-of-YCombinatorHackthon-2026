@@ -10,6 +10,7 @@ import type { Collections } from "./db.js";
 import { buildCorsOptionsForRequest, isPublicCorsPath, isTrustedDashboardOrigin } from "./cors.js";
 import { ApiError, buildErrorPayload, codeForStatus, validationApiError } from "./errors.js";
 import { registerAgentRoutes } from "./agents-routes.js";
+import { registerAccountRoutes } from "./account.js";
 import { registerApprovalRoutes } from "./approvals.js";
 import { registerAuditRoutes } from "./audit-routes.js";
 import { registerAuthRoutes } from "./auth.js";
@@ -37,6 +38,7 @@ import { ensureAgentDomain, getDomainStatus } from "./providers/resend-domain.js
 import { startAlertingLoop } from "./alerting.js";
 import { registerHealthRoutes } from "./health.js";
 import { registerMetricsHooks } from "./metrics.js";
+import { startRetentionLoop } from "./retention.js";
 import { captureRequestException, initSentry } from "./sentry.js";
 
 export async function buildApp(config: AppConfig, collections: Collections) {
@@ -177,6 +179,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerEmailProvisioner(collections, config);
   registerPhoneProvisioner(collections, config);
   const emailProvider = createEmailProvider(config);
+  registerAccountRoutes(app, collections, config, emailProvider);
   registerEmailApprovalExecutor(collections, config, emailProvider);
   registerPhoneApprovalExecutor(collections, config);
   registerSmsApprovalExecutor(collections, config);
@@ -227,6 +230,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerUsageRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
   startAlertingLoop(collections, config);
+  startRetentionLoop(collections, config);
 
   if (config.PROVIDER_MODE_EMAIL === "live") {
     setImmediate(() => {
