@@ -153,6 +153,35 @@ describe("MCP streamable HTTP endpoint", () => {
 
     await close();
   });
+
+  it("returns pending approval immediately for email replies by default", async () => {
+    const { agent, token } = await createAgent({ email: true, phone: false });
+    const { client, close } = await connectMcpClient(token);
+    const sent = await client.callTool({
+      name: "barkan_email_send",
+      arguments: { to: "person@example.com", subject: "Reply gate", body: "Opening" }
+    });
+    const threadId = (sent.structuredContent as { thread_id: string }).thread_id;
+    await database.collections.policies.updateOne(
+      { agentId: agent._id },
+      { $set: { "email.requireApproval": "always", updatedAt: new Date() } }
+    );
+
+    const reply = await client.callTool({
+      name: "barkan_email_reply",
+      arguments: { thread_id: threadId, body: "Needs approval" }
+    });
+
+    expect(reply.isError).not.toBe(true);
+    expect(reply.structuredContent).toMatchObject({
+      ok: false,
+      status: "approval_required",
+      decision: "pending"
+    });
+    expect((reply.structuredContent as { approval_id?: string }).approval_id).toBeTruthy();
+
+    await close();
+  });
 });
 
 async function connectMcpClient(token: string): Promise<{ client: Client; close: () => Promise<void> }> {
@@ -178,9 +207,10 @@ async function createAgent(input: {
   blockedRecipient?: string;
 }): Promise<{ agent: AgentDocument; token: string }> {
   const now = new Date();
+  const ownerUserId = new ObjectId();
   const agent: AgentDocument = {
     _id: new ObjectId(),
-    ownerUserId: null,
+    ownerUserId,
     name: "MCP Bot",
     slug: `mcp-bot-${new ObjectId().toHexString()}`,
     status: "active",
@@ -191,6 +221,15 @@ async function createAgent(input: {
     updatedAt: now
   };
   await database.collections.agents.insertOne(agent);
+  await database.collections.billingAccounts.insertOne({
+    _id: new ObjectId(),
+    ownerUserId,
+    stripeCustomerId: `cus_${ownerUserId.toHexString()}`,
+    plan: "pro",
+    subscriptionStatus: "active",
+    createdAt: now,
+    updatedAt: now
+  });
   await database.collections.policies.insertOne({
     _id: new ObjectId(),
     agentId: agent._id,

@@ -325,9 +325,9 @@ function registerResources(
 }
 
 function approvalOptions(waitForApproval: boolean | undefined) {
-  return waitForApproval === false
-    ? { async: true }
-    : { waitMs: maxApprovalWaitMs };
+  return waitForApproval === true
+    ? { waitMs: maxApprovalWaitMs }
+    : { async: true };
 }
 
 async function emailSendResult(

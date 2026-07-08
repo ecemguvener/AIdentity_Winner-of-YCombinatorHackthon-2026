@@ -58,7 +58,7 @@ If an MCP server named `barkan` is configured, use MCP tools instead of shelling
 | `barkan_approval_status` | Poll approval request |
 | `barkan_audit_recent` | Read recent audit trail |
 
-Default `wait_for_approval` to `true` unless the user explicitly wants a background request. If the tool returns pending approval, tell the user: "waiting for owner approval in the Barkan dashboard."
+Do not pass `wait_for_approval` unless the user explicitly wants the tool call to block while they approve it. If a tool returns `status: "approval_required"`, tell the user the request is waiting for owner approval in the Barkan dashboard and include the `approval_id`. Use `barkan_approval_status` to check it later.
 
 ## Fallback Path: REST
 

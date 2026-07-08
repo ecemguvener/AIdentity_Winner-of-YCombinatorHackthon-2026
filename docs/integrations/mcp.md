@@ -30,7 +30,7 @@ The server is stateless and is backed by the official `@modelcontextprotocol/sdk
 - `barkan_approval_status(approval_id)`
 - `barkan_audit_recent(limit?)`
 
-`wait_for_approval` defaults to `true`. Barkan waits up to 120 seconds for owner approval; on timeout, the tool returns a structured pending approval result with `approval_id`.
+`wait_for_approval` defaults to `false`. Barkan returns a structured pending approval result with `approval_id` immediately. Pass `wait_for_approval: true` only when the runtime should block for up to 120 seconds while the owner approves.
 
 Policy blocks return normal tool results:
 
