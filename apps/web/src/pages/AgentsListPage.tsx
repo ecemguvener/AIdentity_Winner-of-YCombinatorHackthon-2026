@@ -246,8 +246,8 @@ Barkan API URL: ${normalizedApiUrl}
 Barkan identity token: ${token}
 
 Do these steps:
-1. Do not search, install, or verify a barkan-identity OpenClaw skill. This identity connects through MCP.
-2. Run these commands on the OpenClaw machine:
+1. Do not use OpenClaw skill management for this setup. Skip skill update/install/verify flows and any ClawHub search. Local or untracked skills cannot be updated that way, and Barkan does not need a skill install.
+2. Configure the hosted Barkan MCP server directly. If a barkan-identity skill already exists, ignore it for this identity and overwrite the "barkan" MCP server config:
    openclaw mcp set barkan '${JSON.stringify(openClawMcpServer)}'
    openclaw config set env.vars.BARKAN_API_URL ${normalizedApiUrl}
    openclaw config set env.vars.BARKAN_IDENTITY_TOKEN '${token}'

@@ -24,21 +24,11 @@ Before publishing:
 - Pin the published version in release notes.
 - Run one local install drill before the public publish.
 
-## Optional Skill Install
+## Avoid Skill Updates For Dashboard Setup
 
-Local directory install:
+Do not use OpenClaw skill update, install, verify, or ClawHub lookup flows for normal dashboard setup. Local or untracked OpenClaw skills cannot be updated through ClawHub, and Barkan does not need a skill install to work. Configure the hosted `barkan` MCP server directly instead.
 
-```bash
-openclaw skills install ./openclaw-skills/barkan-identity
-```
-
-ClawHub install:
-
-```bash
-openclaw skills install barkan-identity
-```
-
-Only use this optional skill path when you have the repo or a published ClawHub package available. Normal dashboard setup does not need it.
+The `openclaw-skills/barkan-identity` folder is only for maintainers preparing a future ClawHub publication or local skill development.
 
 ## Skill Environment
 

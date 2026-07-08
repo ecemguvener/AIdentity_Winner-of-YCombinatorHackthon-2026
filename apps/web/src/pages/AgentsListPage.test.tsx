@@ -53,7 +53,8 @@ describe("Agent creation wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /copy prompt/i }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("BARKAN_IDENTITY_TOKEN 'barkan_secret_once'"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"BARKAN_IDENTITY_TOKEN": "barkan_secret_once"'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Do not search, install, or verify a barkan-identity OpenClaw skill"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Do not use OpenClaw skill management for this setup"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Local or untracked skills cannot be updated that way"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("openclaw mcp set barkan"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("openclaw mcp probe barkan --json"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"mcp":'));
@@ -62,6 +63,7 @@ describe("Agent creation wizard", () => {
     expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("mcpServers"));
     expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("openclaw skills install"));
     expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("openclaw skills verify"));
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("openclaw skills update"));
 
     fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
 
