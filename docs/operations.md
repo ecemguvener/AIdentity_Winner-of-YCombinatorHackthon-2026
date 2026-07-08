@@ -50,6 +50,25 @@ Staging drill:
 3. Confirm Sentry receives `failed webhook deliveries in the last 5 minutes` within 2 minutes.
 4. Run the integration harness and confirm `/internal/metrics` contains all metric families.
 
+## Browser E2E
+
+Run the Playwright suite before release:
+
+```powershell
+npm run e2e
+```
+
+The harness builds the app, starts an in-memory MongoDB replica set, boots the API on `http://127.0.0.1:4101`, and serves the dashboard preview on `http://127.0.0.1:4899`. It covers signup/login persistence, agent creation, approvals, email, phone calls, billing gates, and first-run onboarding. Test-only routes live under `/api/test-support/*` and are registered only when `NODE_ENV=test`.
+
+For local debugging:
+
+```powershell
+npm run e2e:ui
+npx playwright show-trace test-results/<failed-test>/trace.zip
+```
+
+If a run behaves oddly after changing API URLs, clear the browser state by deleting `test-results/` and rerun `npm run e2e`; Playwright creates a fresh context per test, but stale built assets can survive if the build step was skipped.
+
 ## PM2 Logs
 
 Install log rotation once per host:

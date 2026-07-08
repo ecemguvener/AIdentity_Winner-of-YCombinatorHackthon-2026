@@ -106,6 +106,7 @@ The Node API exposes:
 - `POST /webhooks/twilio/status` (Twilio SMS delivery status webhook)
 - `GET /docs` (hosted API reference)
 - Dev-only webhook smoke routes `POST /webhooks/ping/:provider` (mock mode only)
+- Test-only browser E2E support routes `POST /api/test-support/inbound-email`, `POST /api/test-support/post-call`, and `POST /api/test-support/billing-plan` are registered only when `NODE_ENV=test`
 
 ## Key Files
 
@@ -136,6 +137,10 @@ The Node API exposes:
 | `apps/api/src/retention.ts` | Daily data retention sweep for transcripts, email bodies, webhooks, usage, approvals, pairing, audit, and tombstones |
 | `apps/api/src/backup-retention.ts` | Pure backup archive pruning helper used by tests/runbooks |
 | `apps/api/src/seed-demo.ts` | Idempotent current-model demo account seeder for agents, approvals, email, phone, usage, and audits |
+| `apps/api/src/test-support.ts` | Test-only browser E2E helper routes guarded by `NODE_ENV=test` |
+| `e2e/` | Playwright browser suite for auth, agent creation, approvals, email, phone, billing, and onboarding |
+| `scripts/e2e-server.ts` | Playwright web server harness with in-memory MongoDB, mock providers, API, and Vite preview |
+| `playwright.config.ts` | Browser E2E configuration, traces, videos, and local web server wiring |
 | `apps/web/src/sentry.ts` | Web Sentry initialization and event scrubber |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
 | `apps/api/src/mcp/server.ts` | MCP Streamable HTTP server, agent-token auth, capability-scoped tools, and resources |
@@ -205,6 +210,7 @@ npm install
 npm run build
 npm test
 npm run e2e:integration
+npm run e2e
 ```
 
 Development:

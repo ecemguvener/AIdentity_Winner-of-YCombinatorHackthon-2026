@@ -16,3 +16,5 @@ coding-plans/
 **/.serval/debug/
 .barkan/debug/
 **/.barkan/debug/
+test-results/
+playwright-report/

@@ -88,7 +88,7 @@ describe("API error contract", () => {
 
 describe("rate limits", () => {
   it("limits auth routes to 10 requests per minute per IP", async () => {
-    const app = await buildApp(baseConfig, createCollections());
+    const app = await buildApp({ ...baseConfig, API_RATE_LIMIT_MAX: 10 }, createCollections());
 
     for (let index = 0; index < 10; index += 1) {
       const response = await app.inject({

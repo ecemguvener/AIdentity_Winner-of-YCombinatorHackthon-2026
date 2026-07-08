@@ -111,6 +111,23 @@ describe("phone provisioner", () => {
     expect(await database.collections.phoneNumbers.countDocuments({ agentId: agent._id })).toBe(0);
   });
 
+  it("skips candidate numbers already reserved in the database", async () => {
+    const existingAgent = await insertAgent();
+    await insertPhoneNumber(existingAgent, { status: "active", twilioSid: "PNexisting", elevenLabsPhoneNumberId: "el-existing" });
+    const agent = await insertAgent();
+    const providers = fakeProviders({
+      searchNumbers: async () => [
+        { e164: "+15005550001", friendlyName: "Used", locality: null, region: null, country: "US", voiceEnabled: true, smsEnabled: true, monthlyPriceCents: 115 },
+        { e164: "+15005550002", friendlyName: "Open", locality: null, region: null, country: "US", voiceEnabled: true, smsEnabled: true, monthlyPriceCents: 115 }
+      ]
+    });
+
+    const active = await provisionAgentPhoneNumber(database.collections, config, agent, providers);
+
+    expect(active.e164).toBe("+15005550002");
+    expect(providers.purchases[0]?.e164).toBe("+15005550002");
+  });
+
   it("compensates Twilio purchase when ElevenLabs import fails", async () => {
     const agent = await insertAgent();
     const providers = fakeProviders({

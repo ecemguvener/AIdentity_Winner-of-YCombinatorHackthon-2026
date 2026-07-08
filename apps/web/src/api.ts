@@ -510,7 +510,7 @@ function stripTrailingSlash(value: string): string {
 }
 
 function getLogoutBaseUrlCandidates(): string[] {
-  const candidates = [apiBaseUrl, ""];
+  const candidates = apiBaseUrl ? [apiBaseUrl] : [""];
 
   if (typeof window !== "undefined" && !localHostnames.has(window.location.hostname)) {
     const currentApiPort = new URL(apiBaseUrl).port || configuredApiPort || fallbackApiPort;

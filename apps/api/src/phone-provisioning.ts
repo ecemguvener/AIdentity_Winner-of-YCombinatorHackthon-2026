@@ -66,7 +66,10 @@ export async function provisionAgentPhoneNumber(
     const candidates = providers.searchNumbers
       ? await providers.searchNumbers({ country: config.TWILIO_NUMBER_COUNTRY || "US" })
       : await searchNumbers(config, { country: config.TWILIO_NUMBER_COUNTRY || "US" });
-    const candidate = candidates.find((item) => item.voiceEnabled && item.smsEnabled);
+    const usedNumbers = new Set(
+      (await collections.phoneNumbers.find({ e164: { $in: candidates.map((item) => item.e164) } }).toArray()).map((number) => number.e164)
+    );
+    const candidate = candidates.find((item) => item.voiceEnabled && item.smsEnabled && !usedNumbers.has(item.e164));
     if (!candidate) {
       throw new ApiError(502, "provider_error", "no Twilio voice+SMS numbers are available");
     }

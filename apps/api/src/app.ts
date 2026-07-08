@@ -33,6 +33,7 @@ import { registerOpenApiRoutes } from "./openapi.js";
 import { registerOnboardingRoutes } from "./onboarding.js";
 import { registerSiteRoutes } from "./sites.js";
 import { registerSmsApprovalExecutor } from "./sms-service.js";
+import { registerTestSupportRoutes } from "./test-support.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
 import { registerWebhookRoutes } from "./webhooks/routes.js";
 import { registerWaitlistRoutes } from "./waitlist.js";
@@ -76,7 +77,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
       routeOptions.config = {
         ...routeOptions.config,
         rateLimit: {
-          max: 10,
+          max: authRateLimitMax(config),
           timeWindow: "1 minute",
           groupId: "auth",
           keyGenerator: (request) => request.ip,
@@ -230,6 +231,7 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerPhoneRoutes(app, collections, config);
   registerPolicyRoutes(app, collections, config);
   registerSiteRoutes(app, collections, config);
+  registerTestSupportRoutes(app, collections, config);
   registerUsageRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
   registerWaitlistRoutes(app, collections);
@@ -272,6 +274,10 @@ function isAgentTokenRoute(url: string): boolean {
 
 function isAuthRateLimitedRoute(url: string): boolean {
   return ["/api/auth/login", "/api/auth/signup", "/api/auth/check-email"].includes(url);
+}
+
+function authRateLimitMax(config: AppConfig): number {
+  return config.NODE_ENV === "test" ? config.API_RATE_LIMIT_MAX : 10;
 }
 
 function agentTokenRateLimitKey(request: { headers: Record<string, unknown>; ip: string }): string {

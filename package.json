@@ -12,6 +12,8 @@
     "pm2:start-prod-api": "pm2 startOrReload ecosystem.config.cjs --only prod-barkan-api --update-env && pm2 save",
     "pm2:list": "pm2 list",
     "build": "npm --workspaces --if-present run build",
+    "e2e": "VITE_API_URL=http://127.0.0.1:4101 VITE_API_PORT=4101 PUBLIC_API_URL=http://127.0.0.1:4101 PUBLIC_APP_URL=http://127.0.0.1:4899 npm run build && playwright test",
+    "e2e:ui": "VITE_API_URL=http://127.0.0.1:4101 VITE_API_PORT=4101 PUBLIC_API_URL=http://127.0.0.1:4101 PUBLIC_APP_URL=http://127.0.0.1:4899 npm run build && playwright test --headed --debug",
     "deploy:barkan-web": "bash scripts/deploy-barkan-web.sh",
     "deploy-barkan-web": "npm run deploy:barkan-web",
     "test": "node scripts/build-skills.mjs && node scripts/validate-skills.mjs && npm --workspaces --if-present run test",
@@ -20,6 +22,7 @@
     "lint": "npm --workspaces --if-present run lint"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "typescript": "^5.6.3"
   }
 }
