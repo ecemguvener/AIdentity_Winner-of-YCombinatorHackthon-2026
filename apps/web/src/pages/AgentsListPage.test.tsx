@@ -51,13 +51,17 @@ describe("Agent creation wizard", () => {
 
     expect(await screen.findByText("barkan_secret_once")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /copy prompt/i }));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('BARKAN_IDENTITY_TOKEN "barkan_secret_once"'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("BARKAN_IDENTITY_TOKEN 'barkan_secret_once'"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"BARKAN_IDENTITY_TOKEN": "barkan_secret_once"'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("openclaw mcp add barkan --transport streamable-http"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Do not search, install, or verify a barkan-identity OpenClaw skill"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("openclaw mcp set barkan"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("openclaw mcp probe barkan --json"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"mcp":'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"servers":'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("/mcp"));
     expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("mcpServers"));
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("openclaw skills install"));
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("openclaw skills verify"));
 
     fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
 

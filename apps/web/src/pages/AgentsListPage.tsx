@@ -181,7 +181,7 @@ export function AgentCreationWizard({
             <div className="site-onboarding-page__prompt-card">
               <div>
                 <strong>OpenClaw setup prompt</strong>
-                <span>Paste into OpenClaw so it installs the skill, stores the env values, and verifies the identity.</span>
+                <span>Paste into OpenClaw so it stores the MCP server, reloads tools, and verifies the identity.</span>
               </div>
               <button type="button" onClick={copyOpenClawPrompt}>
                 <Copy size={16} aria-hidden="true" />
@@ -263,15 +263,14 @@ Barkan API URL: ${normalizedApiUrl}
 Barkan identity token: ${token}
 
 Do these steps:
-1. Install or enable the OpenClaw skill named barkan-identity.
+1. Do not search, install, or verify a barkan-identity OpenClaw skill. This identity connects through MCP.
 2. Run these commands on the OpenClaw machine:
-   openclaw mcp add barkan --transport streamable-http --url ${mcpUrl} --header "Authorization=Bearer ${token}"
-   openclaw config set env.vars.BARKAN_API_URL ${normalizedApiUrl}
-   openclaw config set env.vars.BARKAN_IDENTITY_TOKEN "${token}"
-   openclaw mcp reload
-   openclaw mcp probe barkan
-3. If barkan already exists, replace it with:
    openclaw mcp set barkan '${JSON.stringify(openClawMcpServer)}'
+   openclaw config set env.vars.BARKAN_API_URL ${normalizedApiUrl}
+   openclaw config set env.vars.BARKAN_IDENTITY_TOKEN '${token}'
+   openclaw mcp reload
+   openclaw mcp probe barkan --json
+3. Setup is successful when the probe output shows server "barkan", no diagnostics, and Barkan tools like barkan__barkan_whoami.
 4. The equivalent OpenClaw config is:
 ${JSON.stringify(openClawConfig, null, 2)}
 5. Verify setup by calling the Barkan identity tool and answering: "What is your Barkan identity?"

@@ -1,6 +1,8 @@
 # OpenClaw Integration
 
-Barkan ships an OpenClaw AgentSkill at `openclaw-skills/barkan-identity`. Build it from the canonical shared source before publishing:
+Use the hosted Barkan MCP server for OpenClaw setup. Do not require users to search, install, or verify a `barkan-identity` ClawHub skill; Barkan works through `mcp.servers.barkan`.
+
+Barkan also includes an optional OpenClaw AgentSkill source at `openclaw-skills/barkan-identity` for future publishing:
 
 ```bash
 node scripts/build-skills.mjs
@@ -22,7 +24,7 @@ Before publishing:
 - Pin the published version in release notes.
 - Run one local install drill before the public publish.
 
-## Install
+## Optional Skill Install
 
 Local directory install:
 
@@ -36,7 +38,7 @@ ClawHub install:
 openclaw skills install barkan-identity
 ```
 
-Users can also install from the ClawHub UI by searching for `barkan-identity`.
+Only use this optional skill path when you have the repo or a published ClawHub package available. Normal dashboard setup does not need it.
 
 ## Skill Environment
 
@@ -66,19 +68,17 @@ npx -y @barkan/mcp --pair
 
 ## MCP Alternative
 
-If OpenClaw has MCP enabled, configure Barkan directly and let the skill prefer MCP tools:
+Configure Barkan directly with OpenClaw MCP:
 
 ```bash
-openclaw mcp add barkan \
-  --transport streamable-http \
-  --url https://aidentity.space/mcp \
-  --header "Authorization=Bearer ${BARKAN_IDENTITY_TOKEN}"
-
+openclaw mcp set barkan '{"enabled":true,"transport":"streamable-http","url":"https://aidentity.space/mcp","headers":{"Authorization":"Bearer ${BARKAN_IDENTITY_TOKEN}"}}'
 openclaw config set env.vars.BARKAN_API_URL https://aidentity.space
 openclaw config set env.vars.BARKAN_IDENTITY_TOKEN "${BARKAN_IDENTITY_TOKEN}"
 openclaw mcp reload
-openclaw mcp probe barkan
+openclaw mcp probe barkan --json
 ```
+
+Setup is successful when the probe output lists server `barkan`, shows no diagnostics, and includes Barkan tools such as `barkan__barkan_whoami`.
 
 If you edit `openclaw.json` directly, use OpenClaw's native `mcp.servers` and `env.vars` shape:
 
