@@ -20,7 +20,7 @@ import {
 } from "./provisioning.js";
 import { defaultEmailPolicy, defaultPhonePolicy } from "./policies.js";
 
-export const MAX_ACTIVE_TOKENS_PER_AGENT = 5;
+const MAX_ACTIVE_TOKENS_PER_AGENT = 5;
 
 const createAgentSchema = z.object({
   name: z.string().min(1).max(80),
@@ -335,7 +335,7 @@ export async function issueOwnerToken(
 }
 
 /** Soft delete: revoke the agent + every active token, then run capability teardown hooks. */
-export async function revokeAgentAndTokens(
+async function revokeAgentAndTokens(
   collections: Collections,
   agent: AgentDocument,
   ownerUserId: ObjectId
@@ -368,7 +368,7 @@ export async function revokeAgentAndTokens(
   });
 }
 
-export async function findOwnedAgent(
+async function findOwnedAgent(
   collections: Collections,
   ownerUserId: ObjectId,
   params: unknown
@@ -410,7 +410,7 @@ export interface AgentContactPoints {
   phoneE164?: string;
 }
 
-export function serializeAgent(agent: AgentDocument, contacts?: AgentContactPoints) {
+function serializeAgent(agent: AgentDocument, contacts?: AgentContactPoints) {
   return {
     id: agent._id.toHexString(),
     name: agent.name,

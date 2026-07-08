@@ -33,7 +33,6 @@ All JSON API failures use the shared envelope:
     "message": "invalid request",
     "requestId": "request-id"
   },
-  "message": "invalid request",
-  "legacyError": "invalid request"
+  "message": "invalid request"
 }
 ```

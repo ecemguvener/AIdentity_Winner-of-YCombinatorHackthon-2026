@@ -125,7 +125,7 @@ const DRAFT_SCHEMA = {
   additionalProperties: false
 } as const;
 
-export async function draftEmail(prompt: string, senderName: string, config: AppConfig): Promise<GeneratedEmail> {
+async function draftEmail(prompt: string, senderName: string, config: AppConfig): Promise<GeneratedEmail> {
   if (config.OPENAI_API_KEY) {
     try {
       return await draftWithOpenAI(prompt, senderName, config);
@@ -192,7 +192,7 @@ function draftHeuristic(prompt: string, senderName: string): GeneratedEmail {
   };
 }
 
-export interface ReplySummary {
+interface ReplySummary {
   summary: string;
   suggestedReply: string;
 }
@@ -207,7 +207,7 @@ const SUMMARY_SCHEMA = {
   additionalProperties: false
 } as const;
 
-export async function summarizeReply(subject: string, body: string, config: AppConfig): Promise<ReplySummary> {
+async function summarizeReply(subject: string, body: string, config: AppConfig): Promise<ReplySummary> {
   if (config.OPENAI_API_KEY && body) {
     try {
       const model = config.OPENAI_EMAIL_MODEL;

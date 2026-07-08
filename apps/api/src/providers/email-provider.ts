@@ -29,7 +29,7 @@ export interface EmailProvider {
   sendEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult>;
 }
 
-export interface InboundEmailAttachment {
+interface InboundEmailAttachment {
   id: string;
   filename: string;
   sizeBytes: number;
@@ -54,7 +54,7 @@ export interface EmailInboundClient {
   getAttachment(emailId: string, attachmentId: string): Promise<{ data: ArrayBuffer; contentType: string; filename: string }>;
 }
 
-export class ResendEmailProvider implements EmailProvider {
+class ResendEmailProvider implements EmailProvider {
   private readonly resend: Resend;
 
   constructor(apiKey: string) {
@@ -103,7 +103,7 @@ export class MockEmailProvider implements EmailProvider {
   }
 }
 
-export class ResendInboundClient implements EmailInboundClient {
+class ResendInboundClient implements EmailInboundClient {
   private readonly resend: Resend;
 
   constructor(apiKey: string) {

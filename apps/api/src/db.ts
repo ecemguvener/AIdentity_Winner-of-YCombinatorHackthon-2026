@@ -278,7 +278,7 @@ export interface BillingAccountDocument extends Document {
 }
 
 // Completed migration runs recorded by the migration runner.
-export interface MigrationDocument extends Document {
+interface MigrationDocument extends Document {
   _id: ObjectId;
   name: string;
   ranAt: Date;
@@ -301,7 +301,7 @@ export interface UsageEventDocument extends Document {
   updatedAt: Date;
 }
 
-export interface UsageReportDocument extends Document {
+interface UsageReportDocument extends Document {
   _id: ObjectId;
   ownerUserId: ObjectId;
   billingAccountId: ObjectId;
@@ -328,7 +328,7 @@ export interface PairingRequestDocument extends Document {
   updatedAt: Date;
 }
 
-export interface OpsStatusDocument extends Document {
+interface OpsStatusDocument extends Document {
   _id: ObjectId;
   key: string;
   kind: "backup" | "retention" | "account_deletion" | "account_export" | "alert";
@@ -340,7 +340,7 @@ export interface OpsStatusDocument extends Document {
   updatedAt: Date;
 }
 
-export interface AccountExportDocument extends Document {
+interface AccountExportDocument extends Document {
   _id: ObjectId;
   ownerUserId: ObjectId;
   status: "pending" | "ready" | "failed" | "downloaded" | "expired";
@@ -354,7 +354,7 @@ export interface AccountExportDocument extends Document {
   downloadedAt?: Date;
 }
 
-export interface WaitlistDocument extends Document {
+interface WaitlistDocument extends Document {
   _id: ObjectId;
   email: string;
   feature: "card";

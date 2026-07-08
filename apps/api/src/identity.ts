@@ -40,7 +40,7 @@ export interface AgentIdentity {
   };
 }
 
-export function agentIdentityView(agent: AgentDocument): AgentIdentity {
+function agentIdentityView(agent: AgentDocument): AgentIdentity {
   return {
     id: agent._id.toHexString(),
     name: agent.name,
@@ -53,7 +53,7 @@ export function agentIdentityView(agent: AgentDocument): AgentIdentity {
   };
 }
 
-export async function loadAgentIdentityFromRequest(
+async function loadAgentIdentityFromRequest(
   request: FastifyRequest,
   collections: Collections
 ): Promise<AgentIdentity | null> {

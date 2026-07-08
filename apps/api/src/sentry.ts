@@ -75,7 +75,7 @@ export function scrubSentryEvent(event: Sentry.Event): Sentry.Event {
   return scrubObject(event) as Sentry.Event;
 }
 
-export function scrubObject(value: unknown): unknown {
+function scrubObject(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => scrubObject(item));
   }

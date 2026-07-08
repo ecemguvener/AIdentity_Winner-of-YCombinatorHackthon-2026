@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft } from "lucide-react";
 import { api, type User } from "../api";
-import { Brand, FloatingField, getErrorMessage, panelTransitionDurationMs, requiredFieldMessage, type AuthMode, type AuthStep, type AuthTransition, type PanelState } from "../legacy/shared";
+import { Brand, FloatingField, getErrorMessage, panelTransitionDurationMs, requiredFieldMessage, type AuthMode, type AuthStep, type AuthTransition, type PanelState } from "../shared";
 
 export function AuthScreen({
   onAuthed,

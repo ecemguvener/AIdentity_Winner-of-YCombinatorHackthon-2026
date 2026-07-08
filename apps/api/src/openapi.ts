@@ -217,7 +217,7 @@ export function buildOpenApiDocument(config: AppConfig) {
       schemas: {
         ErrorEnvelope: {
           type: "object",
-          required: ["error", "message", "legacyError"],
+          required: ["error", "message"],
           properties: {
             error: {
               type: "object",
@@ -229,8 +229,7 @@ export function buildOpenApiDocument(config: AppConfig) {
                 details: true
               }
             },
-            message: { type: "string" },
-            legacyError: { type: "string" }
+            message: { type: "string" }
           }
         }
       }

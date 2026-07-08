@@ -41,7 +41,7 @@ export function buildTrustedDashboardCorsHeaders(origin: unknown, config: AppCon
   };
 }
 
-export function buildPublicCorsHeaders(origin: unknown): Record<string, string> {
+function buildPublicCorsHeaders(origin: unknown): Record<string, string> {
   return {
     "access-control-allow-origin": typeof origin === "string" && origin.trim() ? origin : "*",
     vary: "Origin"
@@ -62,7 +62,7 @@ export function isPublicCorsPath(requestUrl: string): boolean {
   return pathname === "/webhooks/resend" || pathname === "/api/v1/openapi.json" || pathname === "/docs";
 }
 
-export function getTrustedDashboardOrigins(config: AppConfig): Set<string> {
+function getTrustedDashboardOrigins(config: AppConfig): Set<string> {
   return new Set([config.PUBLIC_APP_URL, config.PUBLIC_API_URL].map(normalizeOrigin).filter(Boolean));
 }
 

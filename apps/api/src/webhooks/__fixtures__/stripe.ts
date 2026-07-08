@@ -55,7 +55,7 @@ export function customerSubscriptionUpdated(
   return subscriptionEvent("evt_subscription_updated", "customer.subscription.updated", overrides);
 }
 
-export function customerSubscriptionDeleted(
+function customerSubscriptionDeleted(
   overrides: Partial<Stripe.CustomerSubscriptionDeletedEvent> = {}
 ): Stripe.CustomerSubscriptionDeletedEvent {
   return subscriptionEvent("evt_subscription_deleted", "customer.subscription.deleted", overrides);

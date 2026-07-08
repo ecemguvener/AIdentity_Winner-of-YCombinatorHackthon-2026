@@ -1,7 +1,7 @@
 import { Resend, type DomainRecords } from "resend";
 import type { AppConfig } from "../config.js";
 
-export interface ResendDomainRecordStatus {
+interface ResendDomainRecordStatus {
   record: string;
   type: string;
   name: string;

@@ -115,7 +115,7 @@ export function registerBillingRoutes(app: FastifyInstance, collections: Collect
   });
 }
 
-export function serializeBillingPlans() {
+function serializeBillingPlans() {
   return Object.values(billingPlans).map((plan) => ({
     plan: plan.plan,
     name: plan.plan === "free" ? "Free" : plan.plan === "pro" ? "Pro" : "Scale",

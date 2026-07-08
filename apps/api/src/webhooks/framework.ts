@@ -34,7 +34,7 @@ declare module "fastify" {
 }
 
 /** Thrown by verifiers/glue when a signature cannot be validated → 401. */
-export class WebhookVerificationError extends Error {
+class WebhookVerificationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "WebhookVerificationError";

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignore": [
+    "apps/api/src/migrations/2026-08-drop-old-identity-collections.ts"
+  ],
+  "ignoreBinaries": [
+    "pm2",
+    "stripe"
+  ],
+  "ignoreDependencies": [
+    "openapi-typescript"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.mjs",
+        "scripts/*.ts"
+      ],
+      "project": [
+        "scripts/**/*.mjs",
+        "scripts/**/*.ts",
+        "e2e/**/*.ts",
+        "*.config.ts"
+      ]
+    },
+    "apps/api": {
+      "entry": [
+        "src/scripts/**/*.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "apps/web": {
+      "entry": [
+        "src/**/*.test.tsx"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "src/**/*.tsx"
+      ]
+    },
+    "packages/mcp": {
+      "entry": [
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/sdk": {
+      "entry": [
+        "src/examples/simple-agent.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "scripts/**/*.mjs"
+      ]
+    }
+  }
+}

@@ -106,23 +106,23 @@ describe("authenticateAgentRequest", () => {
     expect(await authenticateAgentRequest(requestWithAuthorization(`Bearer ${plaintext}`), database.collections)).toBeNull();
   });
 
-  it("authenticates legacy migrated api keys (same hash function)", async () => {
+  it("authenticates migrated pre-v1 api keys (same hash function)", async () => {
     const agent = await createAgent();
-    const legacyPlaintextKey = "ck_legacy-plaintext-key";
+    const migratedPlaintextKey = "ck_migrated-plaintext-key";
     const now = new Date();
     await database.collections.identityTokens.insertOne({
       _id: new ObjectId(),
       agentId: agent._id,
       ownerUserId: null,
-      tokenHash: hashApiKey(legacyPlaintextKey),
-      prefix: legacyPlaintextKey.slice(0, 12),
-      name: "legacy key",
+      tokenHash: hashApiKey(migratedPlaintextKey),
+      prefix: migratedPlaintextKey.slice(0, 12),
+      name: "migrated key",
       status: "active",
       createdAt: now,
       updatedAt: now
     });
     const context = await authenticateAgentRequest(
-      requestWithAuthorization(`Bearer ${legacyPlaintextKey}`),
+      requestWithAuthorization(`Bearer ${migratedPlaintextKey}`),
       database.collections
     );
     expect(context?.agent._id.equals(agent._id)).toBe(true);

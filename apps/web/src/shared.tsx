@@ -1,26 +1,20 @@
-import { CalendarDays, Mail, Phone } from "lucide-react";
 import React, { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-export type { ToastNotificationInput } from "../components/ToastNotifications";
+export type { ToastNotificationInput } from "./components/ToastNotifications";
 import {
   api,
   type DashboardChatCallEmbed,
   type DashboardChatMessageInput,
-  type Site,
   type User
-} from "../api";
-import barkanMarkDark from "../assets/barkan/brand/barkan-mark-dark.svg";
-import barkanMarkLight from "../assets/barkan/brand/barkan-mark-light.svg";
-import sitePreviewAgentIdentities from "../assets/barkan/images/site-preview-agent-identities.jpg";
-import sitePreviewConnectOpenClaw from "../assets/barkan/images/site-preview-connect-openclaw.jpg";
-import sitePreviewIdentityReady from "../assets/barkan/images/site-preview-identity-ready.jpg";
+} from "./api";
+import barkanMarkDark from "./assets/barkan/brand/barkan-mark-dark.svg";
 
 export const dashboardPath = "/agents";
 export const dashboardChatPath = `${dashboardPath}/chat`;
-export const userSettingsPath = `${dashboardPath}/settings`;
-export const billingSettingsPath = "/settings/billing";
+const userSettingsPath = `${dashboardPath}/settings`;
+const billingSettingsPath = "/settings/billing";
 export const approvalsPath = "/approvals";
 export const newSitePath = "/agents/new";
-export const pairPath = "/pair";
+const pairPath = "/pair";
 export const signinPath = "/signin";
 export const plansPath = "/plans";
 export const docsSitePath = "/docs-site";
@@ -29,8 +23,6 @@ export const profileAvatarAcceptedTypes = new Set(["image/png", "image/jpeg", "i
 
 export type AuthMode = "login" | "signup";
 export type AuthStep = "email" | "password";
-export type SiteOnboardingStep = "name" | "openclaw" | "setup" | "install" | "finish";
-export type OpenClawConnectionMode = "existing" | "deploy";
 export type DashboardSection = "sites" | "chat" | "approvals" | "settings";
 export type DashboardChatRole = "assistant" | "user";
 export type DashboardChatMessage = {
@@ -46,65 +38,13 @@ export type DashboardChatMessage = {
 export type SiteDetailTab = "credentials" | "openclaw" | "phone" | "email";
 export type UserSettingsSection = "profile" | "security" | "notifications" | "billing";
 export type PanelState = "active" | "hidden" | "incoming" | "outgoing";
-export type SetupProgressStep = "connection";
-export type SetupStepProgress = Partial<Record<SetupProgressStep, { current: number; total: number; label?: string }>>;
-export type StepTransition = {
-  from: SiteOnboardingStep;
-  to: SiteOnboardingStep;
-};
 export type AuthTransition = {
   from: AuthStep;
   to: AuthStep;
 };
 
-export const siteProgressSteps = [0, 1, 2, 3, 4];
-export const siteStepIndexes: Record<SiteOnboardingStep, number> = {
-  name: 0,
-  openclaw: 1,
-  setup: 2,
-  install: 3,
-  finish: 4
-};
 export const panelTransitionDurationMs = 560;
-export const onboardingPanelTransitionDurationMs = 820;
-export const onboardingPanelTransitionSwapMs = 300;
-export const buttonLoadingDurationMs = 420;
 export const requiredFieldMessage = "Please fill in this field.";
-export const onboardingSetupSteps: Array<{ id: SetupProgressStep; label: string }> = [
-  { id: "connection", label: "OpenClaw link" }
-];
-
-export function isCompletionOnboardingStep(step: SiteOnboardingStep) {
-  return step === "setup" || step === "install" || step === "finish";
-}
-export const sitePreviewImages = {
-  "site-preview-blue-flow": sitePreviewConnectOpenClaw,
-  "site-preview-coral-mint": sitePreviewAgentIdentities,
-  "site-preview-cyan-mist": sitePreviewIdentityReady,
-  "site-preview-dashboard": sitePreviewConnectOpenClaw,
-  "site-preview-lime-blue": sitePreviewAgentIdentities
-} as const;
-export const sitePreviewImageNames = Object.keys(sitePreviewImages) as Array<keyof typeof sitePreviewImages>;
-export const agentIdentityCapabilities = [
-  {
-    label: "Phone",
-    value: "+1 (415) 555-0198",
-    description: "Calls and SMS for the agent",
-    Icon: Phone
-  },
-  {
-    label: "Email",
-    value: "agent@identity.barkan.dev",
-    description: "Inbox and outbound email identity",
-    Icon: Mail
-  },
-  {
-    label: "Calendar",
-    value: "Dashboard audit log",
-    description: "Availability and scheduling",
-    Icon: CalendarDays
-  }
-] as const;
 
 export function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -112,54 +52,6 @@ export function getErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
-}
-
-export function isTimeoutLikeSetupError(message: string): boolean {
-  const normalizedMessage = message.trim().toLowerCase();
-  return normalizedMessage === "failed to fetch" || normalizedMessage.includes("time");
-}
-
-export function sleep(durationMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, durationMs);
-  });
-}
-
-export function slugifyIdentityName(value: string): string {
-  const slug = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return slug || "agent";
-}
-
-export function buildOpenClawLinkPrompt(identityName: string, token: string | undefined, projectId: string | null): string {
-  const linkEndpoint = `${window.location.origin}/api/openclaw/link/confirm`;
-  const safeToken = token ?? "LINK_TOKEN_PENDING";
-  const safeProjectId = projectId ?? "PROJECT_ID_PENDING";
-
-  return `Install the Barkan Agent Identity skill for this OpenClaw instance.
-
-Identity name: ${identityName.trim() || "New agent identity"}
-Link endpoint: ${linkEndpoint}
-Project token: ${safeProjectId}
-Confirmation token: ${safeToken}
-
-After installing the skill, call the link endpoint with the confirmation token so Barkan can attach this OpenClaw instance to the identity. Once linked, use the provisioned phone number, email inbox, audit log, and future real-world tools through the Barkan identity layer.`;
-}
-
-export function buildIdentityReceipt(site: Site | null): string {
-  const identityName = site?.name ?? "Agent identity";
-  const endpoint = site?.domain ?? "managed-openclaw.barkan.dev";
-
-  return `Barkan Agent Identity
-name=${identityName}
-openclaw=${endpoint}
-phone=+1-415-555-0198
-email=agent@identity.barkan.dev
-audit=enabled`;
 }
 
 export function isAppRoute(path: string): boolean {
@@ -178,7 +70,7 @@ export function isProtectedAppRoute(path: string): boolean {
   );
 }
 
-export function isDashboardRoute(path: string): boolean {
+function isDashboardRoute(path: string): boolean {
   return path === dashboardPath || path === `${dashboardPath}/`;
 }
 
@@ -281,25 +173,8 @@ export function getUserSettingsSection(path: string, search = ""): UserSettingsS
   return "profile";
 }
 
-export function getStaggerStyle(index: number): CSSProperties {
-  return { "--stagger-index": index } as CSSProperties;
-}
-
 export function getProjectCardStyle(index: number): CSSProperties {
   return { "--project-index": index } as CSSProperties;
-}
-
-export function getSitePreviewImage(site: Site): string {
-  if (site.previewImage && site.previewImage in sitePreviewImages) {
-    return sitePreviewImages[site.previewImage as keyof typeof sitePreviewImages];
-  }
-
-  let hash = 0;
-  for (const character of site.id) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  }
-
-  return sitePreviewImages[sitePreviewImageNames[hash % sitePreviewImageNames.length] ?? "site-preview-dashboard"];
 }
 
 export function formatSiteRelativeTime(value: string) {
@@ -410,7 +285,7 @@ export const FloatingField = React.forwardRef<HTMLInputElement, FloatingFieldPro
   );
 });
 
-export function FieldError({ id, message }: { id: string; message?: string }) {
+function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) {
     return null;
   }

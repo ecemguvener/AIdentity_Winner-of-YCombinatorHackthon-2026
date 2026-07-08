@@ -13,7 +13,7 @@ import type {
   PhonePolicy
 } from "../api/types";
 import { getApiBaseUrl } from "../api/client";
-import { getErrorMessage } from "../legacy/shared";
+import { getErrorMessage } from "../shared";
 import type { ToastNotificationInput } from "./ToastNotifications";
 
 const defaultPolicy: PhonePolicy = {

@@ -229,7 +229,7 @@ export function auditEntryToCsvRow(entry: AuditLogDocument): string {
   ].map(escapeCsvField).join(",") + "\n";
 }
 
-export function toObjectId(value: ObjectId | string): ObjectId | null {
+function toObjectId(value: ObjectId | string): ObjectId | null {
   if (value instanceof ObjectId) {
     return value;
   }

@@ -51,30 +51,6 @@ export async function requestJson<T>(path: string, options: RequestJsonOptions =
   return await response.json() as T;
 }
 
-export async function requestJsonWithFallbacks<T>(
-  path: string,
-  options: RequestJsonOptions,
-  candidateBaseUrls: string[]
-): Promise<T> {
-  let lastError: unknown = null;
-
-  for (const candidateBaseUrl of candidateBaseUrls) {
-    try {
-      return await requestJson<T>(path, {
-        ...options,
-        apiBaseUrlOverride: candidateBaseUrl
-      });
-    } catch (error) {
-      if (error instanceof ApiClientError) {
-        throw error;
-      }
-      lastError = error;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("request failed");
-}
-
 export function getApiBaseUrl(): string {
   return apiBaseUrl;
 }
@@ -121,7 +97,7 @@ async function buildApiClientError(response: Response): Promise<ApiClientError> 
   try {
     const parsed = JSON.parse(text) as ApiErrorEnvelope;
     const envelope = parsed.error;
-    const message = parsed.message || envelope?.message || parsed.legacyError || fallbackMessage;
+    const message = parsed.message || envelope?.message || fallbackMessage;
     const error = new ApiClientError({
       status: response.status,
       code: envelope?.code || codeForStatus(response.status),

@@ -16,7 +16,7 @@ export function initSentry(): void {
   });
 }
 
-export function scrubSentryEvent(event: Sentry.Event): Sentry.Event {
+function scrubSentryEvent(event: Sentry.Event): Sentry.Event {
   return scrubObject(event) as Sentry.Event;
 }
 

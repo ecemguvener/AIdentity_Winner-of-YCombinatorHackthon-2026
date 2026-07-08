@@ -5,7 +5,7 @@ import { agentsApi } from "../api/agents";
 import type { AgentDetailResponse, AgentListItem, Approval, IdentityToken } from "../api/types";
 import { api, type User, type OnboardingStep } from "../api";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
-import { Brand, formatSiteRelativeTime, getProjectCardStyle, type DashboardSection, type SiteDetailTab, type UserSettingsSection } from "../legacy/shared";
+import { Brand, formatSiteRelativeTime, getProjectCardStyle, type DashboardSection, type SiteDetailTab, type UserSettingsSection } from "../shared";
 import { DashboardChatIcon, DashboardChatScreen, DashboardSitesIcon, getDashboardChatGreetingName } from "../pages/ChatPage";
 import { AgentDetailPage } from "../pages/AgentDetailPage";
 import { ApprovalsPage } from "../pages/ApprovalsPage";

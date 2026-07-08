@@ -3,7 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Phone } from "lucide-react";
 import { api, type DashboardChatMessageInput, type Site, type User } from "../api";
-import { getErrorMessage, type DashboardChatMessage, type DashboardChatRole } from "../legacy/shared";
+import { getErrorMessage, type DashboardChatMessage, type DashboardChatRole } from "../shared";
 
 export function DashboardChatScreen({ user, sites }: { user: User; sites: Site[] }) {
   const [messages, setMessages] = useState<DashboardChatMessage[]>([]);
@@ -531,7 +531,7 @@ export function getDashboardChatGreetingName(email: string): string {
   return firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1);
 }
 
-export function getTimeOfDayLabel(date = new Date()): string {
+function getTimeOfDayLabel(date = new Date()): string {
   const hour = date.getHours();
   if (hour < 12) {
     return "Morning";
@@ -544,7 +544,7 @@ export function getTimeOfDayLabel(date = new Date()): string {
   return "Evening";
 }
 
-export function createDashboardChatMessage(role: DashboardChatRole, content: string): DashboardChatMessage {
+function createDashboardChatMessage(role: DashboardChatRole, content: string): DashboardChatMessage {
   const suffix =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -557,14 +557,14 @@ export function createDashboardChatMessage(role: DashboardChatRole, content: str
   };
 }
 
-export function toDashboardChatApiMessages(messages: DashboardChatMessage[]): DashboardChatMessageInput[] {
+function toDashboardChatApiMessages(messages: DashboardChatMessage[]): DashboardChatMessageInput[] {
   return messages.slice(-24).map((message) => ({
     role: message.role,
     content: message.content
   }));
 }
 
-export function resizeDashboardChatComposer(inputElement: HTMLTextAreaElement | null) {
+function resizeDashboardChatComposer(inputElement: HTMLTextAreaElement | null) {
   if (!inputElement) {
     return;
   }

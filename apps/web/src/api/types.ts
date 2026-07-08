@@ -6,7 +6,6 @@ export interface ApiErrorEnvelope {
     details?: unknown;
   };
   message?: string;
-  legacyError?: string;
 }
 
 export interface Agent {
@@ -27,7 +26,7 @@ export interface Agent {
   updatedAt: string;
 }
 
-export interface ProvisioningStatus {
+interface ProvisioningStatus {
   enabled: boolean;
   state: "not_provisioned" | "pending" | "provisioned" | "active" | "paused" | "failed";
   detail?: string;
@@ -76,7 +75,7 @@ export interface PhonePolicy {
   storeTranscripts: boolean;
 }
 
-export interface AgentPhoneNumber {
+interface AgentPhoneNumber {
   id: string;
   e164: string;
   country: string;
@@ -143,7 +142,7 @@ export interface AgentSmsThreadResponse {
   next_cursor: string | null;
 }
 
-export interface AgentEmailIdentity {
+interface AgentEmailIdentity {
   email_identity_id: string;
   email_address: string;
   display_name: string;
@@ -171,7 +170,7 @@ export interface AgentEmailThreadsResponse {
   nextCursor: string | null;
 }
 
-export interface AgentEmailAttachment {
+interface AgentEmailAttachment {
   filename: string;
   content_type: string;
   size_bytes: number;

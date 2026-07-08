@@ -19,7 +19,7 @@ export interface EntitlementResult {
   plan: BillingPlan;
 }
 
-export const entitlementCatalog = {
+const entitlementCatalog = {
   free: {
     maxAgents: billingPlans.free.agentLimit,
     capabilities: { email: true, phone: false },

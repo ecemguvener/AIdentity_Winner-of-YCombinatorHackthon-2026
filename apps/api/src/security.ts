@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 
-export const SESSION_TTL_DAYS = 30;
-export const SESSION_IDLE_TTL_DAYS = 7;
+const SESSION_TTL_DAYS = 30;
+const SESSION_IDLE_TTL_DAYS = 7;
 export const PASSWORD_MIN_LENGTH = 10;
 
 export function normalizeEmail(email: string): string {

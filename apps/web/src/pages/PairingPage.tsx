@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { pairingApi } from "../api/pairing";
 import type { AgentListItem } from "../api/types";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
-import { Brand, dashboardPath, getErrorMessage } from "../legacy/shared";
+import { Brand, dashboardPath, getErrorMessage } from "../shared";
 
 export function PairingPage({
   agents,

@@ -651,7 +651,6 @@ export interface components {
                 details?: unknown;
             };
             message: string;
-            legacyError: string;
         };
     };
     responses: never;

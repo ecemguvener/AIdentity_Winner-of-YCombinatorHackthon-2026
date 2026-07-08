@@ -497,7 +497,6 @@ describe("email agent API frozen contract", () => {
           "message": "invalid request",
           "requestId": "<request-id>",
         },
-        "legacyError": "invalid request",
         "message": "invalid request",
       }
     `);

@@ -3,7 +3,7 @@ import { Loader2, LogOut, X } from "lucide-react";
 import { api, type Site, type User } from "../api";
 import { billingApi, type BillingAccountView, type BillingPlanName, type BillingPlanView, type BillingUsageView, type EmailDomainStatusView, type OpsStatusView } from "../api/billing";
 import { ApiClientError } from "../api/client";
-import { FloatingField, getErrorMessage, profileAvatarAcceptedTypes, profileAvatarMaxBytes, type ToastNotificationInput, type UserSettingsSection } from "../legacy/shared";
+import { FloatingField, getErrorMessage, profileAvatarAcceptedTypes, profileAvatarMaxBytes, type ToastNotificationInput, type UserSettingsSection } from "../shared";
 import { BillingSettingsContent } from "./BillingSettingsSection";
 import { getDashboardChatGreetingName } from "./ChatPage";
 
@@ -664,7 +664,7 @@ export function getUserInitials(displayName: string, email: string): string {
   return `${first}${second}`.toUpperCase();
 }
 
-export function formatProfileDate(value: string): string {
+function formatProfileDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "Recently";
@@ -774,7 +774,7 @@ export function SiteSettingsCategoryIcon({
   );
 }
 
-export function DeleteMinusCircleIcon({ className = "" }: { className?: string }) {
+function DeleteMinusCircleIcon({ className = "" }: { className?: string }) {
   return (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path

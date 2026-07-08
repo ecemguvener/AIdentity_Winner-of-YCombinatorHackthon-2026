@@ -1,14 +1,13 @@
 import crypto from "node:crypto";
-import type { FastifyRequest, preHandlerHookHandler } from "fastify";
+import type { FastifyRequest } from "fastify";
 import { ObjectId } from "mongodb";
 import type { AgentDocument, Collections, IdentityTokenDocument } from "./db.js";
-import { ApiError } from "./errors.js";
 import { completeOnboardingStep } from "./onboarding.js";
 import { hashApiKey } from "./security.js";
 
 // ---------------------------------------------------------------------------
 // Agent bearer-token authentication, backed by the `agents` + `identityTokens`
-// collections. Tokens are stored hashed (sha256, same function as legacy api
+// collections. Tokens are stored hashed (sha256, same function as pre-v1 API
 // keys so migrated keys keep authenticating); only the prefix is kept for
 // display.
 // ---------------------------------------------------------------------------
@@ -29,11 +28,11 @@ declare module "fastify" {
 const TOKEN_PREFIX_LENGTH = 12;
 const LAST_USED_UPDATE_INTERVAL_MS = 60_000;
 
-export function createIdentityTokenPlaintext(mode: IdentityTokenMode): string {
+function createIdentityTokenPlaintext(mode: IdentityTokenMode): string {
   return `brk_${mode}_${crypto.randomBytes(32).toString("base64url")}`;
 }
 
-export function identityTokenPrefix(plaintext: string): string {
+function identityTokenPrefix(plaintext: string): string {
   return plaintext.slice(0, TOKEN_PREFIX_LENGTH);
 }
 
@@ -113,14 +112,4 @@ export async function authenticateAgentRequest(
     }
   }
   return { agent, token };
-}
-
-export function requireAgentAuth(collections: Collections): preHandlerHookHandler {
-  return async (request, reply) => {
-    const agentContext = await authenticateAgentRequest(request, collections);
-    if (!agentContext) {
-      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
-    }
-    request.agentContext = agentContext;
-  };
 }

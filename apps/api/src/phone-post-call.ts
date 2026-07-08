@@ -77,7 +77,7 @@ export async function handleElevenLabsPostCall(
   return { ok: true, call_id: call._id.toHexString() };
 }
 
-export function mapPostCallStatus(status: string): CallDocument["status"] {
+function mapPostCallStatus(status: string): CallDocument["status"] {
   const normalized = status.toLowerCase();
   if (["failed", "error"].includes(normalized)) return "failed";
   if (["no_answer", "no-answer", "no answer", "missed"].includes(normalized)) return "no_answer";

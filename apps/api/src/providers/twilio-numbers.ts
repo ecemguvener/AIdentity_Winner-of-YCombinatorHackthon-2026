@@ -129,7 +129,7 @@ export async function listPurchasedNumbers(
   })).filter((number) => number.twilioSid && number.e164);
 }
 
-export function createTwilioNumbersClient(config: AppConfig): TwilioNumbersClient {
+function createTwilioNumbersClient(config: AppConfig): TwilioNumbersClient {
   if (!config.TWILIO_ACCOUNT_SID || !config.TWILIO_AUTH_TOKEN) {
     throw new ApiError(500, "internal", "Twilio credentials are not configured");
   }

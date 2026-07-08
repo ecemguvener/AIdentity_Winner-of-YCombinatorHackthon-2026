@@ -202,7 +202,7 @@ async function expireIfNeeded(collections: Collections, pairing: PairingRequestD
   return true;
 }
 
-export async function expirePairingRequests(collections: Collections): Promise<number> {
+async function expirePairingRequests(collections: Collections): Promise<number> {
   const result = await collections.pairingRequests.updateMany(
     { status: "pending", expiresAt: { $lte: new Date() } },
     { $set: { status: "expired", updatedAt: new Date() } }

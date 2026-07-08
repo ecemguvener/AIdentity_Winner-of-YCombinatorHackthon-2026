@@ -45,7 +45,7 @@ export type DashboardChatStreamEvent =
   | { type: "done" }
   | { type: "error"; error: string };
 
-export interface DashboardChatCallTranscriptTurn {
+interface DashboardChatCallTranscriptTurn {
   role: string;
   message: string;
   timeInCallSecs: number | null;
@@ -104,7 +104,7 @@ type ApiRequestOptions = RequestInit & {
   apiBaseUrlOverride?: string;
 };
 
-export class ApiHttpError extends Error {
+class ApiHttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
@@ -116,7 +116,7 @@ export class ApiHttpError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { apiBaseUrlOverride, ...requestOptions } = options;
   const requestBaseUrl = apiBaseUrlOverride ?? apiBaseUrl;
   const headers = new Headers(requestOptions.headers);
@@ -375,7 +375,7 @@ function parseApiError(text: string, fallback = "request failed"): { message: st
     };
     const details = typeof parsed.error === "object" && parsed.error !== null ? parsed.error.details ?? parsed.details : parsed.details;
     const nestedMessage = typeof parsed.error === "object" && parsed.error !== null ? parsed.error.message : undefined;
-    const legacyMessage = typeof parsed.error === "string" ? parsed.error : undefined;
+    const stringErrorMessage = typeof parsed.error === "string" ? parsed.error : undefined;
     const validationDetails = isValidationDetails(details) ? details : undefined;
     const fieldError = Object.values(validationDetails?.fieldErrors ?? {})
       .flatMap((messages) => messages ?? [])
@@ -383,7 +383,7 @@ function parseApiError(text: string, fallback = "request failed"): { message: st
     const formError = validationDetails?.formErrors?.find((message) => message.trim());
 
     return {
-      message: fieldError || formError || parsed.message || nestedMessage || legacyMessage || fallback,
+      message: fieldError || formError || parsed.message || nestedMessage || stringErrorMessage || fallback,
       code: typeof parsed.error === "object" && parsed.error !== null ? parsed.error.code : undefined,
       details
     };

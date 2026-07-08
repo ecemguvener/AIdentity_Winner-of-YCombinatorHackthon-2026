@@ -1,7 +1,7 @@
 import { Check, Info, X } from "lucide-react";
 import type { CSSProperties } from "react";
 
-export type ToastNotificationKind = "success" | "error" | "info";
+type ToastNotificationKind = "success" | "error" | "info";
 
 export type ToastNotification = {
   id: string;

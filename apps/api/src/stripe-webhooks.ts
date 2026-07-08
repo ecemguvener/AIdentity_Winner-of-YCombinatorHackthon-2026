@@ -34,7 +34,7 @@ export function readStripeEventType(payload: unknown): string {
   return isStripeEventLike(payload) ? payload.type : "unknown";
 }
 
-export function validateStripeEventPayload(payload: unknown): void {
+function validateStripeEventPayload(payload: unknown): void {
   if (!isStripeEventLike(payload)) {
     throw new Error("invalid Stripe event payload");
   }

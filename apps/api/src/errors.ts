@@ -35,7 +35,6 @@ export interface ApiErrorPayload {
     details?: unknown;
   };
   message: string;
-  legacyError: string;
 }
 
 export function buildErrorPayload(error: ApiError, requestId: string): ApiErrorPayload {
@@ -46,8 +45,7 @@ export function buildErrorPayload(error: ApiError, requestId: string): ApiErrorP
       requestId,
       ...(error.details === undefined ? {} : { details: error.details })
     },
-    message: error.message,
-    legacyError: error.message
+    message: error.message
   };
 }
 

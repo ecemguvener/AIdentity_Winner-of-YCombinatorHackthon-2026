@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { billingApi } from "../api/billing";
 import { agentsApi } from "../api/agents";
 import type { Agent, CreateAgentResponse } from "../api/types";
-import { Brand, getErrorMessage, requiredFieldMessage, type ToastNotificationInput } from "../legacy/shared";
+import { Brand, getErrorMessage, requiredFieldMessage, type ToastNotificationInput } from "../shared";
 
 type WizardStep = "identity" | "capabilities" | "review" | "token";
 type RuntimeChoice = "openclaw" | "hermes" | "api";

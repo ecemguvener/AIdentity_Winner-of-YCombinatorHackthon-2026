@@ -35,7 +35,7 @@ export function registerMetricsHooks(app: FastifyInstance, collections: Collecti
   });
 }
 
-export async function renderMetrics(collections: Collections): Promise<string> {
+async function renderMetrics(collections: Collections): Promise<string> {
   const pendingApprovals = await collections.approvals.countDocuments({ status: "pending" });
   const sseConnections = getSseConnectionGauge();
   return [

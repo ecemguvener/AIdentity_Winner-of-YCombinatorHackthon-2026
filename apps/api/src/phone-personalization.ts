@@ -11,7 +11,7 @@ const defaultAgentRole = "personal assistant";
 const notInServiceMessage = "This number is not in service.";
 const blockedMessage = "This assistant is not available for this call.";
 
-export const elevenLabsPersonalizationPayloadSchema = z.object({
+const elevenLabsPersonalizationPayloadSchema = z.object({
   caller_id: z.string().min(1),
   agent_id: z.string().min(1).optional(),
   called_number: z.string().min(1),

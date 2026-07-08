@@ -6,7 +6,7 @@ import type { AgentDetailResponse, IdentityToken } from "../api/types";
 import { EmailPanel } from "../components/EmailPanel";
 import { PhonePanel } from "../components/PhonePanel";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
-import { Brand, getErrorMessage, type SiteDetailTab } from "../legacy/shared";
+import { Brand, getErrorMessage, type SiteDetailTab } from "../shared";
 import { BackChevronIcon, SiteSettingsCategoryIcon } from "./SettingsPage";
 
 const pollIntervalMs = 3000;

@@ -30,7 +30,7 @@ export async function useApiSession(page: Page, request: APIRequestContext) {
   await expect(page.getByText("Name this agent identity").or(page.getByRole("heading", { name: "Agent identities" }))).toBeVisible();
 }
 
-export async function createAgentByApi(request: APIRequestContext, input: { name?: string; phone?: boolean } = {}) {
+async function createAgentByApi(request: APIRequestContext, input: { name?: string; phone?: boolean } = {}) {
   const response = await request.post(`${apiUrl}/api/v1/agents`, {
     data: {
       name: input.name ?? "E2E Agent",

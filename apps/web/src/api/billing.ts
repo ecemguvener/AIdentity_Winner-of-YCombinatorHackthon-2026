@@ -43,7 +43,7 @@ export interface BillingUsageView {
   perMeter: Record<UsageMeter, { used: number; included: number; overage: number }>;
 }
 
-export interface EmailDomainRecordView {
+interface EmailDomainRecordView {
   record: string;
   type: string;
   name: string;

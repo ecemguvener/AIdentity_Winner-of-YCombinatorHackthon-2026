@@ -4873,8 +4873,7 @@
         "type": "object",
         "required": [
           "error",
-          "message",
-          "legacyError"
+          "message"
         ],
         "properties": {
           "error": {
@@ -4898,9 +4897,6 @@
             }
           },
           "message": {
-            "type": "string"
-          },
-          "legacyError": {
             "type": "string"
           }
         }

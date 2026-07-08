@@ -77,7 +77,7 @@ export function defaultPhonePolicy(): PhonePolicy {
   };
 }
 
-export function normalizePhonePolicy(value: unknown): PhonePolicy {
+function normalizePhonePolicy(value: unknown): PhonePolicy {
   const defaults = defaultPhonePolicy();
   const parsed = phonePolicySchema.partial().parse(value ?? {});
   return {
@@ -126,7 +126,7 @@ export async function getEmailPolicy(collections: Collections, agent: AgentDocum
   return normalizeEmailPolicy(policy.email, agent.approvalMode);
 }
 
-export async function updateEmailPolicy(
+async function updateEmailPolicy(
   collections: Collections,
   agent: AgentDocument,
   ownerUserId: ObjectId,
@@ -157,7 +157,7 @@ export async function updateEmailPolicy(
   return next;
 }
 
-export async function updatePhonePolicy(
+async function updatePhonePolicy(
   collections: Collections,
   agent: AgentDocument,
   ownerUserId: ObjectId,

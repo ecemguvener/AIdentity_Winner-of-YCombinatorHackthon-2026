@@ -11,7 +11,7 @@ import type {
 } from "../api/types";
 import { getApiBaseUrl } from "../api/client";
 import type { ToastNotificationInput } from "./ToastNotifications";
-import { getErrorMessage } from "../legacy/shared";
+import { getErrorMessage } from "../shared";
 
 export function EmailPanel({ agent, onNotify }: { agent: Agent; onNotify: (notification: ToastNotificationInput) => void }) {
   const [threadsState, setThreadsState] = useState<AgentEmailThreadsResponse | null>(null);

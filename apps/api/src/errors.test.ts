@@ -71,7 +71,7 @@ describe("API error contract", () => {
     await app.close();
   });
 
-  it("wraps legacy route errors into the unified shape", async () => {
+  it("wraps route errors into the unified shape", async () => {
     const app = await buildApp(baseConfig, createCollections());
 
     const response = await app.inject({ method: "GET", url: "/api/auth/me" });
@@ -81,7 +81,6 @@ describe("API error contract", () => {
     expect(body.error.code).toBe("unauthorized");
     expect(body.error.requestId).toBe(response.headers["x-request-id"]);
     expect(body.message).toBe("authentication required");
-    expect(body.legacyError).toBe("authentication required");
     await app.close();
   });
 });

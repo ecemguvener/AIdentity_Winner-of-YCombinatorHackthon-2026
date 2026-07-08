@@ -7,7 +7,7 @@ import barkanMarkLight from "../assets/barkan/brand/barkan-mark-light.svg";
 import sitePreviewAgentIdentities from "../assets/barkan/images/site-preview-agent-identities.jpg";
 import sitePreviewIdentityReady from "../assets/barkan/images/site-preview-identity-ready.jpg";
 import { requestJson } from "../api/client";
-import { dashboardPath, docsSitePath, plansPath, signinPath } from "../legacy/shared";
+import { dashboardPath, docsSitePath, plansPath, signinPath } from "../shared";
 import { docsManifest, findDocsPage } from "../docs/manifest";
 
 const demoSteps = [

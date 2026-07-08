@@ -92,7 +92,7 @@ const environmentSchema = rawEnvironmentSchema.transform((environment) => {
 });
 
 export type AppConfig = z.infer<typeof environmentSchema>;
-export type ProviderMode = AppConfig["PROVIDER_MODE_EMAIL"];
+type ProviderMode = AppConfig["PROVIDER_MODE_EMAIL"];
 
 export function loadConfig(): AppConfig {
   try {
