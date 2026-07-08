@@ -1985,7 +1985,22 @@ button:disabled {
   line-height: 15px;
 }
 
+.dashboard-page__project-copy small {
+  display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  color: #7a7a7a;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dashboard-page__project-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: none;
   border-radius: 999px;
   padding: 5px 8px;
@@ -1995,6 +2010,7 @@ button:disabled {
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .dashboard-chat {
