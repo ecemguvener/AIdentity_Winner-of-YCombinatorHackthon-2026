@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { User } from "../api";
 import type { AgentListItem } from "../api/types";
@@ -11,32 +11,25 @@ describe("Dashboard onboarding", () => {
     localStorage.clear();
   });
 
-  it("shows the activation checklist and sends the owner test email", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+  it("shows agent identities without activation checklist chrome", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/api/v1/billing")) return jsonResponse({ plan: "free" });
       if (url.endsWith("/api/v1/billing/usage")) return jsonResponse({ perMeter: {} });
       if (url.endsWith("/api/v1/ops/status")) {
         return jsonResponse({ providerModes: { email: "mock", phone: "mock", billing: "mock" } });
       }
-      if (url.endsWith(`/api/v1/agents/${agent.id}/email/send?mode=async`) && init?.method === "POST") {
-        return jsonResponse({ ok: false, status: "approval_required", approval_id: "approval_1", approval: { payloadSummary: "Send email" } }, 202);
-      }
       return jsonResponse({}, 200);
     });
 
     renderDashboard(user(), [agent]);
 
-    expect(screen.getByText("Get to first action")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Send test email"));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining(`/api/v1/agents/${agent.id}/email/send?mode=async`),
-      expect.objectContaining({ method: "POST" })
-    ));
+    expect(screen.queryByText("Get to first action")).not.toBeInTheDocument();
+    expect(screen.getByText("First Agent")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Live providers are not connected yet.")).toBeInTheDocument());
   });
 
-  it("hides the checklist once onboarding is complete", () => {
+  it("keeps the checklist hidden once onboarding is complete", () => {
     renderDashboard({
       ...user(),
       onboarding: {

@@ -1,11 +1,12 @@
-import { Bot, Check, Copy, CreditCard, Mail, Phone, Server, X, Zap } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Bot, Check, Copy, Mail, Phone, Server, X, Zap } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { billingApi } from "../api/billing";
 import { agentsApi } from "../api/agents";
+import { ApiClientError } from "../api/client";
 import type { Agent, CreateAgentResponse } from "../api/types";
 import { Brand, getErrorMessage, requiredFieldMessage, type ToastNotificationInput } from "../shared";
 
-type WizardStep = "identity" | "capabilities" | "review" | "token";
+type WizardStep = "identity" | "token";
 type RuntimeChoice = "openclaw" | "hermes" | "api";
 
 const runtimeChoices: Array<{ id: RuntimeChoice; label: string; description: string; Icon: typeof Server }> = [
@@ -45,22 +46,16 @@ export function AgentCreationWizard({
     let cancelled = false;
     void billingApi.getAccount()
       .then((account) => {
-        if (!cancelled) setPhoneLocked(account.plan === "free");
+        if (cancelled) return;
+        const locked = account.plan === "free";
+        setPhoneLocked(locked);
+        setPhoneEnabled(!locked);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, []);
-
-  function goTo(nextStep: WizardStep) {
-    if (nextStep !== "identity" && !normalizedName) {
-      setNameError(requiredFieldMessage);
-      return;
-    }
-    setNameError("");
-    setStep(nextStep);
-  }
 
   async function createAgent(event: FormEvent) {
     event.preventDefault();
@@ -72,16 +67,27 @@ export function AgentCreationWizard({
     setIsCreating(true);
     setSubmitError("");
     try {
-      const response = await agentsApi.create({
+      const input = {
         name: normalizedName,
         description: normalizedDescription || undefined,
         runtime,
-        capabilities: {
-          email: emailEnabled,
-          phone: phoneEnabled
-        },
-        approvalMode: "always"
-      });
+        capabilities: { email: emailEnabled, phone: phoneEnabled },
+        approvalMode: "always" as const
+      };
+      let response: CreateAgentResponse;
+      try {
+        response = await agentsApi.create(input);
+      } catch (error) {
+        if (!(error instanceof ApiClientError) || error.code !== "plan_limit" || !phoneEnabled) {
+          throw error;
+        }
+        response = await agentsApi.create({
+          ...input,
+          capabilities: { email: emailEnabled, phone: false }
+        });
+        setPhoneEnabled(false);
+        onNotify({ title: "Email identity created. Phone can be added after upgrade.", kind: "info" });
+      }
       setCreated(response);
       setStep("token");
       onCreated(response);
@@ -125,10 +131,10 @@ export function AgentCreationWizard({
         <Brand />
 
         {step === "identity" ? (
-          <form className="site-onboarding-page__form" onSubmit={(event) => { event.preventDefault(); goTo("capabilities"); }}>
+          <form className="site-onboarding-page__form" onSubmit={createAgent}>
             <header className="site-onboarding-page__header">
-              <h1>Name this agent identity</h1>
-              <p>Choose how this AI worker will connect to Barkan.</p>
+              <h1>Create agent identity</h1>
+              <p>Barkan provisions the contact points and runtime credentials automatically.</p>
             </header>
             <label className="site-onboarding-page__field">
               <span>Name</span>
@@ -153,63 +159,16 @@ export function AgentCreationWizard({
                 </button>
               ))}
             </div>
-            <button className="site-onboarding-page__submit" type="submit">Continue</button>
-          </form>
-        ) : null}
-
-        {step === "capabilities" ? (
-          <section className="site-onboarding-page__form">
-            <header className="site-onboarding-page__header">
-              <h1>Choose real-world tools</h1>
-              <p>Email and phone are provisioned under owner policy. Payment cards are coming soon.</p>
-            </header>
-            <CapabilityToggle
-              checked={emailEnabled}
-              description="Provision a dedicated email address for outbound and inbound mail."
-              icon={<Mail size={20} aria-hidden="true" />}
-              label="Email"
-              onChange={setEmailEnabled}
-            />
-            <CapabilityToggle
-              checked={phoneEnabled}
-              description={phoneLocked ? "Phone unlocks on paid plans. You can add it after upgrading." : "Provision a phone number for calls and SMS."}
-              disabled={phoneLocked}
-              icon={<Phone size={20} aria-hidden="true" />}
-              label={phoneLocked ? "Phone - upgrade required" : "Phone"}
-              onChange={(checked) => setPhoneEnabled(phoneLocked ? false : checked)}
-            />
-            <div className="site-onboarding-page__choice site-onboarding-page__choice--disabled" title="Controlled agent spending is on the roadmap">
-              <CreditCard size={20} aria-hidden="true" />
-              <span>Payment card</span>
-              <small>Coming soon</small>
-            </div>
-            <div className="site-onboarding-page__actions">
-              <button type="button" onClick={() => goTo("identity")}>Back</button>
-              <button className="site-onboarding-page__submit" type="button" onClick={() => goTo("review")}>Review</button>
-            </div>
-          </section>
-        ) : null}
-
-        {step === "review" ? (
-          <form className="site-onboarding-page__form" onSubmit={createAgent}>
-            <header className="site-onboarding-page__header">
-              <h1>Review & create</h1>
-              <p>{normalizedName} will be created with {runtimeLabel(runtime)} instructions.</p>
-            </header>
             <div className="site-onboarding-page__receipt">
-              <span>Name: {normalizedName}</span>
-              <span>Runtime: {runtimeLabel(runtime)}</span>
-              <span>Email: {emailEnabled ? "Enabled" : "Off"}</span>
-              <span>Phone: {phoneEnabled ? "Enabled" : "Off"}</span>
-              <span>Payment card: Coming soon</span>
+              <strong>Automatic setup</strong>
+              <span><Mail size={15} aria-hidden="true" /> Email address provisioned now</span>
+              <span><Phone size={15} aria-hidden="true" /> {phoneLocked ? "Phone ready after plan upgrade" : "Phone number provisioned now"}</span>
+              <span>{runtimeLabel(runtime)} credentials generated after create</span>
             </div>
             {submitError ? <p className="field-error" role="alert">{submitError}</p> : null}
-            <div className="site-onboarding-page__actions">
-              <button type="button" onClick={() => goTo("capabilities")}>Back</button>
-              <button className="site-onboarding-page__submit" type="submit" disabled={isCreating}>
-                {isCreating ? "Creating..." : "Create identity"}
-              </button>
-            </div>
+            <button className="site-onboarding-page__submit" type="submit" disabled={isCreating}>
+              {isCreating ? "Creating..." : "Create identity"}
+            </button>
           </form>
         ) : null}
 
@@ -245,31 +204,6 @@ export function AgentCreationWizard({
         ) : null}
       </div>
     </main>
-  );
-}
-
-function CapabilityToggle({
-  checked,
-  description,
-  disabled = false,
-  icon,
-  label,
-  onChange
-}: {
-  checked: boolean;
-  description: string;
-  disabled?: boolean;
-  icon: ReactNode;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className={`site-onboarding-page__choice${checked ? " site-onboarding-page__choice--selected" : ""}${disabled ? " site-onboarding-page__choice--disabled" : ""}`}>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
-      {icon}
-      <span>{label}</span>
-      <small>{description}</small>
-    </label>
   );
 }
 

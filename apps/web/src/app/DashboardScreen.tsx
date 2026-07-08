@@ -95,8 +95,8 @@ export function DashboardScreen({
     void billingApi.getOpsStatus()
       .then((status) => {
         if (isCancelled) return;
-        const allMock = status.providerModes.email === "mock" && status.providerModes.phone === "mock" && status.providerModes.billing === "mock";
-        setSandboxBanner(allMock && window.localStorage.getItem(storageKey) !== "true");
+        const contactProvidersMock = status.providerModes.email === "mock" || status.providerModes.phone === "mock";
+        setSandboxBanner(contactProvidersMock && window.localStorage.getItem(storageKey) !== "true");
       })
       .catch(() => undefined);
     return () => {
@@ -171,8 +171,8 @@ export function DashboardScreen({
       {sandboxBanner ? (
         <div className="sandbox-banner" role="status">
           <ShieldAlert size={17} aria-hidden="true" />
-          <span>Sandbox mode - actions are simulated.</span>
-          <a href="/docs-site/operators/email">See setup guide</a>
+          <span>Live providers are not connected yet.</span>
+          <a href="/docs-site/operators/email">Connect providers</a>
           <button type="button" aria-label="Dismiss sandbox banner" onClick={() => {
             window.localStorage.setItem(`barkan:sandbox-dismissed:${user.id}`, "true");
             setSandboxBanner(false);
@@ -220,13 +220,8 @@ export function DashboardScreen({
         <AgentsList
           agents={agents}
           error={error}
-          pendingApprovals={pendingApprovals}
-          user={user}
           onCreateAgent={onCreateAgent}
           onSelectAgent={onSelectAgent}
-          onOpenApprovals={onOpenApprovals}
-          onUserUpdated={onUserUpdated}
-          onNotify={onNotify}
         />
       )}
     </main>
@@ -236,23 +231,13 @@ export function DashboardScreen({
 function AgentsList({
   agents,
   error,
-  pendingApprovals,
-  user,
   onCreateAgent,
-  onSelectAgent,
-  onOpenApprovals,
-  onUserUpdated,
-  onNotify
+  onSelectAgent
 }: {
   agents: AgentListItem[];
   error: string;
-  pendingApprovals: Approval[];
-  user: User;
   onCreateAgent: () => void;
   onSelectAgent: (agentId: string) => void;
-  onOpenApprovals: () => void;
-  onUserUpdated: (user: User) => void;
-  onNotify: (notification: ToastNotificationInput) => void;
 }) {
   return (
     <section className="dashboard-page__workspace dashboard-page__workspace--projects">
@@ -265,18 +250,6 @@ function AgentsList({
           </header>
 
           <div className="dashboard-page__projects-grid-shell">
-            {agents.length > 0 ? (
-              <ActivationChecklist
-                agents={agents}
-                pendingApprovals={pendingApprovals}
-                user={user}
-                onCreateAgent={onCreateAgent}
-                onOpenApprovals={onOpenApprovals}
-                onSelectAgent={onSelectAgent}
-                onUserUpdated={onUserUpdated}
-                onNotify={onNotify}
-              />
-            ) : null}
             {error ? (
               <div className="dashboard-page__projects-state">{error}</div>
             ) : agents.length === 0 ? (
