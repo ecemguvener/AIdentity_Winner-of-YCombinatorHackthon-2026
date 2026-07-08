@@ -1,4 +1,4 @@
-import { Bell, Check, Clock, Copy, LogOut, Mail, Phone, Plus, ShieldAlert, Terminal, X } from "lucide-react";
+import { Check, Clock, Copy, LogOut, Mail, Phone, Plus, ShieldAlert, Terminal, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { billingApi, type BillingPlanName } from "../api/billing";
 import { agentsApi } from "../api/agents";
@@ -9,7 +9,7 @@ import { Brand, formatSiteRelativeTime, getProjectCardStyle, type DashboardSecti
 import { DashboardChatIcon, DashboardChatScreen, DashboardSitesIcon, getDashboardChatGreetingName } from "../pages/ChatPage";
 import { AgentDetailPage } from "../pages/AgentDetailPage";
 import { ApprovalsPage } from "../pages/ApprovalsPage";
-import { UserSettingsPage, getUserInitials } from "../pages/SettingsPage";
+import { NotificationTabIcon, UserSettingsPage, getUserInitials } from "../pages/SettingsPage";
 
 export function DashboardScreen({
   error,
@@ -131,7 +131,7 @@ export function DashboardScreen({
               type="button"
               onClick={onOpenApprovals}
             >
-              <Bell size={18} aria-hidden="true" />
+              <NotificationTabIcon className="dashboard-page__rail-icon" />
               <span>Approvals</span>
               {pendingApprovals.length > 0 ? <strong>{pendingApprovals.length}</strong> : null}
             </button>
