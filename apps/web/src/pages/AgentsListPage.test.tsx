@@ -41,7 +41,8 @@ describe("Agent creation wizard", () => {
         identityToken: { secret: "barkan_secret_once", prefix: "barkan" }
       }, 201);
     });
-    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
 
     render(<AgentCreationWizard onCancel={vi.fn()} onCreated={vi.fn()} onNotify={vi.fn()} />);
 
@@ -51,7 +52,11 @@ describe("Agent creation wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /create identity/i }));
 
     expect(await screen.findByText("barkan_secret_once")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /copy/i }));
+    fireEvent.click(screen.getByRole("button", { name: /copy prompt/i }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("BARKAN_IDENTITY_TOKEN=barkan_secret_once"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("/mcp"));
+
+    fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
 
     await waitFor(() => expect(screen.queryByText("barkan_secret_once")).not.toBeInTheDocument());
     expect(screen.getByText("barkan_sec...stored")).toBeInTheDocument();

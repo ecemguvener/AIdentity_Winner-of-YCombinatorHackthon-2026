@@ -4900,6 +4900,51 @@ button:disabled {
   color: var(--color-text);
 }
 
+.site-onboarding-page__prompt-card {
+  width: 100%;
+  border: 1px solid var(--color-text);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.08);
+  margin-bottom: 12px;
+}
+
+.site-onboarding-page__prompt-card div {
+  display: grid;
+  gap: 6px;
+}
+
+.site-onboarding-page__prompt-card strong {
+  font-size: 16px;
+}
+
+.site-onboarding-page__prompt-card span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.site-onboarding-page__prompt-card button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .site-onboarding-page__receipt code,
 .site-onboarding-page__token code {
   overflow-wrap: anywhere;
@@ -4949,6 +4994,15 @@ button:disabled {
 
   .site-onboarding-page__token {
     grid-template-columns: 1fr;
+  }
+
+  .site-onboarding-page__prompt-card {
+    grid-template-columns: 1fr;
+  }
+
+  .site-onboarding-page__prompt-card button {
+    justify-content: center;
+    width: 100%;
   }
 }
 

@@ -37,6 +37,7 @@ export function AgentCreationWizard({
   const [isCreating, setIsCreating] = useState(false);
   const [created, setCreated] = useState<CreateAgentResponse | null>(null);
   const [isTokenCopied, setIsTokenCopied] = useState(false);
+  const [isOpenClawPromptCopied, setIsOpenClawPromptCopied] = useState(false);
   const normalizedName = name.trim();
   const normalizedDescription = description.trim();
 
@@ -96,6 +97,17 @@ export function AgentCreationWizard({
     await navigator.clipboard.writeText(created.identityToken.secret);
     setIsTokenCopied(true);
     onNotify({ title: "Identity token copied" });
+  }
+
+  async function copyOpenClawPrompt() {
+    if (!created) return;
+    await navigator.clipboard.writeText(buildOpenClawSetupPrompt({
+      agent: created.agent,
+      apiUrl: window.location.origin,
+      token: created.identityToken.secret
+    }));
+    setIsOpenClawPromptCopied(true);
+    onNotify({ title: "OpenClaw prompt copied" });
   }
 
   function confirmStored() {
@@ -204,9 +216,19 @@ export function AgentCreationWizard({
         {step === "token" && created ? (
           <section className="site-onboarding-page__form">
             <header className="site-onboarding-page__header">
-              <h1>Store this identity token</h1>
-              <p>This secret is shown once. Keep it in the agent runtime environment.</p>
+              <h1>Connect OpenClaw</h1>
+              <p>Copy this setup prompt into OpenClaw. It includes the one-time token.</p>
             </header>
+            <div className="site-onboarding-page__prompt-card">
+              <div>
+                <strong>OpenClaw setup prompt</strong>
+                <span>Paste into OpenClaw so it installs the skill, stores the env values, and verifies the identity.</span>
+              </div>
+              <button type="button" onClick={copyOpenClawPrompt}>
+                <Copy size={16} aria-hidden="true" />
+                <span>{isOpenClawPromptCopied ? "Copied" : "Copy prompt"}</span>
+              </button>
+            </div>
             <div className="site-onboarding-page__token">
               <code>{isTokenCopied || tokenWasStored(created.agent.id) ? maskToken(created.identityToken.secret) : created.identityToken.secret}</code>
               <button type="button" onClick={copyToken}>
@@ -267,13 +289,43 @@ const barkan = new BarkanClient({
 
   return (
     <div className="site-onboarding-page__receipt">
-      <strong>{runtimeName} connection</strong>
+      <strong>{runtimeName} fallback config</strong>
       <code>{envText}</code>
       <code>{pairText}</code>
       <code>{sdkText}</code>
-      <span>Use the pair shortcut for MCP, or paste the env lines into OpenClaw, Hermes, or SDK config.</span>
+      <span>Use this if you want to wire env or MCP manually instead of the OpenClaw prompt.</span>
     </div>
   );
+}
+
+function buildOpenClawSetupPrompt({ agent, apiUrl, token }: { agent: Agent; apiUrl: string; token: string }) {
+  const normalizedApiUrl = apiUrl.replace(/\/$/, "");
+  return `Set up Barkan identity for this OpenClaw agent.
+
+Agent name: ${agent.name}
+Barkan API URL: ${normalizedApiUrl}
+Barkan identity token: ${token}
+
+Do these steps:
+1. Install or enable the OpenClaw skill named barkan-identity.
+2. Store these environment variables in this agent runtime:
+   BARKAN_API_URL=${normalizedApiUrl}
+   BARKAN_IDENTITY_TOKEN=${token}
+3. If MCP is available, configure this MCP server:
+${JSON.stringify({
+  mcpServers: {
+    barkan: {
+      transport: "http",
+      url: `${normalizedApiUrl}/mcp`,
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  }
+}, null, 2)}
+4. Verify setup by calling the Barkan identity tool and answering: "What is your Barkan identity?"
+
+Security rule: after storing the token, never print it back to chat.`;
 }
 
 function runtimeLabel(runtime: RuntimeChoice): string {
