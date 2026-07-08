@@ -63,7 +63,7 @@ For local stdio MCP:
 
 ## Messaging Gateway Guidance
 
-Hermes often runs behind Telegram, Discord, or another chat gateway. Owner approval can take longer than a chat reply window. For long-running actions, prefer `wait_for_approval: false`, tell the user the action is waiting in Barkan, then poll `barkan_approval_status` at most once every 10 seconds.
+Hermes often runs behind Telegram, Discord, or another chat gateway. Owner approval can take longer than a chat reply window. When Barkan returns `approval_required`, tell the user the action is waiting in Barkan and will execute automatically when approved. Do not poll or retry the original action.
 
 ## Verification Script
 
@@ -77,8 +77,8 @@ Expected:
 
 1. Hermes uses the `barkan` MCP server or REST fallback.
 2. Barkan creates an approval if policy requires it.
-3. Hermes waits or polls instead of retrying the send.
-4. After approval, Hermes reports the confirmed message id and thread id.
+3. Hermes reports the pending approval id and does not poll or retry.
+4. After approval, Barkan sends automatically. Hermes only reports the confirmed message id if the user later asks for status.
 
 Then ask:
 

@@ -30,8 +30,6 @@ import {
 const require = createRequire(import.meta.url);
 const packageJson = require("../../package.json") as { version?: string };
 
-const maxApprovalWaitMs = 120_000;
-
 export function registerMcpRoutes(
   app: FastifyInstance,
   collections: Collections,
@@ -131,17 +129,16 @@ function registerEmailTools(
       inputSchema: {
         to: z.string().email(),
         subject: z.string().min(1).max(200),
-        body: z.string().min(1).max(10_000),
-        wait_for_approval: z.boolean().optional()
+        body: z.string().min(1).max(10_000)
       }
     },
-    async ({ to, subject, body, wait_for_approval }) => withToolErrors(async () => {
+    async ({ to, subject, body }) => withToolErrors(async () => {
       const result = await sendAgentEmailWithPolicy(collections, config, emailProvider, {
         agent,
         to,
         subject,
         text: body
-      }, approvalOptions(wait_for_approval));
+      }, mcpApprovalOptions());
       return emailSendResult(result);
     })
   );
@@ -176,16 +173,15 @@ function registerEmailTools(
       description: "Reply to an existing email thread.",
       inputSchema: {
         thread_id: z.string().min(1),
-        body: z.string().min(1).max(10_000),
-        wait_for_approval: z.boolean().optional()
+        body: z.string().min(1).max(10_000)
       }
     },
-    async ({ thread_id, body, wait_for_approval }) => withToolErrors(async () => {
+    async ({ thread_id, body }) => withToolErrors(async () => {
       const result = await replyToAgentEmailThread(collections, config, emailProvider, {
         agent,
         threadId: thread_id,
         text: body
-      }, approvalOptions(wait_for_approval));
+      }, mcpApprovalOptions());
       return emailSendResult(result);
     })
   );
@@ -206,18 +202,17 @@ function registerPhoneTools(
         to: z.string().min(3).max(40),
         task: z.string().min(1).max(5000),
         context: z.string().max(8000).optional(),
-        recipient_name: z.string().max(200).optional(),
-        wait_for_approval: z.boolean().optional()
+        recipient_name: z.string().max(200).optional()
       }
     },
-    async ({ to, task, context, recipient_name, wait_for_approval }) => withToolErrors(async () => {
+    async ({ to, task, context, recipient_name }) => withToolErrors(async () => {
       const result = await placeOutboundCall(collections, config, {
         agent,
         toNumber: to,
         task,
         context,
         recipientName: recipient_name
-      }, approvalOptions(wait_for_approval));
+      }, mcpApprovalOptions());
       if ("approvalRequired" in result) {
         return toolOk(approvalPending(result.approval, result.decision));
       }
@@ -245,16 +240,15 @@ function registerPhoneTools(
       description: "Send an SMS as this agent identity.",
       inputSchema: {
         to: z.string().min(3).max(40),
-        body: z.string().min(1).max(1600),
-        wait_for_approval: z.boolean().optional()
+        body: z.string().min(1).max(1600)
       }
     },
-    async ({ to, body, wait_for_approval }) => withToolErrors(async () => {
+    async ({ to, body }) => withToolErrors(async () => {
       const result = await sendAgentSmsWithPolicy(collections, config, {
         agent,
         to,
         body
-      }, approvalOptions(wait_for_approval));
+      }, mcpApprovalOptions());
       if ("approvalRequired" in result) {
         return toolOk(approvalPending(result.approval, result.decision));
       }
@@ -324,10 +318,8 @@ function registerResources(
   );
 }
 
-function approvalOptions(waitForApproval: boolean | undefined) {
-  return waitForApproval === true
-    ? { waitMs: maxApprovalWaitMs }
-    : { async: true };
+function mcpApprovalOptions() {
+  return { async: true };
 }
 
 async function emailSendResult(
@@ -466,6 +458,9 @@ function approvalPending(approval: ApprovalDocument, decision: "pending" | "time
     status: "approval_required",
     decision,
     approval_id: approval._id.toHexString(),
+    polling_required: false,
+    will_execute_on_approval: true,
+    message: "Approval requested. The action will execute automatically when the owner approves it in Barkan.",
     approval: serializeApproval(approval)
   };
 }

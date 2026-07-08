@@ -56,10 +56,10 @@ If an MCP server named `barkan` is configured, use MCP tools instead of shelling
 | `barkan_sms_send` | Send SMS |
 | `barkan_sms_conversation` | Read SMS conversation |
 | `barkan_sms_latest_code` | Fetch newest inbound 4-8 digit code |
-| `barkan_approval_status` | Poll approval request |
+| `barkan_approval_status` | Read approval status when the user asks |
 | `barkan_audit_recent` | Read recent audit trail |
 
-Do not pass `wait_for_approval` unless the user explicitly wants the tool call to block while they approve it. If a tool returns `status: "approval_required"`, tell the user the request is waiting for owner approval in the Barkan dashboard and include the `approval_id`. Use `barkan_approval_status` to check it later.
+If a tool returns `status: "approval_required"`, tell the user the request is waiting for owner approval in the Barkan dashboard and include the `approval_id`. Do not poll. Do not retry the original action. Barkan will execute the email, call, or SMS automatically when the owner approves.
 
 ## Fallback Path: REST
 
@@ -73,7 +73,7 @@ AUTH="authorization: Bearer $BARKAN_IDENTITY_TOKEN"
 Send email:
 
 ```bash
-curl -sS "$API/api/v1/agent/email/send?wait=120" \
+curl -sS "$API/api/v1/agent/email/send" \
   -H "$AUTH" -H "content-type: application/json" \
   -d '{"to":"person@example.com","subject":"Hello","text":"Hi from my Barkan identity."}'
 ```
@@ -93,7 +93,7 @@ curl -sS "$API/api/v1/agent/email/threads/THREAD_ID" -H "$AUTH"
 Reply to email thread:
 
 ```bash
-curl -sS "$API/api/v1/agent/email/threads/THREAD_ID/reply?wait=120" \
+curl -sS "$API/api/v1/agent/email/threads/THREAD_ID/reply" \
   -H "$AUTH" -H "content-type: application/json" \
   -d '{"text":"Thanks, I will follow up."}'
 ```
@@ -101,7 +101,7 @@ curl -sS "$API/api/v1/agent/email/threads/THREAD_ID/reply?wait=120" \
 Place phone call:
 
 ```bash
-curl -sS "$API/api/v1/agent/phone/call?wait=120" \
+curl -sS "$API/api/v1/agent/phone/call" \
   -H "$AUTH" -H "content-type: application/json" \
   -d '{"to":"+14155550198","task":"Ask whether they have a table for two tonight.","context":"Be concise and polite."}'
 ```
@@ -115,7 +115,7 @@ curl -sS "$API/api/v1/agent/phone/calls/CALL_ID" -H "$AUTH"
 Send SMS:
 
 ```bash
-curl -sS "$API/api/v1/agent/phone/sms?wait=120" \
+curl -sS "$API/api/v1/agent/phone/sms" \
   -H "$AUTH" -H "content-type: application/json" \
   -d '{"to":"+14155550198","body":"Hi, this is the Barkan agent identity."}'
 ```
@@ -148,10 +148,9 @@ Report `error.code` and `error.message` plainly. Never expose stack traces or in
 
 ## Approvals Protocol
 
-- Use `wait_for_approval: true` in MCP or `?wait=120` in REST.
 - Pending result means the owner must approve in the Barkan dashboard.
-- Tell the user: "waiting for owner approval in the Barkan dashboard."
-- Poll `barkan_approval_status` at most once every 10 seconds.
+- Tell the user: "waiting for owner approval in the Barkan dashboard; Barkan will execute it automatically once approved."
+- Do not poll approval status unless the user explicitly asks for the current state.
 - Never retry-spam the original action.
 - Never claim the email, call, or SMS happened until the result confirms execution.
 - If rejected, expired, or blocked, report that status and stop.

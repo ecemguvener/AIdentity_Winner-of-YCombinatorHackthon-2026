@@ -8,6 +8,7 @@ import type { AppConfig } from "./config.js";
 import { connectDatabase, type AgentDocument, type Database } from "./db.js";
 import { issueIdentityToken } from "./agent-auth.js";
 import { AUDIT_ACTIONS, recordAudit } from "./audit.js";
+import { decideApproval } from "./approvals.js";
 import { defaultEmailPolicy, defaultPhonePolicy } from "./policies.js";
 
 const config = {
@@ -176,9 +177,19 @@ describe("MCP streamable HTTP endpoint", () => {
     expect(reply.structuredContent).toMatchObject({
       ok: false,
       status: "approval_required",
-      decision: "pending"
+      decision: "pending",
+      polling_required: false,
+      will_execute_on_approval: true
     });
-    expect((reply.structuredContent as { approval_id?: string }).approval_id).toBeTruthy();
+    const approvalId = (reply.structuredContent as { approval_id?: string }).approval_id;
+    expect(approvalId).toBeTruthy();
+    const approved = await decideApproval(database.collections, agent.ownerUserId!, approvalId!, "approved");
+    expect(approved.executionResult).toMatchObject({ status: "sent", to: "person@example.com", subject: "Re: Reply gate" });
+    const sentReply = await database.collections.emailMessages.findOne({
+      _id: new ObjectId(approved.executionResult!.messageId as string),
+      threadId: new ObjectId(threadId)
+    });
+    expect(sentReply).toMatchObject({ direction: "outbound", textBody: "Needs approval", status: "sent" });
 
     await close();
   });

@@ -18,19 +18,19 @@ The server is stateless and is backed by the official `@modelcontextprotocol/sdk
 ## Tools
 
 - `barkan_whoami`
-- `barkan_email_send(to, subject, body, wait_for_approval?)`
+- `barkan_email_send(to, subject, body)`
 - `barkan_email_list_threads(cursor?)`
 - `barkan_email_read_thread(thread_id)`
-- `barkan_email_reply(thread_id, body, wait_for_approval?)`
-- `barkan_phone_call(to, task, context?, recipient_name?, wait_for_approval?)`
+- `barkan_email_reply(thread_id, body)`
+- `barkan_phone_call(to, task, context?, recipient_name?)`
 - `barkan_phone_get_call(call_id)`
-- `barkan_sms_send(to, body, wait_for_approval?)`
+- `barkan_sms_send(to, body)`
 - `barkan_sms_conversation(with, cursor?)`
 - `barkan_sms_latest_code(from?, since_minutes?)`
 - `barkan_approval_status(approval_id)`
 - `barkan_audit_recent(limit?)`
 
-`wait_for_approval` defaults to `false`. Barkan returns a structured pending approval result with `approval_id` immediately. Pass `wait_for_approval: true` only when the runtime should block for up to 120 seconds while the owner approves.
+When policy requires approval, Barkan returns a structured pending approval result with `approval_id` immediately. Do not poll or retry. The action executes automatically when the owner approves it in Barkan.
 
 Policy blocks return normal tool results:
 
