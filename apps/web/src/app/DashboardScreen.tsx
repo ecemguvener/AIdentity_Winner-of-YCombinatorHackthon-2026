@@ -127,13 +127,13 @@ export function DashboardScreen({
               <span>Chat</span>
             </button>
             <button
-              className={`dashboard-page__rail-button${activeSection === "approvals" ? " dashboard-page__rail-button--active" : ""}`}
+              className={`dashboard-page__rail-button${activeSection === "approvals" ? " dashboard-page__rail-button--active" : ""}${pendingApprovals.length > 0 ? " dashboard-page__rail-button--has-notifications" : ""}`}
               type="button"
               onClick={onOpenApprovals}
+              aria-label={pendingApprovals.length > 0 ? `${pendingApprovals.length} pending approval${pendingApprovals.length === 1 ? "" : "s"}` : "Approvals"}
             >
               <NotificationTabIcon className="dashboard-page__rail-icon" />
               <span>Approvals</span>
-              {pendingApprovals.length > 0 ? <strong>{pendingApprovals.length}</strong> : null}
             </button>
             <button className="dashboard-page__rail-button" type="button" onClick={onCreateAgent}>
               <Plus size={18} aria-hidden="true" />

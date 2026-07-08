@@ -1750,6 +1750,14 @@ button:disabled {
   fill: currentColor;
 }
 
+.dashboard-page__rail-icon path:nth-of-type(2) {
+  opacity: 0;
+}
+
+.dashboard-page__rail-button--has-notifications .dashboard-page__rail-icon path:nth-of-type(2) {
+  opacity: 1;
+}
+
 .dashboard-page__rail-button:hover,
 .dashboard-page__logout:hover,
 .dashboard-page__identity:hover {
