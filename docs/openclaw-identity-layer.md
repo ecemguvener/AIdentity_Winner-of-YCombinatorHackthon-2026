@@ -14,11 +14,10 @@ curl -sS http://localhost:4001/api/identity/init \
     "agent_name": "Maya",
     "agent_runtime": "openclaw",
     "use_case": "customer_discovery",
-    "tools": ["email", "phone", "calendar"],
+    "tools": ["email", "phone"],
     "permissions": {
       "email.send": true,
       "phone.call": true,
-      "calendar.create": true,
       "requires_human_approval": true
     }
   }'
@@ -28,14 +27,13 @@ The response returns:
 
 ```json
 {
-  "agent_id": "agent_maya_...",
-  "identity_token": "identity_live_...",
+  "agent_id": "507f1f77bcf86cd799439011",
+  "identity_token": "brk_live_...",
   "email": "maya-1234@agents.barkan.dev",
   "phone": "+1 415 555 1234",
-  "calendar_url": "http://localhost:4001/calendar/agent_maya_...",
   "openclaw_env": {
-    "IDENTITY_LAYER_API_URL": "http://localhost:4001",
-    "AGENT_IDENTITY_TOKEN": "identity_live_..."
+    "BARKAN_API_URL": "http://localhost:4001",
+    "BARKAN_IDENTITY_TOKEN": "brk_live_..."
   }
 }
 ```
@@ -45,28 +43,27 @@ The response returns:
 Give OpenClaw these environment variables or config values:
 
 ```bash
-IDENTITY_LAYER_API_URL=http://localhost:4001
-AGENT_IDENTITY_TOKEN=identity_live_...
+BARKAN_API_URL=http://localhost:4001
+BARKAN_IDENTITY_TOKEN=brk_live_...
 ```
 
-OpenClaw should never receive raw Gmail, Twilio, calendar, or payment keys.
-It only receives the identity token.
+OpenClaw should never receive raw Resend, Twilio, or payment keys.
+It only receives the Barkan identity token.
 
 ## 2a. Add the identity skill to OpenClaw
 
 This repo includes a portable skill folder:
 
 ```text
-openclaw-skills/identity-layer/
+openclaw-skills/barkan-identity/
   SKILL.md
-  client.js
 ```
 
 Add that folder to your OpenClaw skills directory, or copy the instructions from
 `SKILL.md` into the OpenClaw agent. The skill tells OpenClaw:
 
 1. initialize identity before real-world actions,
-2. store `AGENT_IDENTITY_TOKEN`,
+2. store `BARKAN_IDENTITY_TOKEN`,
 3. call identity-layer email, phone, audit, and revoke endpoints,
 4. never use raw provider credentials.
 
@@ -76,7 +73,7 @@ Every real-world action goes through the identity layer with the identity token:
 
 ```bash
 curl -sS http://localhost:4001/api/v1/agent/email/send \
-  -H "authorization: Bearer $AGENT_IDENTITY_TOKEN" \
+  -H "authorization: Bearer $BARKAN_IDENTITY_TOKEN" \
   -H 'content-type: application/json' \
   -d '{
     "to": "demo@example.com",
@@ -90,7 +87,7 @@ Phone calls are demo-simulated but permissioned and audited:
 
 ```bash
 curl -sS http://localhost:4001/api/v1/agent/phone/call \
-  -H "authorization: Bearer $AGENT_IDENTITY_TOKEN" \
+  -H "authorization: Bearer $BARKAN_IDENTITY_TOKEN" \
   -H 'content-type: application/json' \
   -d '{
     "to": "+14155550198",
@@ -103,7 +100,7 @@ curl -sS http://localhost:4001/api/v1/agent/phone/call \
 
 ```bash
 curl -sS http://localhost:4001/api/identity/agent_maya_.../audit-log \
-  -H "authorization: Bearer $AGENT_IDENTITY_TOKEN"
+  -H "authorization: Bearer $BARKAN_IDENTITY_TOKEN"
 ```
 
 ## 5. Revoke the identity
@@ -111,7 +108,7 @@ curl -sS http://localhost:4001/api/identity/agent_maya_.../audit-log \
 ```bash
 curl -sS http://localhost:4001/api/identity/revoke \
   -X POST \
-  -H "authorization: Bearer $AGENT_IDENTITY_TOKEN"
+  -H "authorization: Bearer $BARKAN_IDENTITY_TOKEN"
 ```
 
 After revocation, tool calls using that token are blocked.
@@ -121,7 +118,7 @@ After revocation, tool calls using that token are blocked.
 1. Initialize identity for an OpenClaw agent.
 2. Copy the returned token into OpenClaw.
 3. Ask OpenClaw to validate a startup idea.
-4. OpenClaw calls the identity-layer email, phone, and calendar tools.
+4. OpenClaw calls the identity-layer email and phone tools.
 5. Show the audit log and kill switch.
 
 Pitch line:

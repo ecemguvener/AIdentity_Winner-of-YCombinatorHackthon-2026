@@ -236,8 +236,8 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
       tools,
       permissions: serializePermissions(identity),
       openclaw_env: {
-        IDENTITY_LAYER_API_URL: config.PUBLIC_API_URL,
-        AGENT_IDENTITY_TOKEN: plaintext
+        BARKAN_API_URL: config.PUBLIC_API_URL,
+        BARKAN_IDENTITY_TOKEN: plaintext
       },
       tool_endpoints: {
         email_send: `${config.PUBLIC_API_URL}/api/v1/agent/email/send`,
