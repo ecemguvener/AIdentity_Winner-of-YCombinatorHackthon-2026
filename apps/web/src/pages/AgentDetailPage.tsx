@@ -6,7 +6,7 @@ import type { AgentDetailResponse, IdentityToken } from "../api/types";
 import { EmailPanel } from "../components/EmailPanel";
 import { PhonePanel } from "../components/PhonePanel";
 import type { ToastNotificationInput } from "../components/ToastNotifications";
-import { Brand, getErrorMessage, type SiteDetailTab } from "../shared";
+import { getErrorMessage, type SiteDetailTab } from "../shared";
 import { BackChevronIcon, SiteSettingsCategoryIcon } from "./SettingsPage";
 
 const pollIntervalMs = 3000;
@@ -14,6 +14,7 @@ const pollIntervalMs = 3000;
 export function AgentDetailPage({
   detail,
   activeTab,
+  onSelectTab,
   onAgentDetailLoaded,
   onAgentUpdated,
   onAgentDeleted,
@@ -23,6 +24,7 @@ export function AgentDetailPage({
 }: {
   detail: AgentDetailResponse;
   activeTab: SiteDetailTab;
+  onSelectTab: (tab: SiteDetailTab) => void;
   onAgentDetailLoaded: (detail: AgentDetailResponse) => void;
   onAgentUpdated: (detail: AgentDetailResponse) => void;
   onAgentDeleted: (agentId: string) => void;
@@ -144,11 +146,10 @@ export function AgentDetailPage({
             <BackChevronIcon />
             <span>Back</span>
           </button>
-          <Brand className="site-detail-page__brand" />
           <nav className="site-detail-page__tabs" role="tablist" aria-label="Agent detail">
-            <DetailTab active={visibleTab === "credentials"} icon="general" label="Overview" />
-            <DetailTab active={visibleTab === "email"} icon="email" label="Email" />
-            <DetailTab active={visibleTab === "phone"} icon="phone" label="Phone" />
+            <DetailTab active={visibleTab === "credentials"} icon="general" label="Overview" onSelect={() => onSelectTab("credentials")} />
+            <DetailTab active={visibleTab === "email"} icon="email" label="Email" onSelect={() => onSelectTab("email")} />
+            <DetailTab active={visibleTab === "phone"} icon="phone" label="Phone" onSelect={() => onSelectTab("phone")} />
             <button className="site-detail-page__tab" type="button" disabled title="Controlled agent spending is on the roadmap">
               <SiteSettingsCategoryIcon icon="billing" />
               <span>Payment card</span>
@@ -204,8 +205,8 @@ export function AgentDetailPage({
                 </div>
                 <div className="site-detail-page__snippet-grid">
                   <RuntimeSnippet
-                    title="Remote MCP"
-                    value={buildRemoteMcpConfig(apiUrl, visibleToken)}
+                    title="OpenClaw MCP"
+                    value={buildOpenClawMcpConfig(apiUrl, visibleToken)}
                     onNotify={onNotify}
                   />
                   <RuntimeSnippet
@@ -284,9 +285,19 @@ export function AgentDetailPage({
   );
 }
 
-function DetailTab({ active, icon, label }: { active: boolean; icon: "general" | "email" | "phone"; label: string }) {
+function DetailTab({
+  active,
+  icon,
+  label,
+  onSelect
+}: {
+  active: boolean;
+  icon: "general" | "email" | "phone";
+  label: string;
+  onSelect: () => void;
+}) {
   return (
-    <button className="site-detail-page__tab" type="button" role="tab" aria-selected={active}>
+    <button className="site-detail-page__tab" type="button" role="tab" aria-selected={active} onClick={onSelect}>
       <SiteSettingsCategoryIcon icon={icon} />
       <span>{label}</span>
     </button>
@@ -366,15 +377,25 @@ function RuntimeSnippet({
   );
 }
 
-function buildRemoteMcpConfig(apiUrl: string, token: string): string {
+function buildOpenClawMcpConfig(apiUrl: string, token: string): string {
+  const normalizedApiUrl = apiUrl.replace(/\/$/, "");
   return JSON.stringify({
-    mcpServers: {
-      barkan: {
-        transport: "http",
-        url: `${apiUrl.replace(/\/$/, "")}/mcp`,
-        headers: {
-          Authorization: `Bearer ${token}`
+    mcp: {
+      servers: {
+        barkan: {
+          enabled: true,
+          transport: "streamable-http",
+          url: `${normalizedApiUrl}/mcp`,
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         }
+      }
+    },
+    env: {
+      vars: {
+        BARKAN_API_URL: normalizedApiUrl,
+        BARKAN_IDENTITY_TOKEN: token
       }
     }
   }, null, 2);
@@ -382,13 +403,16 @@ function buildRemoteMcpConfig(apiUrl: string, token: string): string {
 
 function buildStdioMcpConfig(apiUrl: string, token: string): string {
   return JSON.stringify({
-    mcpServers: {
-      barkan: {
-        command: "npx",
-        args: ["-y", "@barkan/mcp"],
-        env: {
-          BARKAN_API_URL: apiUrl.replace(/\/$/, ""),
-          BARKAN_IDENTITY_TOKEN: token
+    mcp: {
+      servers: {
+        barkan: {
+          enabled: true,
+          command: "npx",
+          args: ["-y", "@barkan/mcp"],
+          env: {
+            BARKAN_API_URL: apiUrl.replace(/\/$/, ""),
+            BARKAN_IDENTITY_TOKEN: token
+          }
         }
       }
     }

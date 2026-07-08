@@ -51,8 +51,13 @@ describe("Agent creation wizard", () => {
 
     expect(await screen.findByText("barkan_secret_once")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /copy prompt/i }));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("BARKAN_IDENTITY_TOKEN=barkan_secret_once"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('BARKAN_IDENTITY_TOKEN "barkan_secret_once"'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"BARKAN_IDENTITY_TOKEN": "barkan_secret_once"'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("openclaw mcp add barkan --transport streamable-http"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"mcp":'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"servers":'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("/mcp"));
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("mcpServers"));
 
     fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
 

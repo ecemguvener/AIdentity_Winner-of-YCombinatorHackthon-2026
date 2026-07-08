@@ -79,13 +79,22 @@ const email = await client.callTool({
 
 ```json
 {
-  "mcpServers": {
-    "barkan": {
-      "transport": "http",
-      "url": "https://api.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer ${BARKAN_IDENTITY_TOKEN}"
+  "mcp": {
+    "servers": {
+      "barkan": {
+        "enabled": true,
+        "transport": "streamable-http",
+        "url": "https://api.example.com/mcp",
+        "headers": {
+          "Authorization": "Bearer ${BARKAN_IDENTITY_TOKEN}"
+        }
       }
+    }
+  },
+  "env": {
+    "vars": {
+      "BARKAN_API_URL": "https://api.example.com",
+      "BARKAN_IDENTITY_TOKEN": "brk_live_..."
     }
   }
 }

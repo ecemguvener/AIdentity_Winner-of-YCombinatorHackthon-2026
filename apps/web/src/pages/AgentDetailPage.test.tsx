@@ -25,6 +25,7 @@ describe("Agent detail page", () => {
       <AgentDetailPage
         detail={detail({ email: false })}
         activeTab="credentials"
+        onSelectTab={vi.fn()}
         onAgentDetailLoaded={vi.fn()}
         onAgentUpdated={vi.fn()}
         onAgentDeleted={vi.fn()}
@@ -52,6 +53,7 @@ describe("Agent detail page", () => {
       <AgentDetailPage
         detail={detail({ email: true })}
         activeTab="email"
+        onSelectTab={vi.fn()}
         onAgentDetailLoaded={vi.fn()}
         onAgentUpdated={vi.fn()}
         onAgentDeleted={vi.fn()}
@@ -79,6 +81,7 @@ describe("Agent detail page", () => {
       <AgentDetailPage
         detail={detail({ email: false, phone: true })}
         activeTab="phone"
+        onSelectTab={vi.fn()}
         onAgentDetailLoaded={vi.fn()}
         onAgentUpdated={vi.fn()}
         onAgentDeleted={vi.fn()}
@@ -96,6 +99,7 @@ describe("Agent detail page", () => {
       <AgentDetailPage
         detail={detail({ email: true })}
         activeTab="credentials"
+        onSelectTab={vi.fn()}
         onAgentDetailLoaded={vi.fn()}
         onAgentUpdated={vi.fn()}
         onAgentDeleted={vi.fn()}
@@ -105,10 +109,12 @@ describe("Agent detail page", () => {
       />
     );
 
-    expect(screen.getAllByText("Remote MCP").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("OpenClaw MCP").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Stdio MCP").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/@barkan\/mcp/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/BARKAN_IDENTITY_TOKEN/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/streamable-http/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/mcpServers/)).not.toBeInTheDocument();
   });
 
   it("calls freeze-all from danger zone after name confirmation", async () => {
@@ -129,6 +135,7 @@ describe("Agent detail page", () => {
       <AgentDetailPage
         detail={detail({ email: true })}
         activeTab="credentials"
+        onSelectTab={vi.fn()}
         onAgentDetailLoaded={vi.fn()}
         onAgentUpdated={vi.fn()}
         onAgentDeleted={vi.fn()}

@@ -68,15 +68,38 @@ npx -y @barkan/mcp --pair
 
 If OpenClaw has MCP enabled, configure Barkan directly and let the skill prefer MCP tools:
 
+```bash
+openclaw mcp add barkan \
+  --transport streamable-http \
+  --url https://aidentity.space/mcp \
+  --header "Authorization=Bearer ${BARKAN_IDENTITY_TOKEN}"
+
+openclaw config set env.vars.BARKAN_API_URL https://aidentity.space
+openclaw config set env.vars.BARKAN_IDENTITY_TOKEN "${BARKAN_IDENTITY_TOKEN}"
+openclaw mcp reload
+openclaw mcp probe barkan
+```
+
+If you edit `openclaw.json` directly, use OpenClaw's native `mcp.servers` and `env.vars` shape:
+
 ```json
 {
-  "mcpServers": {
-    "barkan": {
-      "transport": "http",
-      "url": "https://aidentity.space/mcp",
-      "headers": {
-        "Authorization": "Bearer ${BARKAN_IDENTITY_TOKEN}"
+  "mcp": {
+    "servers": {
+      "barkan": {
+        "enabled": true,
+        "transport": "streamable-http",
+        "url": "https://aidentity.space/mcp",
+        "headers": {
+          "Authorization": "Bearer ${BARKAN_IDENTITY_TOKEN}"
+        }
       }
+    }
+  },
+  "env": {
+    "vars": {
+      "BARKAN_API_URL": "https://aidentity.space",
+      "BARKAN_IDENTITY_TOKEN": "brk_live_..."
     }
   }
 }
@@ -86,13 +109,16 @@ For stdio-only runtimes:
 
 ```json
 {
-  "mcpServers": {
-    "barkan": {
-      "command": "npx",
-      "args": ["-y", "@barkan/mcp"],
-      "env": {
-        "BARKAN_API_URL": "https://aidentity.space",
-        "BARKAN_IDENTITY_TOKEN": "brk_live_..."
+  "mcp": {
+    "servers": {
+      "barkan": {
+        "enabled": true,
+        "command": "npx",
+        "args": ["-y", "@barkan/mcp"],
+        "env": {
+          "BARKAN_API_URL": "https://aidentity.space",
+          "BARKAN_IDENTITY_TOKEN": "brk_live_..."
+        }
       }
     }
   }

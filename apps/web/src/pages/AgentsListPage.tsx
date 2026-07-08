@@ -1,4 +1,4 @@
-import { Bot, Check, Copy, Mail, Phone, Server, X, Zap } from "lucide-react";
+import { Bot, Check, Copy, KeyRound, Mail, Phone, Server, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { billingApi } from "../api/billing";
 import { agentsApi } from "../api/agents";
@@ -163,7 +163,7 @@ export function AgentCreationWizard({
               <strong>Automatic setup</strong>
               <span><Mail size={15} aria-hidden="true" /> Email address provisioned now</span>
               <span><Phone size={15} aria-hidden="true" /> {phoneLocked ? "Phone ready after plan upgrade" : "Phone number provisioned now"}</span>
-              <span>{runtimeLabel(runtime)} credentials generated after create</span>
+              <span><KeyRound size={15} aria-hidden="true" /> {runtimeLabel(runtime)} credentials generated after create</span>
             </div>
             {submitError ? <p className="field-error" role="alert">{submitError}</p> : null}
             <button className="site-onboarding-page__submit" type="submit" disabled={isCreating}>
@@ -233,7 +233,29 @@ const barkan = new BarkanClient({
 }
 
 function buildOpenClawSetupPrompt({ agent, apiUrl, token }: { agent: Agent; apiUrl: string; token: string }) {
-  const normalizedApiUrl = apiUrl.replace(/\/$/, "");
+  const normalizedApiUrl = normalizeApiUrl(apiUrl);
+  const mcpUrl = `${normalizedApiUrl}/mcp`;
+  const openClawMcpServer = {
+    enabled: true,
+    transport: "streamable-http",
+    url: mcpUrl,
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  };
+  const openClawConfig = {
+    mcp: {
+      servers: {
+        barkan: openClawMcpServer
+      }
+    },
+    env: {
+      vars: {
+        BARKAN_API_URL: normalizedApiUrl,
+        BARKAN_IDENTITY_TOKEN: token
+      }
+    }
+  };
   return `Set up Barkan identity for this OpenClaw agent.
 
 Agent name: ${agent.name}
@@ -242,24 +264,23 @@ Barkan identity token: ${token}
 
 Do these steps:
 1. Install or enable the OpenClaw skill named barkan-identity.
-2. Store these environment variables in this agent runtime:
-   BARKAN_API_URL=${normalizedApiUrl}
-   BARKAN_IDENTITY_TOKEN=${token}
-3. If MCP is available, configure this MCP server:
-${JSON.stringify({
-  mcpServers: {
-    barkan: {
-      transport: "http",
-      url: `${normalizedApiUrl}/mcp`,
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    }
-  }
-}, null, 2)}
-4. Verify setup by calling the Barkan identity tool and answering: "What is your Barkan identity?"
+2. Run these commands on the OpenClaw machine:
+   openclaw mcp add barkan --transport streamable-http --url ${mcpUrl} --header "Authorization=Bearer ${token}"
+   openclaw config set env.vars.BARKAN_API_URL ${normalizedApiUrl}
+   openclaw config set env.vars.BARKAN_IDENTITY_TOKEN "${token}"
+   openclaw mcp reload
+   openclaw mcp probe barkan
+3. If barkan already exists, replace it with:
+   openclaw mcp set barkan '${JSON.stringify(openClawMcpServer)}'
+4. The equivalent OpenClaw config is:
+${JSON.stringify(openClawConfig, null, 2)}
+5. Verify setup by calling the Barkan identity tool and answering: "What is your Barkan identity?"
 
 Security rule: after storing the token, never print it back to chat.`;
+}
+
+function normalizeApiUrl(apiUrl: string): string {
+  return apiUrl.replace(/\/$/, "");
 }
 
 function runtimeLabel(runtime: RuntimeChoice): string {
