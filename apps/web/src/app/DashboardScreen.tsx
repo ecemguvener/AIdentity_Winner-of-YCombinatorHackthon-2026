@@ -292,13 +292,11 @@ function AgentsList({
                       <div className="dashboard-page__project-copy">
                         <h2 title={agent.name}>{agent.name}</h2>
                         <p>{formatSiteRelativeTime(agent.updatedAt)}</p>
+                        <small>{contactSummary(agent)}</small>
                       </div>
-                    </div>
-                    <div className="dashboard-page__project-foot">
-                      <small title={contactSummary(agent)}>{contactSummary(agent)}</small>
                       <span className="dashboard-page__project-pill">
-                        {agent.capabilities.email ? <Mail size={11} aria-hidden="true" /> : null}
-                        {agent.capabilities.phone ? <Phone size={11} aria-hidden="true" /> : null}
+                        {agent.capabilities.email ? <Mail size={14} aria-hidden="true" /> : null}
+                        {agent.capabilities.phone ? <Phone size={14} aria-hidden="true" /> : null}
                         {provisioningLabel(agent)}
                       </span>
                     </div>

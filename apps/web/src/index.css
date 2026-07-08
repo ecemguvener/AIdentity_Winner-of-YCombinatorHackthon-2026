@@ -1869,8 +1869,9 @@ button:disabled {
 
 .dashboard-page__projects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(3, minmax(0, 270px));
+  column-gap: 12px;
+  row-gap: 12px;
   align-content: start;
 }
 
@@ -1909,12 +1910,10 @@ button:disabled {
 
 .dashboard-page__project-card {
   --dashboard-project-stagger-delay: calc(var(--project-index, 0) * 55ms);
-  width: 100%;
-  min-height: 278px;
-  padding: 18px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
+  width: 270px;
+  min-height: 172px;
+  padding: 9px 9px 10px;
+  border-radius: 8px;
   background: #f9f9f9;
   color: var(--color-text);
   text-align: left;
@@ -1925,10 +1924,10 @@ button:disabled {
 }
 
 .dashboard-page__project-preview {
-  width: 100%;
-  aspect-ratio: 16 / 9;
+  width: 252px;
+  height: 114px;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 4px;
   background: #ececec;
 }
 
@@ -1951,7 +1950,7 @@ button:disabled {
 }
 
 .dashboard-page__project-meta {
-  margin-top: 16px;
+  margin-top: 10px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -1970,9 +1969,9 @@ button:disabled {
 
 .dashboard-page__project-copy h2 {
   color: var(--color-text);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1981,45 +1980,21 @@ button:disabled {
 .dashboard-page__project-copy p {
   margin-top: 1px;
   color: #979797;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 17px;
+  line-height: 15px;
 }
 
 .dashboard-page__project-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   flex: none;
   border-radius: 999px;
-  min-height: 28px;
-  padding: 0 10px;
+  padding: 5px 8px;
   background: #e4e4e4;
   color: #3d3d3d;
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;
-}
-
-.dashboard-page__project-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: auto;
-  padding-top: 16px;
-}
-
-.dashboard-page__project-foot small {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #7a7a7a;
-  font-size: 12px;
-  line-height: 15px;
 }
 
 .dashboard-chat {
@@ -5884,6 +5859,10 @@ button:disabled {
   .pricing-page__plan-description,
   .pricing-page__price small {
     min-height: 0;
+  }
+
+  .dashboard-page__projects-grid {
+    grid-template-columns: repeat(2, minmax(0, 270px));
   }
 
   .site-detail-page__shell {
