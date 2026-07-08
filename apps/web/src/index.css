@@ -5291,6 +5291,59 @@ button:disabled {
   font-weight: 700;
 }
 
+.site-onboarding-page__flow--identity,
+.site-onboarding-page__flow--capabilities,
+.site-onboarding-page__flow--review {
+  width: min(520px, calc(100% - 48px));
+  top: clamp(48px, 8vh, 92px);
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__stage,
+.site-onboarding-page__flow--capabilities .site-onboarding-page__stage,
+.site-onboarding-page__flow--review .site-onboarding-page__stage {
+  min-height: 0;
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__panel,
+.site-onboarding-page__flow--capabilities .site-onboarding-page__panel,
+.site-onboarding-page__flow--review .site-onboarding-page__panel {
+  width: 100%;
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__form,
+.site-onboarding-page__flow--capabilities .site-onboarding-page__form,
+.site-onboarding-page__flow--review .site-onboarding-page__form {
+  width: 100%;
+  margin-top: 0;
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__header p,
+.site-onboarding-page__flow--capabilities .site-onboarding-page__header p,
+.site-onboarding-page__flow--review .site-onboarding-page__header p {
+  width: min(360px, 100%);
+  margin-top: 14px;
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__field:first-of-type {
+  margin-top: 28px;
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__mode-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+  margin-bottom: 18px;
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__mode-card {
+  min-height: 132px;
+  padding: 16px;
+}
+
+.site-onboarding-page__flow--identity .site-onboarding-page__submit {
+  margin-top: 0;
+}
+
 .site-onboarding-page__setup,
 .site-onboarding-page__ready,
 .site-onboarding-page__finish {
@@ -6364,6 +6417,18 @@ button:disabled {
     top: 50%;
     width: min(342px, calc(100% - 32px));
     transform: translate(-50%, -50%);
+  }
+
+  .site-onboarding-page__flow--identity,
+  .site-onboarding-page__flow--capabilities,
+  .site-onboarding-page__flow--review {
+    top: 32px;
+    width: min(420px, calc(100% - 32px));
+    transform: translateX(-50%);
+  }
+
+  .site-onboarding-page__flow--identity .site-onboarding-page__mode-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .site-onboarding-page__flow--compact .site-onboarding-page__stage,

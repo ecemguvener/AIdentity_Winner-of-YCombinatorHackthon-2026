@@ -138,9 +138,9 @@ export function AgentCreationWizard({
             <X size={18} aria-hidden="true" />
           </button>
 
-          <div className={`site-onboarding-page__flow${step === "token" ? " site-onboarding-page__flow--completion" : " site-onboarding-page__flow--compact"}`}>
+          <div className={`site-onboarding-page__flow site-onboarding-page__flow--${step}${step === "token" ? " site-onboarding-page__flow--completion" : " site-onboarding-page__flow--compact"}`}>
             <div className="site-onboarding-page__stage">
-              <div className="site-onboarding-page__completion-backdrop site-onboarding-page__completion-backdrop--active" aria-hidden="true" />
+              <div className={`site-onboarding-page__completion-backdrop${step === "token" ? " site-onboarding-page__completion-backdrop--active" : ""}`} aria-hidden="true" />
               <div className="site-onboarding-page__panel site-onboarding-page__panel--active">
                 {step === "identity" ? (
                   <form className="site-onboarding-page__form" onSubmit={(event) => { event.preventDefault(); goTo("capabilities"); }}>
