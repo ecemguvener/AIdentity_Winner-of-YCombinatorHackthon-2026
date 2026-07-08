@@ -49,7 +49,7 @@ Inject Barkan credentials through OpenClaw skill config:
       "barkan-identity": {
         "version": "0.1.0",
         "env": {
-          "BARKAN_API_URL": "https://api.barkan.dev",
+          "BARKAN_API_URL": "https://aidentity.space",
           "BARKAN_IDENTITY_TOKEN": "brk_live_..."
         }
       }
@@ -73,7 +73,7 @@ If OpenClaw has MCP enabled, configure Barkan directly and let the skill prefer 
   "mcpServers": {
     "barkan": {
       "transport": "http",
-      "url": "https://api.barkan.dev/mcp",
+      "url": "https://aidentity.space/mcp",
       "headers": {
         "Authorization": "Bearer ${BARKAN_IDENTITY_TOKEN}"
       }
@@ -91,7 +91,7 @@ For stdio-only runtimes:
       "command": "npx",
       "args": ["-y", "@barkan/mcp"],
       "env": {
-        "BARKAN_API_URL": "https://api.barkan.dev",
+        "BARKAN_API_URL": "https://aidentity.space",
         "BARKAN_IDENTITY_TOKEN": "brk_live_..."
       }
     }

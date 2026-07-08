@@ -6,7 +6,7 @@ Typed Node client for Barkan agent-facing APIs.
 import { Barkan } from "@barkan/sdk";
 
 const barkan = new Barkan({
-  apiUrl: "https://api.barkan.dev",
+  apiUrl: "https://aidentity.space",
   token: process.env.BARKAN_IDENTITY_TOKEN
 });
 
@@ -21,7 +21,7 @@ await barkan.email.send({
 Environment fallback:
 
 ```bash
-BARKAN_API_URL=https://api.barkan.dev
+BARKAN_API_URL=https://aidentity.space
 BARKAN_IDENTITY_TOKEN=brk_live_...
 ```
 

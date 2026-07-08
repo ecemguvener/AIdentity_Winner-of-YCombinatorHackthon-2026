@@ -14,7 +14,7 @@ import {
   ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 
-const defaultApiUrl = "https://api.barkan.dev";
+const defaultApiUrl = "https://aidentity.space";
 const defaultPollIntervalMs = 5000;
 const pairingTimeoutMs = 10 * 60_000;
 const version = "0.1.0";
@@ -178,7 +178,7 @@ function parseArgs(argv: string[]): CliArgs {
 function printHelp(): void {
   console.log(`Usage:
   barkan-mcp
-  barkan-mcp --pair [--api-url https://api.barkan.dev]
+  barkan-mcp --pair [--api-url https://aidentity.space]
 
 Environment:
   BARKAN_API_URL             Barkan API base URL

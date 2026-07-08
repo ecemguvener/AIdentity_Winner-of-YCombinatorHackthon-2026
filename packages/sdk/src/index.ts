@@ -39,7 +39,7 @@ export class Barkan {
   private readonly fetchImpl: FetchLike;
 
   constructor(options: BarkanOptions = {}) {
-    this.apiUrl = (options.apiUrl ?? process.env.BARKAN_API_URL ?? "https://api.barkan.dev").replace(/\/$/, "");
+    this.apiUrl = (options.apiUrl ?? process.env.BARKAN_API_URL ?? "https://aidentity.space").replace(/\/$/, "");
     this.token = options.token ?? process.env.BARKAN_IDENTITY_TOKEN ?? "";
     if (!this.token) {
       throw new BarkanError("unauthorized", "missing BARKAN_IDENTITY_TOKEN", 401);

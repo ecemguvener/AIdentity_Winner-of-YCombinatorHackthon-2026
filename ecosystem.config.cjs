@@ -10,10 +10,10 @@ const prodApiPort = process.env.BARKAN_PROD_API_PORT || "4000";
 const stagingApiPort = process.env.BARKAN_STAGING_API_PORT || "4002";
 const devPublicAppUrl = process.env.BARKAN_DEV_PUBLIC_APP_URL || `http://${publicHost}:${devWebPort}`;
 const devPublicApiUrl = process.env.BARKAN_DEV_PUBLIC_API_URL || `http://${publicHost}:${devApiPort}`;
-const prodPublicAppUrl = process.env.BARKAN_PROD_PUBLIC_APP_URL || "https://barkan.dev";
-const prodPublicApiUrl = process.env.BARKAN_PROD_PUBLIC_API_URL || "https://api.barkan.dev";
-const stagingPublicAppUrl = process.env.BARKAN_STAGING_PUBLIC_APP_URL || "https://staging.barkan.dev";
-const stagingPublicApiUrl = process.env.BARKAN_STAGING_PUBLIC_API_URL || "https://staging-api.barkan.dev";
+const prodPublicAppUrl = process.env.BARKAN_PROD_PUBLIC_APP_URL || "https://aidentity.space";
+const prodPublicApiUrl = process.env.BARKAN_PROD_PUBLIC_API_URL || "https://aidentity.space";
+const stagingPublicAppUrl = process.env.BARKAN_STAGING_PUBLIC_APP_URL || "https://aidentity.space";
+const stagingPublicApiUrl = process.env.BARKAN_STAGING_PUBLIC_API_URL || "https://aidentity.space";
 const devApiProxyTarget = process.env.BARKAN_DEV_API_PROXY_TARGET || `http://127.0.0.1:${devApiPort}`;
 const devViteApiUrl = process.env.BARKAN_DEV_VITE_API_URL || "";
 

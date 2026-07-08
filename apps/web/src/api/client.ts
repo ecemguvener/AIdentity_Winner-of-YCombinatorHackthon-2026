@@ -2,7 +2,6 @@ import type { ApiErrorEnvelope } from "./types";
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_URL || "";
 const configuredApiPort = import.meta.env.VITE_API_PORT || "";
-const fallbackApiPort = "4001";
 const localHostnames = new Set(["localhost", "127.0.0.1", "::1"]);
 
 export class ApiClientError extends Error {
@@ -61,9 +60,7 @@ function resolveApiBaseUrl(configuredUrl: string): string {
   }
 
   if (!configuredUrl) {
-    return localHostnames.has(window.location.hostname)
-      ? ""
-      : `${window.location.protocol}//${window.location.hostname}:${configuredApiPort || fallbackApiPort}`;
+    return "";
   }
 
   try {

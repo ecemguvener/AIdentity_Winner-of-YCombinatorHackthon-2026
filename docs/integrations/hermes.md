@@ -20,7 +20,7 @@ npx -y @barkan/mcp --pair
 Then configure Hermes to provide:
 
 ```bash
-BARKAN_API_URL=https://api.barkan.dev
+BARKAN_API_URL=https://aidentity.space
 BARKAN_IDENTITY_TOKEN=brk_live_...
 ```
 
@@ -33,7 +33,7 @@ Configure Hermes with the hosted Streamable HTTP server:
   "mcpServers": {
     "barkan": {
       "transport": "http",
-      "url": "https://api.barkan.dev/mcp",
+      "url": "https://aidentity.space/mcp",
       "headers": {
         "Authorization": "Bearer ${BARKAN_IDENTITY_TOKEN}"
       }
@@ -53,7 +53,7 @@ For local stdio MCP:
       "command": "npx",
       "args": ["-y", "@barkan/mcp"],
       "env": {
-        "BARKAN_API_URL": "https://api.barkan.dev",
+        "BARKAN_API_URL": "https://aidentity.space",
         "BARKAN_IDENTITY_TOKEN": "brk_live_..."
       }
     }

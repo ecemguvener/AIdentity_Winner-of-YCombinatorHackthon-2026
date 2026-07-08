@@ -1,7 +1,7 @@
 ---
 name: barkan-identity
 description: Give this agent a real-world identity (email address, phone number) via Barkan. Use for sending/receiving email, making phone calls, and SMS (including fetching 2FA codes).
-homepage: https://barkan.dev
+homepage: https://aidentity.space
 ---
 
 # Barkan Identity
@@ -65,7 +65,7 @@ Default `wait_for_approval` to `true` unless the user explicitly wants a backgro
 Set base and bearer:
 
 ```bash
-API="${BARKAN_API_URL:-https://api.barkan.dev}"
+API="${BARKAN_API_URL:-https://aidentity.space}"
 AUTH="authorization: Bearer $BARKAN_IDENTITY_TOKEN"
 ```
 

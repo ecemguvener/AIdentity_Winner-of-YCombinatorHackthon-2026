@@ -46,10 +46,10 @@ releases_dir="$deploy_root/releases"
 current_link="$deploy_root/current"
 env_file="${BARKAN_ENV_FILE:-$repo_root/.env.$target}"
 pm2_app="${BARKAN_PM2_APP:-prod-barkan-api}"
-health_url="${BARKAN_HEALTH_URL:-https://api.barkan.dev/api/health}"
+health_url="${BARKAN_HEALTH_URL:-https://aidentity.space/api/health}"
 if [ "$target" = "staging" ]; then
   pm2_app="${BARKAN_STAGING_PM2_APP:-staging-barkan-api}"
-  health_url="${BARKAN_STAGING_HEALTH_URL:-https://staging-api.barkan.dev/api/health}"
+  health_url="${BARKAN_STAGING_HEALTH_URL:-https://aidentity.space/api/health}"
 fi
 
 log() {

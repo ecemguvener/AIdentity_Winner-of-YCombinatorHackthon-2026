@@ -254,7 +254,7 @@ function CapabilityToggle({
 function RuntimeInstructions({ agent, tokenPrefix }: { agent: Agent; tokenPrefix: string }) {
   const runtimeName = runtimeLabel(agent.runtime === "other" || agent.runtime === null ? "api" : agent.runtime);
   const envText = useMemo(
-    () => `BARKAN_API_URL=${window.location.origin.replace(/:4888$/, ":4001")}\nBARKAN_IDENTITY_TOKEN=${tokenPrefix}_...`,
+    () => `BARKAN_API_URL=${window.location.origin}\nBARKAN_IDENTITY_TOKEN=${tokenPrefix}_...`,
     [tokenPrefix]
   );
   const pairText = "npx @barkan/mcp --pair";

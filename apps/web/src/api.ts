@@ -65,7 +65,6 @@ export interface DashboardChatCallEmbed {
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_URL || "";
 const configuredApiPort = import.meta.env.VITE_API_PORT || "";
-const fallbackApiPort = "4001";
 const localHostnames = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function resolveApiBaseUrl(configuredUrl: string): string {
@@ -74,9 +73,7 @@ function resolveApiBaseUrl(configuredUrl: string): string {
   }
 
   if (!configuredUrl) {
-    return localHostnames.has(window.location.hostname)
-      ? ""
-      : `${window.location.protocol}//${window.location.hostname}:${configuredApiPort || fallbackApiPort}`;
+    return "";
   }
 
   try {
@@ -428,9 +425,9 @@ function getLogoutBaseUrlCandidates(): string[] {
   const candidates = apiBaseUrl ? [apiBaseUrl] : [""];
 
   if (typeof window !== "undefined" && !localHostnames.has(window.location.hostname)) {
-    const currentApiPort = new URL(apiBaseUrl).port || configuredApiPort || fallbackApiPort;
-    candidates.push(`${window.location.protocol}//${window.location.hostname}:${currentApiPort}`);
-    candidates.push(`${window.location.protocol}//${window.location.hostname}:${fallbackApiPort}`);
+    if (configuredApiPort) {
+      candidates.push(`${window.location.protocol}//${window.location.hostname}:${configuredApiPort}`);
+    }
   }
 
   return [...new Set(candidates.map(stripTrailingSlash))];
@@ -440,7 +437,9 @@ function getEmailLookupBaseUrlCandidates(): string[] {
   const candidates = [apiBaseUrl, ""];
 
   if (typeof window !== "undefined" && !localHostnames.has(window.location.hostname)) {
-    candidates.push(`${window.location.protocol}//${window.location.hostname}:${fallbackApiPort}`);
+    if (configuredApiPort) {
+      candidates.push(`${window.location.protocol}//${window.location.hostname}:${configuredApiPort}`);
+    }
   }
 
   return [...new Set(candidates.map(stripTrailingSlash))];

@@ -79,7 +79,7 @@ describe("verifySvixSignature", () => {
 
 describe("verifyTwilioSignature", () => {
   const authToken = "twilio-auth-token-for-tests";
-  const url = "https://api.barkan.dev/webhooks/twilio/sms";
+  const url = "https://aidentity.space/webhooks/twilio/sms";
   const params = { MessageSid: "SM123", MessageStatus: "delivered", To: "+15550100", From: "+15550111" };
 
   function sign(targetUrl: string, targetParams: Record<string, string>): string {

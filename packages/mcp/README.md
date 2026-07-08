@@ -3,7 +3,7 @@
 Stdio MCP bridge for Barkan agent identities.
 
 ```bash
-BARKAN_API_URL=https://api.barkan.dev \
+BARKAN_API_URL=https://aidentity.space \
 BARKAN_IDENTITY_TOKEN=brk_live_... \
 npx -y @barkan/mcp
 ```

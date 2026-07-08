@@ -1,5 +1,5 @@
 {
-	email {$CADDY_ACME_EMAIL:ops@barkan.dev}
+	email {$CADDY_ACME_EMAIL:ops@aidentity.space}
 }
 
 (security_headers) {
@@ -12,50 +12,40 @@
 	}
 }
 
-(api_proxy) {
+(web_with_api) {
+	import security_headers
+
 	@internal path /internal/*
 	respond @internal 404
 
-	reverse_proxy /webhooks/* 127.0.0.1:{$BARKAN_API_PORT:4000} {
+	@api path /api/* /webhooks/* /mcp /docs
+	reverse_proxy @api 127.0.0.1:{$BARKAN_API_PORT:4000} {
 		flush_interval -1
 	}
-	reverse_proxy /mcp 127.0.0.1:{$BARKAN_API_PORT:4000} {
-		flush_interval -1
-	}
-	reverse_proxy 127.0.0.1:{$BARKAN_API_PORT:4000}
-}
 
-{$BARKAN_WEB_HOST:barkan.dev} {
-	import security_headers
 	root * {$BARKAN_WEB_ROOT:/srv/barkan/current/apps/web/dist}
 	encode zstd gzip
 	try_files {path} /index.html
 	file_server
 }
 
-{$BARKAN_API_HOST:api.barkan.dev} {
-	import security_headers
-	import api_proxy
+{$BARKAN_WEB_HOST:aidentity.space} {
+	import web_with_api
 }
 
-{$BARKAN_STAGING_WEB_HOST:staging.barkan.dev} {
+{$BARKAN_STAGING_WEB_HOST:staging.aidentity.space} {
 	import security_headers
+
+	@internal path /internal/*
+	respond @internal 404
+
+	@api path /api/* /webhooks/* /mcp /docs
+	reverse_proxy @api 127.0.0.1:{$BARKAN_STAGING_API_PORT:4002} {
+		flush_interval -1
+	}
+
 	root * {$BARKAN_STAGING_WEB_ROOT:/srv/barkan-staging/current/apps/web/dist}
 	encode zstd gzip
 	try_files {path} /index.html
 	file_server
-}
-
-{$BARKAN_STAGING_API_HOST:staging-api.barkan.dev} {
-	import security_headers
-	@internal path /internal/*
-	respond @internal 404
-
-	reverse_proxy /webhooks/* 127.0.0.1:{$BARKAN_STAGING_API_PORT:4002} {
-		flush_interval -1
-	}
-	reverse_proxy /mcp 127.0.0.1:{$BARKAN_STAGING_API_PORT:4002} {
-		flush_interval -1
-	}
-	reverse_proxy 127.0.0.1:{$BARKAN_STAGING_API_PORT:4002}
 }

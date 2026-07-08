@@ -15,7 +15,7 @@ For the mutation drill, comment out the inbound message/thread increment in the 
 Live staging drill:
 
 ```bash
-E2E_MODE=live PUBLIC_API_URL=https://staging.barkan.dev npm run e2e:integration
+E2E_MODE=live PUBLIC_API_URL=https://aidentity.space npm run e2e:integration
 ```
 
 Live mode is intentionally documented as a staging operation rather than run by the local Vitest harness. In staging, keep the same scenario order but relax assertions that require provider-controlled delivery: email checks provider acceptance and webhook receipt, not inbox content; phone places a call to a Twilio test number and asserts the post-call webhook, not a human transcript.
