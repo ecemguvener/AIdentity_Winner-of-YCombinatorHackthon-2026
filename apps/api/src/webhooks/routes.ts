@@ -49,7 +49,7 @@ export function registerWebhookRoutes(app: FastifyInstance, collections: Collect
     path: "/webhooks/resend",
     provider: "resend",
     verify: providerVerifier("resend"),
-    extractEventId: (payload) => (isRecord(payload) && typeof payload.id === "string" ? payload.id : null),
+    extractEventId: readResendEventId,
     extractEventType: (payload) => (isRecord(payload) && typeof payload.type === "string" ? payload.type : "unknown"),
     handle: (payload) => handleResendWebhook(payload, collections, config, inboundClient)
   });
@@ -191,7 +191,28 @@ function readProviderMessageId(data: Record<string, unknown>): string | null {
   for (const key of ["email_id", "message_id", "id"]) {
     const value = data[key];
     if (typeof value === "string" && value.trim()) {
-      return value;
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function readResendEventId(payload: unknown, request: { headers: Record<string, unknown> }): string | null {
+  const svixId = request.headers["svix-id"];
+  if (typeof svixId === "string" && svixId.trim()) {
+    return svixId.trim();
+  }
+  if (!isRecord(payload)) {
+    return null;
+  }
+  if (typeof payload.id === "string" && payload.id.trim()) {
+    return payload.id.trim();
+  }
+  const eventType = typeof payload.type === "string" && payload.type.trim() ? payload.type.trim() : "unknown";
+  if (isRecord(payload.data)) {
+    const providerMessageId = readProviderMessageId(payload.data);
+    if (providerMessageId) {
+      return `${eventType}:${providerMessageId}`;
     }
   }
   return null;

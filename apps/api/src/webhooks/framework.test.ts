@@ -15,6 +15,7 @@ import { registerWebhookRoutes } from "./routes.js";
 
 const STRIPE_SECRET = "whsec_stripe_framework_test";
 const TWILIO_AUTH_TOKEN = "twilio-framework-test-token";
+const RESEND_SECRET = `whsec_${Buffer.from("resend-framework-test-secret").toString("base64")}`;
 
 const baseConfig = {
   NODE_ENV: "test",
@@ -62,6 +63,13 @@ function stripeSignatureFor(body: string): string {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = crypto.createHmac("sha256", STRIPE_SECRET).update(`${timestamp}.${body}`).digest("hex");
   return `t=${timestamp},v1=${signature}`;
+}
+
+function svixHeadersFor(id: string, body: string): Record<string, string> {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const key = Buffer.from(RESEND_SECRET.slice("whsec_".length), "base64");
+  const signature = crypto.createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest("base64");
+  return { "svix-id": id, "svix-timestamp": timestamp, "svix-signature": `v1,${signature}` };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -292,6 +300,33 @@ describe("registerWebhookRoute", () => {
 });
 
 describe("registerWebhookRoutes", () => {
+  it("accepts signed Resend events whose id is only in Svix headers", async () => {
+    const liveConfig = {
+      ...baseConfig,
+      PROVIDER_MODE_EMAIL: "live",
+      RESEND_WEBHOOK_SECRET: RESEND_SECRET
+    } as AppConfig;
+    const app = Fastify({ logger: false });
+    await app.register(cookie);
+    registerRawBodyParsers(app);
+    registerWebhookRoutes(app, database.collections, liveConfig);
+    const body = JSON.stringify({ type: "email.delivered", data: { email_id: "re_header_only_1" } });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/resend",
+      headers: { "content-type": "application/json", ...svixHeadersFor("msg_header_only_1", body) },
+      payload: body
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ ok: true, event_id: "msg_header_only_1" });
+    const event = await database.collections.webhookEvents.findOne({ provider: "resend", providerEventId: "msg_header_only_1" });
+    expect(event).toMatchObject({ eventType: "email.delivered", status: "processed" });
+
+    await app.close();
+  });
+
   it("exercises the dev ping route end-to-end with replay dedupe", async () => {
     const mockConfig = { ...baseConfig, STRIPE_WEBHOOK_SECRET: undefined, RESEND_WEBHOOK_SECRET: undefined } as AppConfig;
     const app = Fastify({ logger: false });
