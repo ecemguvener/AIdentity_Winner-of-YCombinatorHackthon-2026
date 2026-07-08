@@ -193,7 +193,7 @@ export function buildOpenApiDocument(config: AppConfig) {
     openapi: "3.1.0",
     info: {
       title: "Barkan API",
-      version: "0.1.0",
+      version: "1.0.0",
       description: "Agent identity, email, phone, approvals, and billing APIs.",
       license: { name: "Proprietary", identifier: "LicenseRef-Proprietary" }
     },
