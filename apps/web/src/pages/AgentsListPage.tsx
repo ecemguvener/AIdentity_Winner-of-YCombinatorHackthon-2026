@@ -1,12 +1,19 @@
-import { Bot, Check, Copy, KeyRound, Mail, Phone, Server, X, Zap } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Bot, Check, Copy, CreditCard, KeyRound, Mail, Phone, Server, X, Zap, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { billingApi } from "../api/billing";
 import { agentsApi } from "../api/agents";
 import type { Agent, CreateAgentResponse } from "../api/types";
 import { Brand, getErrorMessage, requiredFieldMessage, type ToastNotificationInput } from "../shared";
 
-type WizardStep = "identity" | "token";
+type WizardStep = "identity" | "capabilities" | "review" | "token";
 type RuntimeChoice = "openclaw" | "hermes" | "api";
+
+const wizardSteps: Array<{ id: WizardStep; label: string }> = [
+  { id: "identity", label: "Identity" },
+  { id: "capabilities", label: "Tools" },
+  { id: "review", label: "Review" },
+  { id: "token", label: "Connect" }
+];
 
 const runtimeChoices: Array<{ id: RuntimeChoice; label: string; description: string; Icon: typeof Server }> = [
   { id: "openclaw", label: "OpenClaw", description: "Connect this identity to an OpenClaw runtime.", Icon: Server },
@@ -29,7 +36,7 @@ export function AgentCreationWizard({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [runtime, setRuntime] = useState<RuntimeChoice>("openclaw");
-  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [emailEnabled] = useState(true);
   const [phoneLocked, setPhoneLocked] = useState(true);
   const [nameError, setNameError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -39,6 +46,7 @@ export function AgentCreationWizard({
   const [isOpenClawPromptCopied, setIsOpenClawPromptCopied] = useState(false);
   const normalizedName = name.trim();
   const normalizedDescription = description.trim();
+  const activeStepIndex = wizardSteps.findIndex((item) => item.id === step);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +60,16 @@ export function AgentCreationWizard({
       cancelled = true;
     };
   }, []);
+
+  function goTo(nextStep: WizardStep) {
+    if (nextStep !== "identity" && !normalizedName) {
+      setNameError(requiredFieldMessage);
+      return;
+    }
+    setNameError("");
+    setSubmitError("");
+    setStep(nextStep);
+  }
 
   async function createAgent(event: FormEvent) {
     event.preventDefault();
@@ -107,84 +125,138 @@ export function AgentCreationWizard({
 
   return (
     <main className="site-onboarding-page" aria-label="Create agent identity">
-      <button className="site-onboarding-page__close" type="button" aria-label="Close" onClick={onCancel}>
-        <X size={18} aria-hidden="true" />
-      </button>
-      <div className="site-onboarding-page__panel site-onboarding-page__panel--active">
-        <Brand />
+      <div className="site-onboarding-page__canvas">
+        <div className="site-onboarding-page__dark-plane" aria-hidden="true" />
+        <div className="site-onboarding-page__board">
+          <Brand className="site-onboarding-page__brand" />
+          <div className="site-onboarding-page__progress" aria-hidden="true">
+            {wizardSteps.map((item, index) => (
+              <span className={`site-onboarding-page__progress-step${index <= activeStepIndex ? " site-onboarding-page__progress-step--active" : ""}`} key={item.id} />
+            ))}
+          </div>
+          <button className="site-onboarding-page__close" type="button" aria-label="Close" onClick={onCancel}>
+            <X size={18} aria-hidden="true" />
+          </button>
 
-        {step === "identity" ? (
-          <form className="site-onboarding-page__form" onSubmit={createAgent}>
-            <header className="site-onboarding-page__header">
-              <h1>Create agent identity</h1>
-              <p>Barkan provisions the contact points and runtime credentials automatically.</p>
-            </header>
-            <label className="site-onboarding-page__field">
-              <span>Name</span>
-              <input value={name} onChange={(event) => { setName(event.target.value); setNameError(""); }} />
-              {nameError ? <small role="alert">{nameError}</small> : null}
-            </label>
-            <label className="site-onboarding-page__field">
-              <span>Description</span>
-              <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
-            </label>
-            <div className="site-onboarding-page__choice-grid">
-              {runtimeChoices.map(({ id, label, description: runtimeDescription, Icon }) => (
-                <button
-                  className={`site-onboarding-page__choice${runtime === id ? " site-onboarding-page__choice--selected" : ""}`}
-                  key={id}
-                  type="button"
-                  onClick={() => setRuntime(id)}
-                >
-                  <Icon size={20} aria-hidden="true" />
-                  <span>{label}</span>
-                  <small>{runtimeDescription}</small>
-                </button>
-              ))}
-            </div>
-            <div className="site-onboarding-page__receipt">
-              <strong>Automatic setup</strong>
-              <span><Mail size={15} aria-hidden="true" /> Email address provisioned now</span>
-              <span><Phone size={15} aria-hidden="true" /> {phoneLocked ? "Phone ready after plan upgrade" : "Phone off by default. Enable it from the Phone tab when ready."}</span>
-              <span><KeyRound size={15} aria-hidden="true" /> {runtimeLabel(runtime)} credentials generated after create</span>
-            </div>
-            {submitError ? <p className="field-error" role="alert">{submitError}</p> : null}
-            <button className="site-onboarding-page__submit" type="submit" disabled={isCreating}>
-              {isCreating ? "Creating..." : "Create identity"}
-            </button>
-          </form>
-        ) : null}
+          <div className={`site-onboarding-page__flow${step === "token" ? " site-onboarding-page__flow--completion" : " site-onboarding-page__flow--compact"}`}>
+            <div className="site-onboarding-page__stage">
+              <div className="site-onboarding-page__completion-backdrop site-onboarding-page__completion-backdrop--active" aria-hidden="true" />
+              <div className="site-onboarding-page__panel site-onboarding-page__panel--active">
+                {step === "identity" ? (
+                  <form className="site-onboarding-page__form" onSubmit={(event) => { event.preventDefault(); goTo("capabilities"); }}>
+                    <header className="site-onboarding-page__header site-onboarding-page__sequence-item" style={sequenceStyle(0)}>
+                      <h1>Name this agent identity</h1>
+                      <p>Choose how this AI worker will connect to Barkan.</p>
+                    </header>
+                    <label className="site-onboarding-page__field site-onboarding-page__sequence-item" style={sequenceStyle(1)}>
+                      <span>Name</span>
+                      <input value={name} onChange={(event) => { setName(event.target.value); setNameError(""); }} autoFocus />
+                      {nameError ? <small role="alert">{nameError}</small> : null}
+                    </label>
+                    <label className="site-onboarding-page__field site-onboarding-page__sequence-item" style={sequenceStyle(2)}>
+                      <span>Description</span>
+                      <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
+                    </label>
+                    <div className="site-onboarding-page__mode-grid site-onboarding-page__sequence-item" style={sequenceStyle(3)}>
+                      {runtimeChoices.map(({ id, label, description: runtimeDescription, Icon }) => (
+                        <button
+                          className={`site-onboarding-page__mode-card${runtime === id ? " site-onboarding-page__mode-card--active" : ""}`}
+                          key={id}
+                          type="button"
+                          onClick={() => setRuntime(id)}
+                        >
+                          <Icon size={18} aria-hidden="true" />
+                          <strong>{label}</strong>
+                          <span>{runtimeDescription}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button className="site-onboarding-page__submit site-onboarding-page__sequence-item" style={sequenceStyle(4)} type="submit">
+                      Continue
+                    </button>
+                  </form>
+                ) : null}
 
-        {step === "token" && created ? (
-          <section className="site-onboarding-page__form">
-            <header className="site-onboarding-page__header">
-              <h1>Connect OpenClaw</h1>
-              <p>Copy this setup prompt into OpenClaw. It includes the one-time token.</p>
-            </header>
-            <div className="site-onboarding-page__prompt-card">
-              <div>
-                <strong>OpenClaw setup prompt</strong>
-                <span>Paste into OpenClaw so it stores the MCP server, reloads tools, and verifies the identity.</span>
+                {step === "capabilities" ? (
+                  <section className="site-onboarding-page__form">
+                    <header className="site-onboarding-page__header site-onboarding-page__sequence-item" style={sequenceStyle(0)}>
+                      <h1>Choose real-world tools</h1>
+                      <p>Barkan creates email now. Phone stays off until you enable it from the identity page.</p>
+                    </header>
+                    <div className="agent-identity-capabilities agent-identity-capabilities--onboarding site-onboarding-page__sequence-item" style={sequenceStyle(1)}>
+                      <CapabilitySummary icon={Mail} label="Email" value={emailEnabled ? "Provisioned on create" : "Off"} />
+                      <CapabilitySummary icon={Phone} label="Phone" value={phoneLocked ? "Upgrade, then enable later" : "Off by default"} />
+                      <CapabilitySummary icon={CreditCard} label="Payment card" value="Coming soon" />
+                      <CapabilitySummary icon={KeyRound} label="Runtime" value={`${runtimeLabel(runtime)} credentials`} />
+                    </div>
+                    <div className="site-onboarding-page__managed-note site-onboarding-page__sequence-item" style={sequenceStyle(2)}>
+                      <Check size={16} aria-hidden="true" />
+                      <span>Phone numbers are never bought during identity creation.</span>
+                    </div>
+                    <div className="site-onboarding-page__actions site-onboarding-page__sequence-item" style={sequenceStyle(3)}>
+                      <button type="button" onClick={() => goTo("identity")}>Back</button>
+                      <button className="site-onboarding-page__submit" type="button" onClick={() => goTo("review")}>Review</button>
+                    </div>
+                  </section>
+                ) : null}
+
+                {step === "review" ? (
+                  <form className="site-onboarding-page__form" onSubmit={createAgent}>
+                    <header className="site-onboarding-page__header site-onboarding-page__sequence-item" style={sequenceStyle(0)}>
+                      <h1>Review & create</h1>
+                      <p>{normalizedName} will get a Barkan email identity and {runtimeLabel(runtime)} setup token.</p>
+                    </header>
+                    <SetupProgress activeIndex={2} />
+                    <div className="site-onboarding-page__receipt site-onboarding-page__receipt-card site-onboarding-page__sequence-item" style={sequenceStyle(2)}>
+                      <strong>{normalizedName}</strong>
+                      <span><Mail size={15} aria-hidden="true" /> Email address provisioned now</span>
+                      <span><Phone size={15} aria-hidden="true" /> Phone off by default</span>
+                      <span><KeyRound size={15} aria-hidden="true" /> {runtimeLabel(runtime)} credentials generated after create</span>
+                    </div>
+                    {submitError ? <p className="site-onboarding-page__submit-error" role="alert">{submitError}</p> : null}
+                    <div className="site-onboarding-page__actions site-onboarding-page__sequence-item" style={sequenceStyle(3)}>
+                      <button type="button" onClick={() => goTo("capabilities")}>Back</button>
+                      <button className="site-onboarding-page__submit" type="submit" disabled={isCreating}>
+                        {isCreating ? "Creating..." : "Create identity"}
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+
+                {step === "token" && created ? (
+                  <section className="site-onboarding-page__form site-onboarding-page__form--completion">
+                    <header className="site-onboarding-page__header site-onboarding-page__sequence-item" style={sequenceStyle(0)}>
+                      <h1>Connect OpenClaw</h1>
+                      <p>Copy this setup prompt into OpenClaw. It includes the one-time token.</p>
+                    </header>
+                    <div className="site-onboarding-page__setup site-onboarding-page__sequence-item" style={sequenceStyle(1)}>
+                      <SetupProgress activeIndex={3} />
+                      <div className="site-onboarding-page__secret-card">
+                        <code>{isTokenCopied || tokenWasStored(created.agent.id) ? maskToken(created.identityToken.secret) : created.identityToken.secret}</code>
+                        <button className="site-onboarding-page__inline-action" type="button" onClick={copyToken}>
+                          <Copy size={14} aria-hidden="true" />
+                          <span>{isTokenCopied ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                      <div className="site-onboarding-page__prompt-card">
+                        <pre>{buildOpenClawSetupPrompt({ agent: created.agent, apiUrl: window.location.origin, token: created.identityToken.secret })}</pre>
+                        <button className="site-onboarding-page__inline-action" type="button" onClick={copyOpenClawPrompt}>
+                          <Copy size={14} aria-hidden="true" />
+                          <span>{isOpenClawPromptCopied ? "Copied" : "Copy prompt"}</span>
+                        </button>
+                      </div>
+                    </div>
+                    <RuntimeInstructions agent={created.agent} tokenPrefix={created.identityToken.prefix} />
+                    <button className="site-onboarding-page__submit site-onboarding-page__action--form-width" type="button" onClick={confirmStored}>
+                      <Check size={16} aria-hidden="true" />
+                      <span>I stored it</span>
+                    </button>
+                  </section>
+                ) : null}
               </div>
-              <button type="button" onClick={copyOpenClawPrompt}>
-                <Copy size={16} aria-hidden="true" />
-                <span>{isOpenClawPromptCopied ? "Copied" : "Copy prompt"}</span>
-              </button>
             </div>
-            <div className="site-onboarding-page__token">
-              <code>{isTokenCopied || tokenWasStored(created.agent.id) ? maskToken(created.identityToken.secret) : created.identityToken.secret}</code>
-              <button type="button" onClick={copyToken}>
-                <Copy size={16} aria-hidden="true" />
-                <span>{isTokenCopied ? "Copied" : "Copy"}</span>
-              </button>
-            </div>
-            <RuntimeInstructions agent={created.agent} tokenPrefix={created.identityToken.prefix} />
-            <button className="site-onboarding-page__submit" type="button" onClick={confirmStored}>
-              <Check size={16} aria-hidden="true" />
-              <span>I stored it</span>
-            </button>
-          </section>
-        ) : null}
+          </div>
+        </div>
       </div>
     </main>
   );
@@ -213,6 +285,51 @@ const barkan = new BarkanClient({
       <span>Use this if you want to wire env or MCP manually instead of the OpenClaw prompt.</span>
     </div>
   );
+}
+
+function CapabilitySummary({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="agent-identity-capabilities__item">
+      <span className="agent-identity-capabilities__icon">
+        <Icon size={17} aria-hidden="true" />
+      </span>
+      <div>
+        <strong>{label}</strong>
+        <span>{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function SetupProgress({ activeIndex }: { activeIndex: number }) {
+  const steps = ["Identity", "Tools", "Review", "Connect"];
+  const lineProgress = steps.length <= 1 ? 0 : activeIndex / (steps.length - 1);
+  return (
+    <div
+      className="setup-progress"
+      style={{
+        "--setup-progress-step-count": steps.length,
+        "--setup-progress-line-progress": lineProgress
+      } as CSSProperties}
+      aria-hidden="true"
+    >
+      {steps.map((label, index) => (
+        <div
+          className={`setup-progress__step${index < activeIndex ? " setup-progress__step--complete" : ""}${index === activeIndex ? " setup-progress__step--active" : ""}`}
+          key={label}
+        >
+          <span className="setup-progress__circle" style={{ "--setup-progress-circle-progress": index === activeIndex ? "0.72turn" : "1turn" } as CSSProperties}>
+            {index < activeIndex ? <Check size={15} aria-hidden="true" /> : index + 1}
+          </span>
+          <span className="setup-progress__label">{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function sequenceStyle(index: number): CSSProperties {
+  return { "--stagger-index": index } as CSSProperties;
 }
 
 function buildOpenClawSetupPrompt({ agent, apiUrl, token }: { agent: Agent; apiUrl: string; token: string }) {

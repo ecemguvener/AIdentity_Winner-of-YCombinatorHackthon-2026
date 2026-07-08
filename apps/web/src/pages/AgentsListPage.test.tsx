@@ -12,7 +12,7 @@ describe("Agent creation wizard", () => {
   it("blocks empty identity names", () => {
     render(<AgentCreationWizard onCancel={vi.fn()} onCreated={vi.fn()} onNotify={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /create identity/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Please fill in this field.");
   });
@@ -47,6 +47,8 @@ describe("Agent creation wizard", () => {
     render(<AgentCreationWizard onCancel={vi.fn()} onCreated={vi.fn()} onNotify={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Maya" } });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /review/i }));
     fireEvent.click(screen.getByRole("button", { name: /create identity/i }));
 
     expect(await screen.findByText("barkan_secret_once")).toBeInTheDocument();
@@ -100,8 +102,10 @@ describe("Agent creation wizard", () => {
 
     render(<AgentCreationWizard onCancel={vi.fn()} onCreated={vi.fn()} onNotify={vi.fn()} />);
 
-    expect(await screen.findByText(/Phone off by default/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Paid Maya" } });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(await screen.findByText(/Off by default/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
     fireEvent.click(screen.getByRole("button", { name: /create identity/i }));
 
     expect(await screen.findByText("barkan_secret_paid")).toBeInTheDocument();

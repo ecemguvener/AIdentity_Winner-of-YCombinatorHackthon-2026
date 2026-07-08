@@ -4709,6 +4709,7 @@ button:disabled {
 
 .site-onboarding-page__canvas {
   position: relative;
+  width: min(1200px, 100%);
   min-height: 100vh;
 }
 
