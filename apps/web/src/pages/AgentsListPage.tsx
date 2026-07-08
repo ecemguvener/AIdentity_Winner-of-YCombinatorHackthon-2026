@@ -2,7 +2,6 @@ import { Bot, Check, Copy, KeyRound, Mail, Phone, Server, X, Zap } from "lucide-
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { billingApi } from "../api/billing";
 import { agentsApi } from "../api/agents";
-import { ApiClientError } from "../api/client";
 import type { Agent, CreateAgentResponse } from "../api/types";
 import { Brand, getErrorMessage, requiredFieldMessage, type ToastNotificationInput } from "../shared";
 
@@ -31,7 +30,6 @@ export function AgentCreationWizard({
   const [description, setDescription] = useState("");
   const [runtime, setRuntime] = useState<RuntimeChoice>("openclaw");
   const [emailEnabled, setEmailEnabled] = useState(true);
-  const [phoneEnabled, setPhoneEnabled] = useState(false);
   const [phoneLocked, setPhoneLocked] = useState(true);
   const [nameError, setNameError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -47,9 +45,7 @@ export function AgentCreationWizard({
     void billingApi.getAccount()
       .then((account) => {
         if (cancelled) return;
-        const locked = account.plan === "free";
-        setPhoneLocked(locked);
-        setPhoneEnabled(!locked);
+        setPhoneLocked(account.plan === "free");
       })
       .catch(() => undefined);
     return () => {
@@ -71,23 +67,10 @@ export function AgentCreationWizard({
         name: normalizedName,
         description: normalizedDescription || undefined,
         runtime,
-        capabilities: { email: emailEnabled, phone: phoneEnabled },
+        capabilities: { email: emailEnabled, phone: false },
         approvalMode: "always" as const
       };
-      let response: CreateAgentResponse;
-      try {
-        response = await agentsApi.create(input);
-      } catch (error) {
-        if (!(error instanceof ApiClientError) || error.code !== "plan_limit" || !phoneEnabled) {
-          throw error;
-        }
-        response = await agentsApi.create({
-          ...input,
-          capabilities: { email: emailEnabled, phone: false }
-        });
-        setPhoneEnabled(false);
-        onNotify({ title: "Email identity created. Phone can be added after upgrade.", kind: "info" });
-      }
+      const response = await agentsApi.create(input);
       setCreated(response);
       setStep("token");
       onCreated(response);
@@ -162,7 +145,7 @@ export function AgentCreationWizard({
             <div className="site-onboarding-page__receipt">
               <strong>Automatic setup</strong>
               <span><Mail size={15} aria-hidden="true" /> Email address provisioned now</span>
-              <span><Phone size={15} aria-hidden="true" /> {phoneLocked ? "Phone ready after plan upgrade" : "Phone number provisioned now"}</span>
+              <span><Phone size={15} aria-hidden="true" /> {phoneLocked ? "Phone ready after plan upgrade" : "Phone off by default. Enable it from the Phone tab when ready."}</span>
               <span><KeyRound size={15} aria-hidden="true" /> {runtimeLabel(runtime)} credentials generated after create</span>
             </div>
             {submitError ? <p className="field-error" role="alert">{submitError}</p> : null}

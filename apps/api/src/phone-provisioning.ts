@@ -59,6 +59,11 @@ export async function provisionAgentPhoneNumber(
     throwPlanLimit(await checkEntitlement(collections, agent.ownerUserId, { type: "number.provision" }));
   }
 
+  const retainedNumber = await findReusableRetainedNumber(collections, agent);
+  if (retainedNumber) {
+    return provisionRetainedPhoneNumber(collections, config, agent, retainedNumber, providers);
+  }
+
   let row: PhoneNumberDocument | null = null;
   let purchased: PurchasedTwilioNumber | null = null;
   let elevenLabsPhoneNumberId: string | null = null;
@@ -136,6 +141,57 @@ export async function provisionAgentPhoneNumber(
   }
 }
 
+export async function retainAgentPhoneNumberForReuse(
+  collections: Collections,
+  config: AppConfig,
+  agent: AgentDocument,
+  providers: PhoneProvisioningProviders = {}
+): Promise<void> {
+  const row = await collections.phoneNumbers.findOne(
+    { agentId: agent._id, status: "active", twilioSid: { $type: "string" } },
+    { sort: { createdAt: -1 } }
+  );
+  if (!row) {
+    await setAgentPhoneFlag(collections, agent, false);
+    return;
+  }
+  if (row.elevenLabsPhoneNumberId) {
+    await safeRemoveElevenLabsNumber(config, providers, row.elevenLabsPhoneNumberId);
+  }
+  const updated = await collections.phoneNumbers.findOneAndUpdate(
+    { _id: row._id },
+    {
+      $set: { status: "active", updatedAt: new Date() },
+      $unset: { elevenLabsPhoneNumberId: "", provisioningDetail: "", releaseDetail: "" }
+    },
+    { returnDocument: "after" }
+  );
+  await setAgentPhoneFlag(collections, agent, false);
+  await recordAudit(collections, {
+    agentId: agent._id,
+    ownerUserId: agent.ownerUserId,
+    actor: "system",
+    action: "phone.number.retained",
+    status: "allowed",
+    detail: `Phone number ${row.e164} retained for reuse instead of released.`,
+    resourceType: "phoneNumber",
+    resourceId: row._id.toHexString(),
+    metadata: { twilioSid: row.twilioSid ?? null }
+  });
+  if (updated) {
+    await recordAudit(collections, {
+      agentId: agent._id,
+      ownerUserId: agent.ownerUserId,
+      actor: "system",
+      action: AUDIT_ACTIONS.phone.released,
+      status: "allowed",
+      detail: `Phone capability disabled; ${updated.e164} retained for reuse.`,
+      resourceType: "phoneNumber",
+      resourceId: updated._id.toHexString()
+    });
+  }
+}
+
 export async function deprovisionAgentPhoneNumber(
   collections: Collections,
   config: AppConfig,
@@ -196,6 +252,108 @@ async function safeRemoveElevenLabsNumber(config: AppConfig, providers: PhonePro
     }
   } catch {
     // Best-effort compensation; original failure should stay primary.
+  }
+}
+
+async function findReusableRetainedNumber(collections: Collections, agent: AgentDocument): Promise<PhoneNumberDocument | null> {
+  if (!agent.ownerUserId) return null;
+  const revokedAgents = await collections.agents
+    .find({ ownerUserId: agent.ownerUserId, status: "revoked" }, { projection: { _id: 1 } })
+    .toArray();
+  if (revokedAgents.length === 0) return null;
+  return collections.phoneNumbers.findOne(
+    {
+      agentId: { $in: revokedAgents.map((revokedAgent) => revokedAgent._id) },
+      status: "active",
+      twilioSid: { $type: "string" }
+    },
+    { sort: { updatedAt: 1 } }
+  );
+}
+
+async function provisionRetainedPhoneNumber(
+  collections: Collections,
+  config: AppConfig,
+  agent: AgentDocument,
+  retainedNumber: PhoneNumberDocument,
+  providers: PhoneProvisioningProviders
+): Promise<PhoneNumberDocument> {
+  const previousAgentId = retainedNumber.agentId;
+  let elevenLabsPhoneNumberId: string | null = null;
+  try {
+    if (retainedNumber.elevenLabsPhoneNumberId) {
+      await safeRemoveElevenLabsNumber(config, providers, retainedNumber.elevenLabsPhoneNumberId);
+    }
+    const claimed = await collections.phoneNumbers.findOneAndUpdate(
+      { _id: retainedNumber._id, agentId: previousAgentId, status: "active" },
+      {
+        $set: {
+          agentId: agent._id,
+          provisioningDetail: "Linking retained number...",
+          updatedAt: new Date()
+        },
+        $unset: { elevenLabsPhoneNumberId: "", releaseDetail: "" }
+      },
+      { returnDocument: "after" }
+    );
+    if (!claimed) {
+      throw new ApiError(409, "validation_failed", "retained phone number was already claimed");
+    }
+
+    const imported = providers.importTwilioNumber
+      ? await providers.importTwilioNumber({ e164: claimed.e164, label: `${agent.name} (${claimed.e164})` })
+      : await importTwilioNumber(config, { e164: claimed.e164, label: `${agent.name} (${claimed.e164})` });
+    elevenLabsPhoneNumberId = imported.phoneNumberId;
+    if (providers.assignAgentToNumber) {
+      await providers.assignAgentToNumber(elevenLabsPhoneNumberId);
+    } else {
+      await assignAgentToNumber(config, elevenLabsPhoneNumberId);
+    }
+
+    const active = await activateNumberRow(collections, claimed._id, { elevenLabsPhoneNumberId });
+    await collections.phoneNumbers.updateOne({ _id: active._id }, { $unset: { provisioningDetail: "", releaseDetail: "" } });
+    await setAgentPhoneFlag(collections, agent, true);
+    await recordAudit(collections, {
+      agentId: agent._id,
+      ownerUserId: agent.ownerUserId,
+      actor: "system",
+      action: "phone.number.reused",
+      status: "allowed",
+      detail: `Reused retained phone number ${active.e164}.`,
+      resourceType: "phoneNumber",
+      resourceId: active._id.toHexString(),
+      metadata: { previousAgentId: previousAgentId.toHexString(), twilioSid: active.twilioSid ?? null }
+    });
+    await recordAudit(collections, {
+      agentId: agent._id,
+      ownerUserId: agent.ownerUserId,
+      actor: "system",
+      action: AUDIT_ACTIONS.phone.provisioned,
+      status: "allowed",
+      detail: `Phone number ${active.e164} provisioned from retained inventory.`,
+      resourceType: "phoneNumber",
+      resourceId: active._id.toHexString(),
+      metadata: { twilioSid: active.twilioSid ?? null, elevenLabsPhoneNumberId }
+    });
+    return { ...active, provisioningDetail: undefined, releaseDetail: undefined };
+  } catch (error) {
+    if (elevenLabsPhoneNumberId) {
+      await safeRemoveElevenLabsNumber(config, providers, elevenLabsPhoneNumberId);
+    }
+    await collections.phoneNumbers.updateOne(
+      { _id: retainedNumber._id, agentId: agent._id },
+      {
+        $set: {
+          agentId: previousAgentId,
+          status: "active",
+          releaseDetail: (error as Error).message,
+          updatedAt: new Date()
+        },
+        $unset: { provisioningDetail: "", elevenLabsPhoneNumberId: "" }
+      }
+    );
+    await setAgentPhoneFlag(collections, agent, false);
+    throw error;
   }
 }
 

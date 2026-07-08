@@ -117,6 +117,30 @@ describe("Agent detail page", () => {
     expect(screen.queryByText(/mcpServers/)).not.toBeInTheDocument();
   });
 
+  it("does not enable phone when the purchase confirmation is cancelled", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    render(
+      <AgentDetailPage
+        detail={detail({ email: true, phone: false })}
+        activeTab="credentials"
+        onSelectTab={vi.fn()}
+        onAgentDetailLoaded={vi.fn()}
+        onAgentUpdated={vi.fn()}
+        onAgentDeleted={vi.fn()}
+        onTokensChanged={vi.fn()}
+        onNotify={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getAllByLabelText(/enable phone/i)[0]!);
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("buy a new Twilio number"));
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/capabilities/phone/enable"), expect.anything());
+  });
+
   it("calls freeze-all from danger zone after name confirmation", async () => {
     vi.spyOn(window, "prompt").mockReturnValue("Maya");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {

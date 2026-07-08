@@ -9,6 +9,7 @@ import {
   deprovisionAgentPhoneNumber,
   getAgentPhoneProvisioningStatus,
   provisionAgentPhoneNumber,
+  retainAgentPhoneNumberForReuse,
   type PhoneProvisioningProviders
 } from "./phone-provisioning.js";
 
@@ -128,6 +129,30 @@ describe("phone provisioner", () => {
     expect(providers.purchases[0]?.e164).toBe("+15005550002");
   });
 
+  it("reuses a retained number from a deleted agent before searching or buying", async () => {
+    const deletedAgent = await insertAgent({ phone: false });
+    await database.collections.agents.updateOne({ _id: deletedAgent._id }, { $set: { status: "revoked", updatedAt: new Date() } });
+    const retained = await insertPhoneNumber(deletedAgent, { status: "active", twilioSid: "PNretained", elevenLabsPhoneNumberId: undefined });
+    const agent = await insertAgent({ ownerUserId: deletedAgent.ownerUserId ?? undefined });
+    const providers = fakeProviders();
+
+    const active = await provisionAgentPhoneNumber(database.collections, config, agent, providers);
+
+    expect(active._id).toEqual(retained._id);
+    expect(active.agentId).toEqual(agent._id);
+    expect(active.e164).toBe("+15005550001");
+    expect(providers.searches).toEqual([]);
+    expect(providers.purchases).toEqual([]);
+    expect(providers.releases).toEqual([]);
+    expect(providers.imports).toEqual([{ e164: "+15005550001", label: "Phone Agent (+15005550001)" }]);
+    expect(providers.assignments).toEqual(["el-phone-1"]);
+    const updatedAgent = await database.collections.agents.findOne({ _id: agent._id });
+    expect(updatedAgent?.capabilities.phone).toBe(true);
+    const audits = (await database.collections.auditLogs.find({ agentId: agent._id }).sort({ createdAt: 1 }).toArray()).map((audit) => audit.action);
+    expect(audits).toContain("phone.number.reused");
+    expect(audits).not.toContain("phone.number.purchased");
+  });
+
   it("compensates Twilio purchase when ElevenLabs import fails", async () => {
     const agent = await insertAgent();
     const providers = fakeProviders({
@@ -188,6 +213,22 @@ describe("phone provisioner", () => {
     expect(actions).toEqual(["phone.number.released", "phone.released"]);
   });
 
+  it("retains an active number for reuse without releasing Twilio", async () => {
+    const agent = await insertAgent({ phone: true });
+    const row = await insertPhoneNumber(agent, { status: "active", twilioSid: "PN123", elevenLabsPhoneNumberId: "el-phone-1" });
+    const providers = fakeProviders();
+
+    await retainAgentPhoneNumberForReuse(database.collections, config, agent, providers);
+
+    expect(providers.removals).toEqual(["el-phone-1"]);
+    expect(providers.releases).toEqual([]);
+    const retained = await database.collections.phoneNumbers.findOne({ _id: row._id });
+    expect(retained).toMatchObject({ status: "active", twilioSid: "PN123" });
+    expect(retained?.elevenLabsPhoneNumberId).toBeUndefined();
+    const updatedAgent = await database.collections.agents.findOne({ _id: agent._id });
+    expect(updatedAgent?.capabilities.phone).toBe(false);
+  });
+
   it("exposes mock route enable/disable through agent detail polling", async () => {
     const cookie = await signup("phone-route-owner@example.com");
     const created = await createAgent(cookie, { name: "Route Phone" });
@@ -214,9 +255,9 @@ describe("phone provisioner", () => {
   });
 });
 
-async function insertAgent(input: { phone?: boolean } = {}): Promise<AgentDocument> {
+async function insertAgent(input: { phone?: boolean; ownerUserId?: ObjectId } = {}): Promise<AgentDocument> {
   const now = new Date();
-  const ownerUserId = new ObjectId();
+  const ownerUserId = input.ownerUserId ?? new ObjectId();
   const agent: AgentDocument = {
     _id: new ObjectId(),
     ownerUserId,
@@ -228,15 +269,23 @@ async function insertAgent(input: { phone?: boolean } = {}): Promise<AgentDocume
     createdAt: now,
     updatedAt: now
   };
-  await database.collections.billingAccounts.insertOne({
-    _id: new ObjectId(),
-    ownerUserId,
-    stripeCustomerId: `cus_${ownerUserId.toHexString()}`,
-    plan: "pro",
-    subscriptionStatus: "active",
-    createdAt: now,
-    updatedAt: now
-  });
+  await database.collections.billingAccounts.updateOne(
+    { ownerUserId },
+    {
+      $set: {
+        stripeCustomerId: `cus_${ownerUserId.toHexString()}`,
+        plan: "pro",
+        subscriptionStatus: "active",
+        updatedAt: now
+      },
+      $setOnInsert: {
+        _id: new ObjectId(),
+        ownerUserId,
+        createdAt: now
+      }
+    },
+    { upsert: true }
+  );
   await database.collections.agents.insertOne(agent);
   return agent;
 }

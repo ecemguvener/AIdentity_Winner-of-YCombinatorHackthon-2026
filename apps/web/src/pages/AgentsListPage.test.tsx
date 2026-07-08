@@ -68,6 +68,43 @@ describe("Agent creation wizard", () => {
     await waitFor(() => expect(screen.queryByText("barkan_secret_once")).not.toBeInTheDocument());
     expect(screen.getByText("barkan_sec...stored")).toBeInTheDocument();
   });
+
+  it("keeps phone disabled by default for paid accounts", async () => {
+    let createBody: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/billing")) {
+        return jsonResponse({ plan: "pro" });
+      }
+      createBody = JSON.parse(String(init?.body));
+      return jsonResponse({
+        agent: {
+          id: "agent_2",
+          name: "Paid Maya",
+          slug: "paid-maya",
+          status: "active",
+          description: null,
+          runtime: "openclaw",
+          capabilities: { email: true, phone: false },
+          approvalMode: "always",
+          emailAddress: "paid-maya@agents.barkan.dev",
+          phoneE164: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        identityToken: { secret: "barkan_secret_paid", prefix: "barkan" }
+      }, 201);
+    });
+
+    render(<AgentCreationWizard onCancel={vi.fn()} onCreated={vi.fn()} onNotify={vi.fn()} />);
+
+    expect(await screen.findByText(/Phone off by default/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Paid Maya" } });
+    fireEvent.click(screen.getByRole("button", { name: /create identity/i }));
+
+    expect(await screen.findByText("barkan_secret_paid")).toBeInTheDocument();
+    expect(createBody).toMatchObject({ capabilities: { email: true, phone: false } });
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {

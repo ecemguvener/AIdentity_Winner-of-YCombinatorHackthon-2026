@@ -72,6 +72,12 @@ export function AgentDetailPage({
   }
 
   async function toggleCapability(capability: "email" | "phone", enabled: boolean) {
+    if (enabled && capability === "phone") {
+      const confirmed = window.confirm(
+        "Enable phone for this agent? Barkan will reuse a retained number if one exists. Otherwise this will buy a new Twilio number and may use credits."
+      );
+      if (!confirmed) return;
+    }
     if (!enabled) {
       const warning =
         capability === "phone"

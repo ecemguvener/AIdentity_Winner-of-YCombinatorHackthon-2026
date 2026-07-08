@@ -19,6 +19,7 @@ import {
   type CapabilityName
 } from "./provisioning.js";
 import { defaultEmailPolicy, defaultPhonePolicy } from "./policies.js";
+import { retainAgentPhoneNumberForReuse } from "./phone-provisioning.js";
 
 const MAX_ACTIVE_TOKENS_PER_AGENT = 5;
 
@@ -181,7 +182,7 @@ export function registerAgentRoutes(app: FastifyInstance, collections: Collectio
   app.delete("/api/v1/agents/:agentId", async (request, reply) => {
     const authContext = await requireAuth(request, reply, collections, config);
     const agent = await findOwnedAgent(collections, authContext.user._id, request.params);
-    await revokeAgentAndTokens(collections, agent, authContext.user._id);
+    await revokeAgentAndTokens(collections, config, agent, authContext.user._id);
     return { ok: true };
   });
 
@@ -337,6 +338,7 @@ export async function issueOwnerToken(
 /** Soft delete: revoke the agent + every active token, then run capability teardown hooks. */
 async function revokeAgentAndTokens(
   collections: Collections,
+  config: AppConfig,
   agent: AgentDocument,
   ownerUserId: ObjectId
 ): Promise<void> {
@@ -352,7 +354,11 @@ async function revokeAgentAndTokens(
       continue;
     }
     try {
-      await getProvisioner(capability).deprovision(agent);
+      if (capability === "phone") {
+        await retainAgentPhoneNumberForReuse(collections, config, agent);
+      } else {
+        await getProvisioner(capability).deprovision(agent);
+      }
     } catch (error) {
       console.error(`capability ${capability} teardown failed for agent ${agent._id.toHexString()}`, error);
     }

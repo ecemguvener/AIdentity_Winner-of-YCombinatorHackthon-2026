@@ -461,4 +461,42 @@ describe("DELETE /api/v1/agents/:agentId", () => {
       registerProvisioner("email", originalProvisioner);
     }
   });
+
+  it("retains a deleted agent phone number and reuses it for the next agent", async () => {
+    const first = await createAgent({ name: "Phone Retained", capabilities: { phone: true } });
+    await waitForCapability(first.agent.id, "phone", true);
+    const firstNumber = await database.collections.phoneNumbers.findOne({ agentId: new ObjectId(first.agent.id), status: "active" });
+    expect(firstNumber).toBeTruthy();
+
+    const remove = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/agents/${first.agent.id}`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie }
+    });
+    expect(remove.statusCode).toBe(200);
+
+    const retained = await database.collections.phoneNumbers.findOne({ _id: firstNumber!._id });
+    expect(retained).toMatchObject({ status: "active", e164: firstNumber!.e164 });
+    expect(retained?.agentId).toEqual(new ObjectId(first.agent.id));
+    expect(retained?.elevenLabsPhoneNumberId).toBeUndefined();
+
+    const second = await createAgent({ name: "Phone Reused" });
+    const enable = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/${second.agent.id}/capabilities/phone/enable`,
+      cookies: { [config.SESSION_COOKIE_NAME]: ownerCookie }
+    });
+    expect(enable.statusCode).toBe(202);
+    await waitForCapability(second.agent.id, "phone", true);
+
+    const reused = await database.collections.phoneNumbers.findOne({ _id: firstNumber!._id });
+    expect(reused).toMatchObject({ status: "active", e164: firstNumber!.e164 });
+    expect(reused?.agentId).toEqual(new ObjectId(second.agent.id));
+    expect(await database.collections.phoneNumbers.countDocuments({ e164: firstNumber!.e164 })).toBe(1);
+    const purchaseAudits = await database.collections.auditLogs.countDocuments({
+      agentId: new ObjectId(second.agent.id),
+      action: "phone.number.purchased"
+    });
+    expect(purchaseAudits).toBe(0);
+  });
 });
