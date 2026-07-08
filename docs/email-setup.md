@@ -2,7 +2,7 @@
 
 ## Resend Domain
 
-1. Choose an agent email subdomain, for example `agents.identity.space`.
+1. Choose an agent email subdomain, for example `agents.aidentity.space`.
 2. Set `EMAIL_AGENT_DOMAIN` to that subdomain and set `PROVIDER_MODE_EMAIL=live`.
 3. Add `RESEND_API_KEY` and restart the API.
 4. Open `GET /api/v1/ops/email-domain` with a dashboard session cookie. Barkan creates the Resend domain if needed and returns DNS records.

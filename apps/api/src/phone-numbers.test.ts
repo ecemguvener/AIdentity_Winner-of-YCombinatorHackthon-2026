@@ -20,7 +20,7 @@ import { ApiError } from "./errors.js";
 const config = {
   MONGODB_URI: "set-by-beforeAll",
   PROVIDER_MODE_PHONE: "mock",
-  PUBLIC_API_URL: "https://identity.space"
+  PUBLIC_API_URL: "https://aidentity.space"
 } as unknown as AppConfig;
 
 let mongoServer: MongoMemoryServer;

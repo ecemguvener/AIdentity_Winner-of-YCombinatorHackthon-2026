@@ -11,7 +11,7 @@ import {
 
 const config = {
   PROVIDER_MODE_PHONE: "live",
-  PUBLIC_API_URL: "https://identity.space/api",
+  PUBLIC_API_URL: "https://aidentity.space/api",
   TWILIO_ACCOUNT_SID: "AC123",
   TWILIO_AUTH_TOKEN: "token",
   TWILIO_NUMBER_COUNTRY: "US",
@@ -54,9 +54,9 @@ describe("twilio number provider", () => {
     expect(buildPurchaseParams(config, { e164: "+14155550123", friendlyName: "barkan:agent", agentId: "agent" })).toEqual({
       phoneNumber: "+14155550123",
       friendlyName: "barkan:agent",
-      smsUrl: "https://identity.space/api/webhooks/twilio/sms",
+      smsUrl: "https://aidentity.space/api/webhooks/twilio/sms",
       smsMethod: "POST",
-      statusCallback: "https://identity.space/api/webhooks/twilio/status",
+      statusCallback: "https://aidentity.space/api/webhooks/twilio/status",
       addressSid: "AD123",
       bundleSid: "BU123"
     });
@@ -75,8 +75,8 @@ describe("twilio number provider", () => {
 
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       phoneNumber: "+14155550123",
-      smsUrl: "https://identity.space/api/webhooks/twilio/sms",
-      statusCallback: "https://identity.space/api/webhooks/twilio/status"
+      smsUrl: "https://aidentity.space/api/webhooks/twilio/sms",
+      statusCallback: "https://aidentity.space/api/webhooks/twilio/status"
     }));
     expect(purchased).toEqual({
       twilioSid: "PN123",

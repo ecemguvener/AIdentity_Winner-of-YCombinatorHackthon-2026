@@ -92,7 +92,7 @@ release_name="$(date -u +%Y%m%d%H%M%S)"
 release_dir="$releases_dir/$release_name"
 
 export NODE_ENV="${NODE_ENV:-production}"
-export VITE_API_URL="${VITE_API_URL:-https://barkan.tech}"
+export VITE_API_URL="${VITE_API_URL:-https://aidentity.space}"
 export VITE_API_PORT="${VITE_API_PORT:-}"
 
 section "Starting deploy"
