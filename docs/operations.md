@@ -88,3 +88,14 @@ pm2 restart dev-barkan-api dev-barkan-web --update-env
 curl http://127.0.0.1:4001/api/health
 curl http://127.0.0.1:4001/internal/metrics
 ```
+
+## Production Release
+
+Use `docs/runbook-golive.md` for live cutover. The deploy gate is:
+
+```powershell
+npm run check-env -- --env production --file .env.production
+npm run deploy:prod -- --target production
+```
+
+The script builds, runs migrations, enforces `npm run e2e`, reloads PM2, smokes `/api/health`, and keeps the latest three releases for rollback.

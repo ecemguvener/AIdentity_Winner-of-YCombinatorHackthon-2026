@@ -1,0 +1,61 @@
+{
+	email {$CADDY_ACME_EMAIL:ops@barkan.dev}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+}
+
+(api_proxy) {
+	@internal path /internal/*
+	respond @internal 404
+
+	reverse_proxy /webhooks/* 127.0.0.1:{$BARKAN_API_PORT:4000} {
+		flush_interval -1
+	}
+	reverse_proxy /mcp 127.0.0.1:{$BARKAN_API_PORT:4000} {
+		flush_interval -1
+	}
+	reverse_proxy 127.0.0.1:{$BARKAN_API_PORT:4000}
+}
+
+{$BARKAN_WEB_HOST:barkan.dev} {
+	import security_headers
+	root * {$BARKAN_WEB_ROOT:/srv/barkan/current/apps/web/dist}
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+}
+
+{$BARKAN_API_HOST:api.barkan.dev} {
+	import security_headers
+	import api_proxy
+}
+
+{$BARKAN_STAGING_WEB_HOST:staging.barkan.dev} {
+	import security_headers
+	root * {$BARKAN_STAGING_WEB_ROOT:/srv/barkan-staging/current/apps/web/dist}
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+}
+
+{$BARKAN_STAGING_API_HOST:staging-api.barkan.dev} {
+	import security_headers
+	@internal path /internal/*
+	respond @internal 404
+
+	reverse_proxy /webhooks/* 127.0.0.1:{$BARKAN_STAGING_API_PORT:4002} {
+		flush_interval -1
+	}
+	reverse_proxy /mcp 127.0.0.1:{$BARKAN_STAGING_API_PORT:4002} {
+		flush_interval -1
+	}
+	reverse_proxy 127.0.0.1:{$BARKAN_STAGING_API_PORT:4002}
+}

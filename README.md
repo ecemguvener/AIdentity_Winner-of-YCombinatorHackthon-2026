@@ -87,7 +87,16 @@ Initialize or reload the production API process in PM2:
 npm run pm2:start-prod-api
 ```
 
-Production web updates are explicit:
+Production and staging releases use the go-live deploy script:
+
+```powershell
+npm run check-env -- --env staging --file .env.staging
+npm run deploy:prod -- --target staging
+npm run check-env -- --env production --file .env.production
+npm run deploy:prod -- --target production
+```
+
+Legacy web-only updates remain available:
 
 ```powershell
 npm run deploy:barkan-web
@@ -116,6 +125,7 @@ apps/
   web/                     React + Vite dashboard
 packages/                  Workspace packages (empty for now)
 scripts/                   Dev, deploy, and build helper scripts
+infra/                     Caddy reverse proxy configuration
 openclaw-skills/           OpenClaw-facing identity skill
 docs/                      Product and integration notes
 _bmad/                     BMAD configuration

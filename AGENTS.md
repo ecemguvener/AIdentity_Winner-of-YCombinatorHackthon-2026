@@ -138,8 +138,13 @@ The Node API exposes:
 | `apps/api/src/backup-retention.ts` | Pure backup archive pruning helper used by tests/runbooks |
 | `apps/api/src/seed-demo.ts` | Idempotent current-model demo account seeder for agents, approvals, email, phone, usage, and audits |
 | `apps/api/src/test-support.ts` | Test-only browser E2E helper routes guarded by `NODE_ENV=test` |
+| `apps/api/src/graceful-shutdown.ts` | PM2-aware API shutdown drain helper used by production server startup |
 | `e2e/` | Playwright browser suite for auth, agent creation, approvals, email, phone, billing, and onboarding |
 | `scripts/e2e-server.ts` | Playwright web server harness with in-memory MongoDB, mock providers, API, and Vite preview |
+| `scripts/check-env.mjs` | Staging/production env parity checker used before deploy |
+| `scripts/deploy-prod.sh` | Release/symlink deploy, migration, E2E gate, PM2 reload, smoke, and rollback script |
+| `infra/Caddyfile` | Caddy TLS reverse proxy for production and staging web/API hosts |
+| `docs/runbook-golive.md` | Ordered production go-live checklist for DNS, providers, deploy, smoke, and rollback |
 | `playwright.config.ts` | Browser E2E configuration, traces, videos, and local web server wiring |
 | `apps/web/src/sentry.ts` | Web Sentry initialization and event scrubber |
 | `apps/api/src/openapi.ts` | OpenAPI document and hosted API reference routes |
@@ -211,6 +216,7 @@ npm run build
 npm test
 npm run e2e:integration
 npm run e2e
+npm run check-env -- --env staging --file .env.staging
 ```
 
 Development:
@@ -235,6 +241,8 @@ npm --workspace @barkan/web run dev
 Production deploy:
 
 ```powershell
+npm run deploy:prod -- --target staging
+npm run deploy:prod -- --target production
 npm run pm2:start-prod-api
 npm run deploy:barkan-web
 ```
