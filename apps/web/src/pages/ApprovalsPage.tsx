@@ -39,7 +39,7 @@ export function ApprovalsPage({
     <section className="dashboard-page__workspace dashboard-page__workspace--projects" aria-labelledby="approvalsTitle">
       <div className="dashboard-page__projects-view">
         <div className="dashboard-page__projects-shell">
-          <header className="dashboard-page__projects-header">
+          <header className="dashboard-page__projects-header approvals-page__header">
             <h1 id="approvalsTitle" className="dashboard-page__projects-title">Approvals</h1>
             <div className="site-detail-page__tabs" role="tablist" aria-label="Approvals">
               <button className="site-detail-page__tab" type="button" aria-selected={activeTab === "pending"} onClick={() => setActiveTab("pending")}>
