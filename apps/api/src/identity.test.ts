@@ -30,7 +30,7 @@ async function initAgent(app: ReturnType<typeof buildApp>) {
       agent_name: "Maya",
       agent_runtime: "openclaw",
       use_case: "customer_discovery",
-      tools: ["email", "phone", "calendar"]
+      tools: ["email", "phone"]
     }
   });
   expect(response.statusCode).toBe(201);
@@ -79,7 +79,7 @@ describe("identity layer routes (Mongo-backed)", () => {
 
     const blocked = await app.inject({
       method: "POST",
-      url: "/api/tools/phone/call",
+      url: "/api/v1/agent/phone/call",
       headers: { authorization: `Bearer ${init.identity_token}` },
       payload: { to: "+1 555 0100", script: "Hi, can we talk?" }
     });
@@ -105,13 +105,13 @@ describe("identity layer routes (Mongo-backed)", () => {
 
     const allowed = await app.inject({
       method: "POST",
-      url: "/api/tools/phone/call",
+      url: "/api/v1/agent/phone/call",
       headers: { authorization: `Bearer ${init.identity_token}` },
       payload: { to: "+1 555 0100", script: "Hi, can we talk?", approved: true }
     });
     expect(allowed.statusCode).toBe(200);
-    expect(allowed.json<{ ok: boolean; from: string; transcript?: unknown }>())
-      .toMatchObject({ ok: true, from: "+15005550001", to: "+15550100" });
+    expect(allowed.json<{ from: string; transcript?: unknown }>())
+      .toMatchObject({ from: "+15005550001", to: "+15550100" });
     expect(allowed.json()).not.toHaveProperty("transcript");
 
     const audit = await app.inject({

@@ -141,9 +141,9 @@ describe("email capability routes", () => {
 
     const send = await app.inject({
       method: "POST",
-      url: "/api/tools/email/send",
+      url: "/api/v1/agent/email/send",
       headers: { authorization: `Bearer ${token}` },
-      payload: { to: "john@example.com", subject: "Meeting tomorrow", body: "Are you free?" }
+      payload: { to: "john@example.com", subject: "Meeting tomorrow", text: "Are you free?" }
     });
     expect(send.statusCode).toBe(201);
     expect(send.json()).toMatchObject({ ok: true, from: email, to: "john@example.com", status: "sent" });
@@ -158,26 +158,6 @@ describe("email capability routes", () => {
     expect(body.email_identity.provider).toBe("mock");
     expect(body.messages).toHaveLength(1);
     expect(body.messages[0]).toMatchObject({ direction: "outbound", to_email: "john@example.com" });
-
-    await app.close();
-  });
-
-  it("drafts and sends from a plain-text request that includes an address", async () => {
-    const app = await buildTestApp();
-    const { token } = await initEmailAgent(app);
-
-    const request = await app.inject({
-      method: "POST",
-      url: "/api/tools/email/request",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { request: "Email sarah@acme.com and ask if she can send the contract today." }
-    });
-    expect(request.statusCode).toBe(201);
-    const body = request.json();
-    expect(body.ok).toBe(true);
-    expect(body.to).toBe("sarah@acme.com");
-    expect(body.parsed.parsed_by).toBe("heuristic");
-    expect(body.parsed.body).toContain("Ava");
 
     await app.close();
   });
@@ -219,65 +199,26 @@ describe("email capability routes", () => {
     await app.close();
   });
 
-  it("asks for a recipient when the request has no address", async () => {
-    const app = await buildTestApp();
-    const { token } = await initEmailAgent(app);
-
-    const request = await app.inject({
-      method: "POST",
-      url: "/api/tools/email/request",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { request: "Email John and ask if he can meet tomorrow." }
-    });
-    expect(request.statusCode).toBe(422);
-    expect(request.json().message).toMatch(/recipient/i);
-
-    await app.close();
-  });
-
   it("sends directly until email policy approvals land", async () => {
     const app = await buildTestApp();
     const { token } = await initEmailAgent(app, true);
 
     const sent = await app.inject({
       method: "POST",
-      url: "/api/tools/email/send",
+      url: "/api/v1/agent/email/send",
       headers: { authorization: `Bearer ${token}` },
-      payload: { to: "john@example.com", subject: "Hi", body: "Hello" }
+      payload: { to: "john@example.com", subject: "Hi", text: "Hello" }
     });
     expect(sent.statusCode).toBe(201);
     expect(sent.json()).toMatchObject({ ok: true, to: "john@example.com", status: "sent" });
 
     const allowed = await app.inject({
       method: "POST",
-      url: "/api/tools/email/send",
+      url: "/api/v1/agent/email/send",
       headers: { authorization: `Bearer ${token}` },
-      payload: { to: "john@example.com", subject: "Hi", body: "Hello", approved: true }
+      payload: { to: "john@example.com", subject: "Hi", text: "Hello", approved: true }
     });
     expect(allowed.statusCode).toBe(201);
-
-    await app.close();
-  });
-
-  it("pauses and resumes the email identity", async () => {
-    const app = await buildTestApp();
-    const { token } = await initEmailAgent(app);
-
-    const paused = await app.inject({ method: "POST", url: "/api/tools/email/pause", headers: { authorization: `Bearer ${token}` } });
-    expect(paused.statusCode).toBe(200);
-    expect(paused.json().status).toBe("paused");
-
-    const blocked = await app.inject({
-      method: "POST",
-      url: "/api/tools/email/send",
-      headers: { authorization: `Bearer ${token}` },
-      payload: { to: "john@example.com", subject: "Hi", body: "Hello" }
-    });
-    expect(blocked.statusCode).toBe(403);
-    expect(blocked.json().message).toMatch(/paused/i);
-
-    const resumed = await app.inject({ method: "POST", url: "/api/tools/email/resume", headers: { authorization: `Bearer ${token}` } });
-    expect(resumed.json().status).toBe("active");
 
     await app.close();
   });

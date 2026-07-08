@@ -1,11 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
 
 const originalEnvironment = { ...process.env };
 
 describe("loadConfig", () => {
-  const legacyDatabasePrefix = ["ai", "dentity"].join("");
-
   beforeEach(() => {
     for (const key of Object.keys(process.env)) {
       delete process.env[key];
@@ -13,7 +11,6 @@ describe("loadConfig", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     replaceEnvironment(originalEnvironment);
   });
 
@@ -41,13 +38,6 @@ describe("loadConfig", () => {
     expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/barkan");
   });
 
-  it("rewrites the legacy MongoDB database name", () => {
-    process.env.NODE_ENV = "development";
-    process.env.MONGODB_URI = `mongodb://127.0.0.1:27017/${legacyDatabasePrefix}-web`;
-
-    expect(loadConfig().MONGODB_URI).toBe(`mongodb://127.0.0.1:27017/${legacyDatabasePrefix}`);
-  });
-
   it("uses barkan when a MongoDB URI has no database name", () => {
     process.env.NODE_ENV = "development";
     process.env.MONGODB_URI = "mongodb://127.0.0.1:27017";
@@ -69,14 +59,6 @@ describe("loadConfig", () => {
     process.env.PUBLIC_API_URL = "http://localhost:4000";
 
     expect(loadConfig().MONGODB_URI).toBe("mongodb://127.0.0.1:27017/barkan-prod");
-  });
-
-  it("rewrites the legacy production MongoDB database name", () => {
-    process.env.NODE_ENV = "production";
-    process.env.MONGODB_URI = `mongodb://127.0.0.1:27017/${legacyDatabasePrefix}-web-prod`;
-    process.env.PUBLIC_API_URL = "http://localhost:4000";
-
-    expect(loadConfig().MONGODB_URI).toBe(`mongodb://127.0.0.1:27017/${legacyDatabasePrefix}-prod`);
   });
 
   it("requires HTTPS for non-local production API URLs", () => {
@@ -111,6 +93,7 @@ describe("loadConfig", () => {
     expect(config.EMAIL_AGENT_DOMAIN).toBe("agents.barkan.dev");
     expect(config.EMAIL_PLATFORM_FROM).toBe("Barkan <no-reply@barkan.dev>");
     expect(config.TWILIO_NUMBER_COUNTRY).toBe("US");
+    expect(config.OPENAI_EMAIL_MODEL).toBe("gpt-4o-mini");
     expect(config.API_RATE_LIMIT_MAX).toBe(300);
   });
 
@@ -147,31 +130,29 @@ describe("loadConfig", () => {
     expect(config.EMAIL_AGENT_DOMAIN).toBe("agents.example.test");
   });
 
-  it("maps legacy email env aliases and warns", () => {
-    const warnMock = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    process.env.EMAIL_FROM_DOMAIN = "legacy.example.test";
-    process.env.EMAIL_WEBHOOK_SECRET = "legacy-webhook-secret";
+  it("rejects removed email env aliases", () => {
+    process.env[["EMAIL", "FROM", "DOMAIN"].join("_")] = "removed.example.test";
+    process.env[["EMAIL", "WEBHOOK", "SECRET"].join("_")] = "removed-webhook-secret";
 
-    const config = loadConfig();
-
-    expect(config.EMAIL_AGENT_DOMAIN).toBe("legacy.example.test");
-    expect(config.RESEND_WEBHOOK_SECRET).toBe("legacy-webhook-secret");
-    expect(warnMock).toHaveBeenCalledWith("EMAIL_FROM_DOMAIN is deprecated. Use EMAIL_AGENT_DOMAIN instead.");
-    expect(warnMock).toHaveBeenCalledWith("EMAIL_WEBHOOK_SECRET is deprecated. Use RESEND_WEBHOOK_SECRET instead.");
+    expect(() => loadConfig()).toThrow(
+      new RegExp(`removed env vars present: ${["EMAIL", "FROM", "DOMAIN"].join("_")}, ${["EMAIL", "WEBHOOK", "SECRET"].join("_")}`)
+    );
   });
 
-  it("prefers new email env names over legacy aliases", () => {
-    const warnMock = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  it("rejects removed brand-prefixed env aliases", () => {
+    process.env[["A", "IDENTITY_PUBLIC_HOST"].join("")] = "127.0.0.1";
+
+    expect(() => loadConfig()).toThrow(new RegExp(`removed env vars present: ${["A", "IDENTITY_PUBLIC_HOST"].join("")}`));
+  });
+
+  it("uses current email env names", () => {
     process.env.EMAIL_AGENT_DOMAIN = "agents.new.test";
-    process.env.EMAIL_FROM_DOMAIN = "legacy.example.test";
     process.env.RESEND_WEBHOOK_SECRET = "new-webhook-secret";
-    process.env.EMAIL_WEBHOOK_SECRET = "legacy-webhook-secret";
 
     const config = loadConfig();
 
     expect(config.EMAIL_AGENT_DOMAIN).toBe("agents.new.test");
     expect(config.RESEND_WEBHOOK_SECRET).toBe("new-webhook-secret");
-    expect(warnMock).not.toHaveBeenCalled();
   });
 });
 

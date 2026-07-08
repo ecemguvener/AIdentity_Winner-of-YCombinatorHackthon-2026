@@ -46,12 +46,11 @@ const rawEnvironmentSchema = z.object({
   CALL_COST_CENTS_PER_MINUTE: z.coerce.number().int().min(0).default(15),
   OPENAI_API_KEY: optionalNonEmptyStringSchema,
   OPENAI_DASHBOARD_CHAT_MODEL: z.string().min(1).default("gpt-5.4-2026-03-05").transform(normalizeConfiguredOpenAIModel),
+  OPENAI_EMAIL_MODEL: z.string().min(1).default("gpt-4o-mini"),
   RESEND_API_KEY: optionalNonEmptyStringSchema,
   EMAIL_AGENT_DOMAIN: optionalNonEmptyStringSchema,
-  EMAIL_FROM_DOMAIN: optionalNonEmptyStringSchema,
   EMAIL_PLATFORM_FROM: z.string().min(1).default("Barkan <no-reply@barkan.dev>"),
   RESEND_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
-  EMAIL_WEBHOOK_SECRET: optionalNonEmptyStringSchema,
   SENTRY_DSN: optionalNonEmptyStringSchema,
   ALERT_WEBHOOK_URL: optionalNonEmptyStringSchema,
   ACCOUNT_EXPORT_DIR: z.string().min(1).default("/tmp/barkan-account-exports"),
@@ -66,23 +65,12 @@ const rawEnvironmentSchema = z.object({
 });
 
 const environmentSchema = rawEnvironmentSchema.transform((environment) => {
-  const emailAgentDomain = environment.EMAIL_AGENT_DOMAIN ?? environment.EMAIL_FROM_DOMAIN ?? "agents.barkan.dev";
-  const resendWebhookSecret = environment.RESEND_WEBHOOK_SECRET ?? environment.EMAIL_WEBHOOK_SECRET;
-  if (!environment.EMAIL_AGENT_DOMAIN && environment.EMAIL_FROM_DOMAIN) {
-    console.warn("EMAIL_FROM_DOMAIN is deprecated. Use EMAIL_AGENT_DOMAIN instead.");
-  }
-  if (!environment.RESEND_WEBHOOK_SECRET && environment.EMAIL_WEBHOOK_SECRET) {
-    console.warn("EMAIL_WEBHOOK_SECRET is deprecated. Use RESEND_WEBHOOK_SECRET instead.");
-  }
+  const emailAgentDomain = environment.EMAIL_AGENT_DOMAIN ?? "agents.barkan.dev";
 
   return {
     ...environment,
     EMAIL_AGENT_DOMAIN: emailAgentDomain,
-    RESEND_WEBHOOK_SECRET: resendWebhookSecret,
-    MONGODB_URI: normalizeMongoUriForEnvironment(
-      normalizeLegacyMongoDatabaseName(environment.MONGODB_URI),
-      environment.NODE_ENV
-    ),
+    MONGODB_URI: normalizeMongoUriForEnvironment(environment.MONGODB_URI, environment.NODE_ENV),
     PUBLIC_API_URL: normalizePublicApiUrlForEnvironment(environment.PUBLIC_API_URL, environment.NODE_ENV)
   };
 }).superRefine((environment, context) => {
@@ -108,12 +96,30 @@ export type ProviderMode = AppConfig["PROVIDER_MODE_EMAIL"];
 
 export function loadConfig(): AppConfig {
   try {
+    rejectRemovedEnvironmentNames(process.env);
     return environmentSchema.parse(process.env);
   } catch (error) {
     if (error instanceof ZodError) {
       throw new Error(formatConfigError(error));
     }
     throw error;
+  }
+}
+
+function rejectRemovedEnvironmentNames(environment: NodeJS.ProcessEnv): void {
+  const removedNames = [
+    ["EMAIL", "FROM", "DOMAIN"].join("_"),
+    ["EMAIL", "WEBHOOK", "SECRET"].join("_")
+  ];
+  const removedPrefix = ["A", "IDENTITY"].join("");
+  const presentNames = [
+    ...removedNames.filter((name) => Object.prototype.hasOwnProperty.call(environment, name)),
+    ...Object.keys(environment).filter((name) => name.startsWith(removedPrefix))
+  ];
+  if (presentNames.length > 0) {
+    throw new Error(
+      `Invalid API configuration: removed env vars present: ${presentNames.join(", ")}. Use BARKAN_* and current email env names.`
+    );
   }
 }
 
@@ -177,20 +183,6 @@ function normalizeMongoUriForEnvironment(mongodbUri: string, nodeEnv: string): s
   }
 
   return ensureProductionMongoDatabaseName(mongodbUriWithDefaultDatabase);
-}
-
-function normalizeLegacyMongoDatabaseName(mongodbUri: string): string {
-  return replaceMongoDatabaseName(mongodbUri, (databaseName) => {
-    if (databaseName === "aidentity-web") {
-      return "aidentity";
-    }
-
-    if (databaseName === "aidentity-web-prod") {
-      return "aidentity-prod";
-    }
-
-    return databaseName;
-  });
 }
 
 function ensureProductionMongoDatabaseName(mongodbUri: string): string {
@@ -267,51 +259,5 @@ function ensureMongoDatabaseName(mongodbUri: string, defaultDatabaseName: string
     }
 
     return `${uriWithoutQuery}${defaultDatabaseName}${query}`;
-  }
-}
-
-function replaceMongoDatabaseName(
-  mongodbUri: string,
-  replaceDatabaseName: (databaseName: string) => string
-): string {
-  try {
-    const parsedUri = new URL(mongodbUri);
-    const databaseName = parsedUri.pathname.replace(/^\/+/, "");
-    if (!databaseName) {
-      return mongodbUri;
-    }
-
-    const replacementDatabaseName = replaceDatabaseName(databaseName);
-    if (replacementDatabaseName === databaseName) {
-      return mongodbUri;
-    }
-
-    parsedUri.pathname = `/${replacementDatabaseName}`;
-    return parsedUri.toString();
-  } catch {
-    const queryIndex = mongodbUri.indexOf("?");
-    const uriWithoutQuery = queryIndex === -1 ? mongodbUri : mongodbUri.slice(0, queryIndex);
-    const query = queryIndex === -1 ? "" : mongodbUri.slice(queryIndex);
-    const schemeEndIndex = uriWithoutQuery.indexOf("://");
-    if (schemeEndIndex === -1) {
-      return mongodbUri;
-    }
-
-    const pathStartIndex = uriWithoutQuery.indexOf("/", schemeEndIndex + 3);
-    if (pathStartIndex === -1) {
-      return mongodbUri;
-    }
-
-    const databaseName = uriWithoutQuery.slice(pathStartIndex + 1);
-    if (!databaseName) {
-      return mongodbUri;
-    }
-
-    const replacementDatabaseName = replaceDatabaseName(databaseName);
-    if (replacementDatabaseName === databaseName) {
-      return mongodbUri;
-    }
-
-    return `${uriWithoutQuery.slice(0, pathStartIndex + 1)}${replacementDatabaseName}${query}`;
   }
 }

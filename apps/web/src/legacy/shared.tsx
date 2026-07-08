@@ -100,7 +100,7 @@ export const agentIdentityCapabilities = [
   },
   {
     label: "Calendar",
-    value: "Managed calendar",
+    value: "Dashboard audit log",
     description: "Availability and scheduling",
     Icon: CalendarDays
   }
@@ -147,7 +147,7 @@ Link endpoint: ${linkEndpoint}
 Project token: ${safeProjectId}
 Confirmation token: ${safeToken}
 
-After installing the skill, call the link endpoint with the confirmation token so Barkan can attach this OpenClaw instance to the identity. Once linked, use the provisioned phone number, email inbox, calendar, and future real-world tools through the Barkan identity layer.`;
+After installing the skill, call the link endpoint with the confirmation token so Barkan can attach this OpenClaw instance to the identity. Once linked, use the provisioned phone number, email inbox, audit log, and future real-world tools through the Barkan identity layer.`;
 }
 
 export function buildIdentityReceipt(site: Site | null): string {
@@ -159,7 +159,7 @@ name=${identityName}
 openclaw=${endpoint}
 phone=+1-415-555-0198
 email=agent@identity.barkan.dev
-calendar=managed`;
+audit=enabled`;
 }
 
 export function isAppRoute(path: string): boolean {

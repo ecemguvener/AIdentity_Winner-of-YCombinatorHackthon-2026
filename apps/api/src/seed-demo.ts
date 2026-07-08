@@ -317,8 +317,6 @@ async function upsertDemoUser(collections: Collections, email: string, password:
 async function resetDemoData(collections: Collections, ownerUserId: ObjectId): Promise<void> {
   const agents = await collections.agents.find({ ownerUserId }, { projection: { _id: 1 } }).toArray();
   const agentIds = agents.map((agentDoc) => agentDoc._id);
-  const sites = await collections.sites.find({ ownerUserId }, { projection: { _id: 1 } }).toArray();
-  const siteIds = sites.map((site) => site._id);
   await Promise.all([
     collections.agents.deleteMany({ ownerUserId }),
     collections.identityTokens.deleteMany({ $or: [{ ownerUserId }, { agentId: { $in: agentIds } }] }),
@@ -335,11 +333,7 @@ async function resetDemoData(collections: Collections, ownerUserId: ObjectId): P
     collections.usageEvents.deleteMany({ ownerUserId }),
     collections.usageReports.deleteMany({ ownerUserId }),
     collections.pairingRequests.deleteMany({ ownerUserId }),
-    collections.accountExports.deleteMany({ ownerUserId }),
-    collections.apiKeys.deleteMany({ userId: ownerUserId }),
-    collections.atlasProjects.deleteMany({ ownerUserId }),
-    siteIds.length ? collections.interactionLogs.deleteMany({ siteId: { $in: siteIds } }) : Promise.resolve(),
-    collections.sites.deleteMany({ ownerUserId })
+    collections.accountExports.deleteMany({ ownerUserId })
   ]);
 }
 

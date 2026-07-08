@@ -4,13 +4,6 @@ import bcrypt from "bcryptjs";
 export const SESSION_TTL_DAYS = 30;
 export const SESSION_IDLE_TTL_DAYS = 7;
 export const PASSWORD_MIN_LENGTH = 10;
-export const SITE_PREVIEW_IMAGES = [
-  "site-preview-blue-flow",
-  "site-preview-coral-mint",
-  "site-preview-cyan-mist",
-  "site-preview-dashboard",
-  "site-preview-lime-blue"
-] as const;
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -40,54 +33,10 @@ export function createSessionIdleExpiry(): Date {
   return new Date(Date.now() + SESSION_IDLE_TTL_DAYS * 24 * 60 * 60 * 1000);
 }
 
-export function createPublicSiteKey(): string {
-  return `site_${crypto.randomBytes(24).toString("base64url")}`;
-}
-
-export function createSitePreviewImage(): string {
-  return SITE_PREVIEW_IMAGES[crypto.randomInt(SITE_PREVIEW_IMAGES.length)] ?? SITE_PREVIEW_IMAGES[0];
-}
-
-export function createBarkanApiKey(): string {
-  return `ck_${crypto.randomBytes(32).toString("base64url")}`;
-}
-
 export function hashApiKey(apiKey: string): string {
   return crypto.createHash("sha256").update(apiKey).digest("base64url");
 }
 
-export function createAtlasProjectId(): string {
-  return `proj_${crypto.randomBytes(18).toString("base64url")}`;
-}
-
-export function isAtlasProjectId(value: unknown): value is string {
-  return typeof value === "string" && /^proj_[A-Za-z0-9_-]{8,}$/.test(value);
-}
-
 export function isPasswordUsable(password: string): boolean {
   return password.length >= PASSWORD_MIN_LENGTH && password.length <= 128;
-}
-
-export function serializeSite(site: {
-  _id: unknown;
-  name: string;
-  domain: string;
-  publicSiteKey: string;
-  previewImage?: string;
-  chatTheme?: "system" | "light" | "dark";
-  createdAt: Date;
-  updatedAt: Date;
-}) {
-  return {
-    id: String(site._id),
-    name: site.name,
-    domain: site.domain,
-    publicSiteKey: site.publicSiteKey,
-    previewImage: SITE_PREVIEW_IMAGES.includes(site.previewImage as (typeof SITE_PREVIEW_IMAGES)[number])
-      ? site.previewImage
-      : SITE_PREVIEW_IMAGES[0],
-    chatTheme: site.chatTheme === "light" || site.chatTheme === "dark" ? site.chatTheme : "system",
-    createdAt: site.createdAt.toISOString(),
-    updatedAt: site.updatedAt.toISOString()
-  };
 }

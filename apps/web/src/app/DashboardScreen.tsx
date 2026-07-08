@@ -453,7 +453,6 @@ function agentToChatSite(agent: AgentListItem) {
     id: agent.id,
     name: agent.name,
     domain: agent.runtime ?? "openclaw",
-    publicSiteKey: agent.slug,
     previewImage: "site-preview-dashboard",
     createdAt: agent.createdAt,
     updatedAt: agent.updatedAt

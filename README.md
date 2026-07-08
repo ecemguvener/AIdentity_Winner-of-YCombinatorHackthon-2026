@@ -10,8 +10,6 @@ The dashboard supports the current agent identity flow:
 - Manage identity details, OpenClaw link tokens, dashboard chat, phone, email, billing, and card waitlist surfaces.
 - Use the first-run checklist to connect a runtime, send the first governed email, approve it, and inspect activation progress.
 
-The backend still keeps the original `sites` and `site-setups` route names internally for speed during the hackathon. The user-facing product language is agent identities.
-
 ## Runtime
 
 - Web dashboard: React + Vite in `apps/web`
@@ -96,26 +94,26 @@ npm run check-env -- --env production --file .env.production
 npm run deploy:prod -- --target production
 ```
 
-Legacy web-only updates remain available:
+Web-only static releases remain available:
 
 ```powershell
 npm run deploy:barkan-web
 ```
 
-## Payment Tool
+## Agent APIs
 
-The legacy payment tool remains in the API for hackathon compatibility, but product-facing payment cards are not yet live. Current production payment work is SaaS billing through Stripe; agent spending cards are waitlist-only.
-
-Agent-facing endpoints use `Authorization: Bearer <identity_token>`:
+Agent-facing endpoints use `Authorization: Bearer <identity_token>` and live under `/api/v1/agent/*`:
 
 | Method & path | Purpose |
 |---|---|
-| `POST /api/tools/payments/request-purchase` | Request a purchase |
-| `POST /api/tools/payments/request-purchase-from-text` | Parse natural language into a purchase request |
-| `POST /api/tools/payments/:requestId/approve` / `/reject` | Human decision on a request |
-| `POST /api/tools/payments/:requestId/execute` | Execute an approved purchase |
-| `PATCH /api/tools/payments/policy` | Update the spending policy |
-| `GET /api/identity/:agentId/payment-activity` | Policy, purchase requests, and transactions |
+| `POST /api/v1/agent/email/send` | Send governed email |
+| `GET /api/v1/agent/email/threads` | List email threads |
+| `POST /api/v1/agent/email/threads/:threadId/reply` | Reply in an email thread |
+| `POST /api/v1/agent/phone/call` | Place governed outbound call |
+| `POST /api/v1/agent/phone/sms` | Send governed SMS |
+| `GET /api/identity/:agentId/audit-log` | Read agent audit log |
+
+Payment cards are waitlist-only. Current production payments are SaaS billing through Stripe under `/api/v1/billing/*`.
 
 ## Project Structure
 

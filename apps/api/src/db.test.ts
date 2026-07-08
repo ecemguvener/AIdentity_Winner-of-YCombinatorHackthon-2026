@@ -32,10 +32,6 @@ describe("connectDatabase", () => {
     const expectedCollectionNames = [
       "users",
       "sessions",
-      "sites",
-      "apiKeys",
-      "atlasProjects",
-      "interactionLogs",
       "agents",
       "identityTokens",
       "auditLogs",

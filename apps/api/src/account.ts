@@ -241,9 +241,6 @@ async function buildAccountExportZip(collections: Collections, user: UserDocumen
 
 async function deleteOwnerScopedRows(collections: Collections, ownerUserId: ObjectId, agentIds: ObjectId[]): Promise<void> {
   await Promise.all([
-    collections.apiKeys.deleteMany({ userId: ownerUserId }),
-    collections.atlasProjects.deleteMany({ ownerUserId }),
-    collections.sites.deleteMany({ ownerUserId }),
     collections.identityTokens.deleteMany({ agentId: { $in: agentIds } }),
     collections.auditLogs.deleteMany({ agentId: { $in: agentIds } }),
     collections.approvals.deleteMany({ ownerUserId }),

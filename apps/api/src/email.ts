@@ -68,12 +68,6 @@ const sendSchema = z.object({
   path: ["text"]
 });
 
-const requestSchema = z.object({
-  request: z.string().min(1).max(2000),
-  to: z.string().email().optional(),
-  approved: z.boolean().optional()
-});
-
 const replySchema = z.object({
   text: z.string().min(1).max(10_000),
   idempotencyKey: z.string().min(1).max(200).optional()
@@ -154,7 +148,7 @@ async function draftWithOpenAI(prompt: string, senderName: string, config: AppCo
     "Write a plain-text `body`. Use a greeting and sign-off only if they fit the tone; when you sign off, sign as the sender. " +
     "Do not invent an email address.";
 
-  const model = process.env.OPENAI_EMAIL_MODEL || "gpt-4o-mini";
+  const model = config.OPENAI_EMAIL_MODEL;
   const response = await instrumentProviderCall("openai", "responses.email_draft", () => fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${config.OPENAI_API_KEY}` },
@@ -216,7 +210,7 @@ const SUMMARY_SCHEMA = {
 export async function summarizeReply(subject: string, body: string, config: AppConfig): Promise<ReplySummary> {
   if (config.OPENAI_API_KEY && body) {
     try {
-      const model = process.env.OPENAI_EMAIL_MODEL || "gpt-4o-mini";
+      const model = config.OPENAI_EMAIL_MODEL;
       const response = await instrumentProviderCall("openai", "responses.email_summary", () => fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${config.OPENAI_API_KEY}` },
@@ -461,34 +455,6 @@ export function registerEmailRoutes(
     });
   };
 
-  app.post("/api/tools/email/request", async (request, reply) => {
-    const context = await loadAgentEmailContext(request, collections);
-    const payload = requestSchema.parse(request.body ?? {});
-    return runEmail(reply, async () => {
-      const generated = await draftEmail(payload.request, context.agent.name, config);
-      const to = payload.to ?? generated.to ?? undefined;
-      if (!to) {
-        throw new EmailError(
-          422,
-          `couldn't find a recipient email in: "${payload.request}". Ask the user for the recipient's email address, then pass it as "to".`
-        );
-      }
-      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
-        agent: context.agent,
-        to,
-        subject: generated.subject,
-        text: generated.body,
-        idempotencyKey: readIdempotencyHeader(request),
-        parsedBy: generated.parsedBy
-      }, readSendApprovalQuery(request));
-      if (result.approvalRequired) {
-        return reply.code(202).send({ ...serializeApprovalPending(result.approval, result.decision), parsed: serializeParsed({ ...generated, to }) });
-      }
-      return reply.code(result.replayed ? 200 : 201).send({ ...serializePersistentSend(result.message), parsed: serializeParsed({ ...generated, to }) });
-    });
-  });
-
-  app.post("/api/tools/email/send", handleSend);
   app.post("/api/v1/agent/email/send", handleSend);
 
   app.get("/api/v1/agent/email/threads", async (request) => {
@@ -625,118 +591,11 @@ export function registerEmailRoutes(
     return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, agent, "active"), config));
   });
 
-  app.post("/api/tools/email/pause", async (request, reply) => {
-    const context = await loadAgentEmailContext(request, collections);
-    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, context.agent, "paused"), config));
-  });
-
-  app.post("/api/tools/email/resume", async (request, reply) => {
-    const context = await loadAgentEmailContext(request, collections);
-    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, context.agent, "active"), config));
-  });
-
   app.get("/api/identity/:agentId/email-activity", async (request, reply) => {
     const context = await loadAgentEmailContext(request, collections);
     const { agentId } = request.params as { agentId: string };
     if (context.agent._id.toHexString() !== agentId) throw new ApiError(403, "forbidden", "identity token does not match requested agent");
     return getPersistentEmailActivity(collections, context.agent, config);
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Routes — dashboard, per agent identity (session + ownership), scoped by site
-// ---------------------------------------------------------------------------
-
-export function registerSiteEmailRoutes(
-  app: FastifyInstance,
-  collections: Collections,
-  config: AppConfig,
-  provider: EmailProvider = createEmailProvider(config)
-) {
-  const resolveSite = async (request: FastifyRequest, reply: FastifyReply): Promise<AgentDocument | null> => {
-    const authContext = await requireAuth(request, reply, collections, config);
-    if (!authContext) return null;
-    const siteId = parseObjectId((request.params as { siteId: string }).siteId);
-    if (!siteId) {
-      throw new ApiError(404, "not_found", "agent identity not found");
-    }
-    // The legacy "site" id is an agent id since task 010 (or a pre-migration
-    // legacy site id from a stale dashboard tab).
-    const agent = await collections.agents.findOne({
-      ownerUserId: authContext.user._id,
-      status: { $ne: "revoked" },
-      $or: [{ _id: siteId }, { legacySiteId: siteId }]
-    });
-    if (!agent) {
-      throw new ApiError(404, "not_found", "agent identity not found");
-    }
-    return agent;
-  };
-
-  app.get("/api/sites/:siteId/email-activity", async (request, reply) => {
-    const agent = await resolveSite(request, reply);
-    if (!agent) return;
-    return getPersistentEmailActivity(collections, agent, config);
-  });
-
-  app.post("/api/sites/:siteId/email/request", async (request, reply) => {
-    const agent = await resolveSite(request, reply);
-    if (!agent) return;
-    const payload = requestSchema.parse(request.body ?? {});
-    return runEmail(reply, async () => {
-      const generated = await draftEmail(payload.request, agent.name, config);
-      const to = payload.to ?? generated.to ?? undefined;
-      if (!to) {
-        throw new EmailError(422, `couldn't find a recipient email in: "${payload.request}". Add the recipient's email address.`);
-      }
-      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
-        agent,
-        actor: "owner",
-        to,
-        subject: generated.subject,
-        text: generated.body,
-        parsedBy: generated.parsedBy
-      });
-      if (result.approvalRequired) {
-        return reply.code(202).send({ ...serializeApprovalPending(result.approval, result.decision), parsed: serializeParsed({ ...generated, to }) });
-      }
-      return reply.code(201).send({ ...serializePersistentSend(result.message), parsed: serializeParsed({ ...generated, to }) });
-    });
-  });
-
-  app.post("/api/sites/:siteId/email/send", async (request, reply) => {
-    const agent = await resolveSite(request, reply);
-    if (!agent) return;
-    const payload = sendSchema.parse(request.body ?? {});
-    return runEmail(reply, async () => {
-      const result = await sendAgentEmailWithPolicy(collections, config, provider, {
-        agent,
-        actor: "owner",
-        to: payload.to,
-        cc: payload.cc,
-        subject: payload.subject,
-        text: payload.text ?? payload.body!,
-        html: payload.html,
-        threadId: payload.threadId,
-        idempotencyKey: payload.idempotencyKey
-      });
-      if (result.approvalRequired) {
-        return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
-      }
-      return reply.code(201).send(serializePersistentSend(result.message));
-    });
-  });
-
-  app.post("/api/sites/:siteId/email/pause", async (request, reply) => {
-    const agent = await resolveSite(request, reply);
-    if (!agent) return;
-    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, agent, "paused"), config));
-  });
-
-  app.post("/api/sites/:siteId/email/resume", async (request, reply) => {
-    const agent = await resolveSite(request, reply);
-    if (!agent) return;
-    return runEmail(reply, async () => serializeEmailAccount(await setAgentEmailAccountStatus(collections, agent, "active"), config));
   });
 }
 

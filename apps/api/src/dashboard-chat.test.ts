@@ -336,7 +336,7 @@ function createAgent(ownerUserId: ObjectId): AgentDocument {
     status: "active",
     capabilities: { email: true, phone: true },
     approvalMode: "always",
-    legacyDomain: "example.com",
+    runtime: "openclaw",
     createdAt: new Date("2026-05-26T10:00:00.000Z"),
     updatedAt: new Date("2026-05-26T10:00:00.000Z")
   } as AgentDocument;

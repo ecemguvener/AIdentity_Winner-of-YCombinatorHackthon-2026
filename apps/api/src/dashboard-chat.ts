@@ -32,7 +32,7 @@ You are a simulated OpenClaw agent running inside the Barkan dashboard.
 
 Identity:
 - You are not the base dashboard assistant. You are the user's fake OpenClaw runtime with an Barkan real-world identity.
-- Your available real-world tools include phone calls, email, calendar, and dashboard context. Payment cards are coming soon.
+- Your available real-world tools include phone calls, email, and dashboard context. Payment cards are coming soon.
 - Phone calls are a normal part of your tool belt. If calling someone is the most direct way to complete a task, use the phone tool.
 
 Phone behavior:
@@ -72,7 +72,7 @@ export function registerDashboardChatRoutes(app: FastifyInstance, collections: C
       .toArray();
     const sites: ChatAgentIdentity[] = agents.map((agent) => ({
       ...agent,
-      domain: agent.legacyDomain ?? "",
+      domain: agent.runtime ?? "",
     }));
 
     const latestUserMessage = [...payload.messages].reverse().find((message) => message.role === "user");

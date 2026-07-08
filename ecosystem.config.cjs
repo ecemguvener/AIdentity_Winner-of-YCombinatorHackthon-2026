@@ -3,32 +3,19 @@ const dotenv = require("dotenv");
 
 dotenv.config({ path: path.join(__dirname, ".env"), override: true });
 
-const publicHost = process.env.BARKAN_PUBLIC_HOST || process.env.AIDENTITY_PUBLIC_HOST || "100.81.152.74";
-const devWebPort = process.env.BARKAN_DEV_WEB_PORT || process.env.AIDENTITY_DEV_WEB_PORT || "4888";
-const devApiPort = process.env.BARKAN_DEV_API_PORT || process.env.AIDENTITY_DEV_API_PORT || "4001";
-const prodApiPort = process.env.BARKAN_PROD_API_PORT || process.env.AIDENTITY_PROD_API_PORT || "4000";
-const stagingApiPort = process.env.BARKAN_STAGING_API_PORT || process.env.AIDENTITY_STAGING_API_PORT || "4002";
-const devPublicAppUrl =
-  process.env.BARKAN_DEV_PUBLIC_APP_URL ||
-  process.env.AIDENTITY_DEV_PUBLIC_APP_URL ||
-  `http://${publicHost}:${devWebPort}`;
-const devPublicApiUrl =
-  process.env.BARKAN_DEV_PUBLIC_API_URL ||
-  process.env.AIDENTITY_DEV_PUBLIC_API_URL ||
-  `http://${publicHost}:${devApiPort}`;
-const prodPublicAppUrl =
-  process.env.BARKAN_PROD_PUBLIC_APP_URL || process.env.AIDENTITY_PROD_PUBLIC_APP_URL || "https://barkan.dev";
-const prodPublicApiUrl =
-  process.env.BARKAN_PROD_PUBLIC_API_URL || process.env.AIDENTITY_PROD_PUBLIC_API_URL || "https://api.barkan.dev";
-const stagingPublicAppUrl =
-  process.env.BARKAN_STAGING_PUBLIC_APP_URL || process.env.AIDENTITY_STAGING_PUBLIC_APP_URL || "https://staging.barkan.dev";
-const stagingPublicApiUrl =
-  process.env.BARKAN_STAGING_PUBLIC_API_URL || process.env.AIDENTITY_STAGING_PUBLIC_API_URL || "https://staging-api.barkan.dev";
-const devApiProxyTarget =
-  process.env.BARKAN_DEV_API_PROXY_TARGET ||
-  process.env.AIDENTITY_DEV_API_PROXY_TARGET ||
-  `http://127.0.0.1:${devApiPort}`;
-const devViteApiUrl = process.env.BARKAN_DEV_VITE_API_URL || process.env.AIDENTITY_DEV_VITE_API_URL || "";
+const publicHost = process.env.BARKAN_PUBLIC_HOST || "100.81.152.74";
+const devWebPort = process.env.BARKAN_DEV_WEB_PORT || "4888";
+const devApiPort = process.env.BARKAN_DEV_API_PORT || "4001";
+const prodApiPort = process.env.BARKAN_PROD_API_PORT || "4000";
+const stagingApiPort = process.env.BARKAN_STAGING_API_PORT || "4002";
+const devPublicAppUrl = process.env.BARKAN_DEV_PUBLIC_APP_URL || `http://${publicHost}:${devWebPort}`;
+const devPublicApiUrl = process.env.BARKAN_DEV_PUBLIC_API_URL || `http://${publicHost}:${devApiPort}`;
+const prodPublicAppUrl = process.env.BARKAN_PROD_PUBLIC_APP_URL || "https://barkan.dev";
+const prodPublicApiUrl = process.env.BARKAN_PROD_PUBLIC_API_URL || "https://api.barkan.dev";
+const stagingPublicAppUrl = process.env.BARKAN_STAGING_PUBLIC_APP_URL || "https://staging.barkan.dev";
+const stagingPublicApiUrl = process.env.BARKAN_STAGING_PUBLIC_API_URL || "https://staging-api.barkan.dev";
+const devApiProxyTarget = process.env.BARKAN_DEV_API_PROXY_TARGET || `http://127.0.0.1:${devApiPort}`;
+const devViteApiUrl = process.env.BARKAN_DEV_VITE_API_URL || "";
 
 const common = {
   cwd: __dirname,
@@ -89,7 +76,7 @@ module.exports = {
       script: "apps/api/dist/server.js",
       watch: false,
       exec_mode: "cluster",
-      instances: Number(process.env.BARKAN_PROD_API_INSTANCES || process.env.AIDENTITY_PROD_API_INSTANCES || 2),
+      instances: Number(process.env.BARKAN_PROD_API_INSTANCES || 2),
       wait_ready: true,
       listen_timeout: 15000,
       kill_timeout: 12000,
@@ -106,7 +93,7 @@ module.exports = {
       script: "apps/api/dist/server.js",
       watch: false,
       exec_mode: "cluster",
-      instances: Number(process.env.BARKAN_STAGING_API_INSTANCES || process.env.AIDENTITY_STAGING_API_INSTANCES || 1),
+      instances: Number(process.env.BARKAN_STAGING_API_INSTANCES || 1),
       wait_ready: true,
       listen_timeout: 15000,
       kill_timeout: 12000,

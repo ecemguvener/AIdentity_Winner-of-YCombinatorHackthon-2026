@@ -67,7 +67,7 @@ Add that folder to your OpenClaw skills directory, or copy the instructions from
 
 1. initialize identity before real-world actions,
 2. store `AGENT_IDENTITY_TOKEN`,
-3. call identity-layer email, phone, calendar, audit, and revoke endpoints,
+3. call identity-layer email, phone, audit, and revoke endpoints,
 4. never use raw provider credentials.
 
 ## 3. Call identity-layer tools from OpenClaw
@@ -75,13 +75,13 @@ Add that folder to your OpenClaw skills directory, or copy the instructions from
 Every real-world action goes through the identity layer with the identity token:
 
 ```bash
-curl -sS http://localhost:4001/api/tools/email/send \
+curl -sS http://localhost:4001/api/v1/agent/email/send \
   -H "authorization: Bearer $AGENT_IDENTITY_TOKEN" \
   -H 'content-type: application/json' \
   -d '{
     "to": "demo@example.com",
     "subject": "Customer discovery call",
-    "body": "Hi, can we ask two questions about your workflow?",
+    "text": "Hi, can we ask two questions about your workflow?",
     "approved": true
   }'
 ```
@@ -89,26 +89,12 @@ curl -sS http://localhost:4001/api/tools/email/send \
 Phone calls are demo-simulated but permissioned and audited:
 
 ```bash
-curl -sS http://localhost:4001/api/tools/phone/call \
+curl -sS http://localhost:4001/api/v1/agent/phone/call \
   -H "authorization: Bearer $AGENT_IDENTITY_TOKEN" \
   -H 'content-type: application/json' \
   -d '{
     "to": "+14155550198",
     "script": "Ask for a quick validation interview.",
-    "approved": true
-  }'
-```
-
-Calendar booking is also demo-simulated and audited:
-
-```bash
-curl -sS http://localhost:4001/api/tools/calendar/book \
-  -H "authorization: Bearer $AGENT_IDENTITY_TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{
-    "title": "Customer discovery interview",
-    "attendee_email": "demo@example.com",
-    "start_time": "2026-06-28T10:00:00Z",
     "approved": true
   }'
 ```

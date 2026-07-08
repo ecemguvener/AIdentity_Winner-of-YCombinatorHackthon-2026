@@ -43,6 +43,15 @@ const livePhoneRequiredKeys = [
   "ELEVENLABS_WORKSPACE_WEBHOOK_SECRET"
 ];
 
+const exampleExtraKeys = new Set([
+  "BACKUP_DIR",
+  "BACKUP_REMOTE",
+  "BARKAN_DEPLOY_ROOT",
+  "BARKAN_STAGING_DEPLOY_ROOT",
+  "VITE_SENTRY_DSN",
+  "VITE_SENTRY_RELEASE"
+]);
+
 export function parseEnv(content) {
   const env = {};
   for (const rawLine of content.split(/\r?\n/)) {
@@ -94,6 +103,37 @@ export function validateEnvFile({ target, filePath }) {
   return { ok: errors.length === 0, errors, env };
 }
 
+export function validateExampleSync({
+  examplePath = path.resolve(process.cwd(), ".env.example"),
+  configPath = path.resolve(process.cwd(), "apps/api/src/config.ts")
+} = {}) {
+  const exampleKeys = new Set(Object.keys(parseEnv(fs.readFileSync(examplePath, "utf8"))));
+  const configKeys = readRawEnvironmentSchemaKeys(fs.readFileSync(configPath, "utf8"));
+  const allowedKeys = new Set([...configKeys, ...exampleExtraKeys]);
+  const missing = [...configKeys].filter((key) => !exampleKeys.has(key)).sort();
+  const extra = [...exampleKeys].filter((key) => !allowedKeys.has(key)).sort();
+  const errors = [];
+  if (missing.length > 0) errors.push(`missing from .env.example: ${missing.join(", ")}`);
+  if (extra.length > 0) errors.push(`extra in .env.example: ${extra.join(", ")}`);
+  return { ok: errors.length === 0, errors, configKeys: [...configKeys].sort(), exampleKeys: [...exampleKeys].sort() };
+}
+
+function readRawEnvironmentSchemaKeys(configSource) {
+  const match = configSource.match(/const rawEnvironmentSchema = z\.object\(\{([\s\S]*?)^\}\);/m);
+  if (!match) {
+    throw new Error("Could not read rawEnvironmentSchema keys from apps/api/src/config.ts");
+  }
+
+  const keys = new Set();
+  for (const line of match[1].split(/\r?\n/)) {
+    const keyMatch = line.match(/^\s{2}([A-Z0-9_]+):/);
+    if (keyMatch) {
+      keys.add(keyMatch[1]);
+    }
+  }
+  return keys;
+}
+
 function validateUrls(env, target) {
   const errors = [];
   for (const key of ["PUBLIC_APP_URL", "PUBLIC_API_URL"]) {
@@ -137,10 +177,12 @@ function readMongoDatabaseName(mongodbUri) {
 }
 
 function parseArgs(argv) {
-  const parsed = { target: "production", filePath: "" };
+  const parsed = { target: "production", filePath: "", exampleSync: false };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
-    if (value === "--env") {
+    if (value === "--example-sync") {
+      parsed.exampleSync = true;
+    } else if (value === "--env") {
       parsed.target = argv[++index] ?? parsed.target;
     } else if (value === "--file") {
       parsed.filePath = argv[++index] ?? "";
@@ -155,7 +197,18 @@ function parseArgs(argv) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   try {
-    const { target, filePath } = parseArgs(process.argv.slice(2));
+    const { target, filePath, exampleSync } = parseArgs(process.argv.slice(2));
+    if (exampleSync) {
+      const result = validateExampleSync();
+      if (!result.ok) {
+        console.error("env example sync failed");
+        for (const error of result.errors) console.error(`- ${error}`);
+        process.exit(1);
+      }
+      console.log("env example sync passed");
+      process.exit(0);
+    }
+
     const result = validateEnvFile({ target, filePath });
     if (!result.ok) {
       console.error(`env check failed for ${target} (${filePath})`);

@@ -18,7 +18,7 @@ import { requireAuth } from "./auth.js";
 import { registerDashboardChatRoutes } from "./dashboard-chat.js";
 import { registerBillingRoutes, registerBillingStripeHandlers } from "./billing.js";
 import { registerUsageRoutes } from "./usage.js";
-import { registerEmailRoutes, registerSiteEmailRoutes } from "./email.js";
+import { registerEmailRoutes } from "./email.js";
 import { registerEmailApprovalExecutor } from "./email-service.js";
 import { createEmailProvider } from "./providers/email-provider.js";
 import { registerEmailProvisioner } from "./email-provisioning.js";
@@ -31,7 +31,6 @@ import { registerPhoneProvisioner } from "./phone-provisioning.js";
 import { registerPhoneApprovalExecutor } from "./phone-service.js";
 import { registerOpenApiRoutes } from "./openapi.js";
 import { registerOnboardingRoutes } from "./onboarding.js";
-import { registerSiteRoutes } from "./sites.js";
 import { registerSmsApprovalExecutor } from "./sms-service.js";
 import { registerTestSupportRoutes } from "./test-support.js";
 import { registerRawBodyParsers } from "./webhooks/framework.js";
@@ -223,14 +222,12 @@ export async function buildApp(config: AppConfig, collections: Collections) {
   registerBillingRoutes(app, collections, config);
   registerDashboardChatRoutes(app, collections, config);
   registerEmailRoutes(app, collections, config, emailProvider);
-  registerSiteEmailRoutes(app, collections, config, emailProvider);
   registerIdentityRoutes(app, collections, config);
   registerMcpRoutes(app, collections, config, emailProvider);
   registerOnboardingRoutes(app, collections, config);
   registerPairingRoutes(app, collections, config);
   registerPhoneRoutes(app, collections, config);
   registerPolicyRoutes(app, collections, config);
-  registerSiteRoutes(app, collections, config);
   registerTestSupportRoutes(app, collections, config);
   registerUsageRoutes(app, collections, config);
   registerWebhookRoutes(app, collections, config);
@@ -269,7 +266,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAgentTokenRoute(url: string): boolean {
-  return url === "/mcp" || url.startsWith("/api/tools/") || url.startsWith("/api/identity/") || url.startsWith("/api/v1/agent/");
+  return url === "/mcp" || url.startsWith("/api/identity/") || url.startsWith("/api/v1/agent/");
 }
 
 function isAuthRateLimitedRoute(url: string): boolean {

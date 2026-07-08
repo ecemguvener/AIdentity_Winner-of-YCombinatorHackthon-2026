@@ -26,7 +26,7 @@ async function main(): Promise<void> {
     for (const migrationFile of migrationFiles) {
       const migrationUrl = pathToFileURL(path.join(migrationsDir, migrationFile)).href;
       const migration = (await import(migrationUrl)) as MigrationModule;
-      const { stats, summary } = await migration.run({ collections: database.collections, dryRun });
+      const { stats, summary } = await migration.run({ collections: database.collections, database: database.db, dryRun });
       console.log(`[migrate] ${migration.name}${dryRun ? " (dry-run)" : ""}: ${summary}`);
       if (!dryRun) {
         const now = new Date();

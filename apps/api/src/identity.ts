@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
@@ -29,11 +28,9 @@ import {
   serializeSmsMessage
 } from "./sms-service.js";
 
-type ToolName = "email" | "phone" | "calendar";
-type PermissionName = "email.send" | "phone.call" | "calendar.create";
+type ToolName = "email" | "phone";
+type PermissionName = "email.send" | "phone.call";
 
-// Compatibility view over a persisted agent, consumed by legacy tool routes.
-// Calendar remains demo-scoped until the real integration lands.
 export interface AgentIdentity {
   id: string;
   name: string;
@@ -51,7 +48,6 @@ export function agentIdentityView(agent: AgentDocument): AgentIdentity {
     permissions: {
       "email.send": agent.capabilities.email,
       "phone.call": agent.capabilities.phone,
-      "calendar.create": true,
       requiresHumanApproval: agent.approvalMode !== "autonomous"
     }
   };
@@ -71,14 +67,13 @@ const initIdentitySchema = z.object({
   use_case: z.string().min(1).max(120).default("automation"),
   owner_email: z.string().email().optional(),
   tools: z
-    .array(z.enum(["email", "phone", "calendar"]))
+    .array(z.enum(["email", "phone"]))
     .min(1)
-    .default(["email", "phone", "calendar"]),
+    .default(["email", "phone"]),
   permissions: z
     .object({
       "email.send": z.boolean().optional(),
       "phone.call": z.boolean().optional(),
-      "calendar.create": z.boolean().optional(),
       requires_human_approval: z.boolean().optional()
     })
     .optional()
@@ -120,13 +115,6 @@ const smsLatestCodeQuerySchema = z.object({
 
 const auditRecentQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25)
-});
-
-const calendarBookSchema = z.object({
-  title: z.string().min(1).max(200),
-  attendee_email: z.string().email(),
-  start_time: z.string().min(1),
-  approved: z.boolean().optional()
 });
 
 export function registerIdentityRoutes(app: FastifyInstance, collections: Collections, config: AppConfig) {
@@ -252,45 +240,15 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
         AGENT_IDENTITY_TOKEN: plaintext
       },
       tool_endpoints: {
-        email_request: `${config.PUBLIC_API_URL}/api/tools/email/request`,
-        email_send: `${config.PUBLIC_API_URL}/api/tools/email/send`,
-        email_send_v1: `${config.PUBLIC_API_URL}/api/v1/agent/email/send`,
-        email_pause: `${config.PUBLIC_API_URL}/api/tools/email/pause`,
-        email_resume: `${config.PUBLIC_API_URL}/api/tools/email/resume`,
+        email_send: `${config.PUBLIC_API_URL}/api/v1/agent/email/send`,
+        email_threads: `${config.PUBLIC_API_URL}/api/v1/agent/email/threads`,
         email_activity: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/email-activity`,
-        phone_call: `${config.PUBLIC_API_URL}/api/tools/phone/call`,
-        calendar_book: `${config.PUBLIC_API_URL}/api/tools/calendar/book`,
+        phone_call: `${config.PUBLIC_API_URL}/api/v1/agent/phone/call`,
+        phone_sms: `${config.PUBLIC_API_URL}/api/v1/agent/phone/sms`,
         audit_log: `${config.PUBLIC_API_URL}/api/identity/${identity.id}/audit-log`,
         token_rotate: `${config.PUBLIC_API_URL}/api/identity/tokens/rotate`
       }
     });
-  });
-
-  app.post("/api/tools/phone/call", async (request, reply) => {
-    const agentContext = await authenticateAgentRequest(request, collections);
-    if (!agentContext) {
-      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
-    }
-    const payload = phoneCallSchema.parse(request.body ?? {});
-    const query = approvalQuerySchema.parse(request.query ?? {});
-
-    const result = await placeOutboundCall(collections, config, {
-      agent: agentContext.agent,
-      toNumber: payload.to,
-      task: payload.task ?? payload.script ?? "",
-      context: payload.context,
-      recipientName: payload.recipientName
-    }, { async: query.mode === "async", waitMs: query.wait ? query.wait * 1000 : undefined });
-    if ("approvalRequired" in result) {
-      return reply.code(202).send(serializeApprovalPending(result.approval, result.decision));
-    }
-    return {
-      ok: true,
-      call_id: result.callId,
-      status: result.status,
-      from: result.from,
-      to: result.to
-    };
   });
 
   app.post("/api/v1/agent/phone/call", async (request) => {
@@ -403,45 +361,6 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
     return { code: result.code, receivedAt: result.receivedAt.toISOString(), from: result.from };
   });
 
-  app.post("/api/tools/calendar/book", async (request, reply) => {
-    const agentContext = await authenticateAgentRequest(request, collections);
-    if (!agentContext) {
-      throw new ApiError(401, "unauthorized", "missing or invalid identity token");
-    }
-    const identity = agentIdentityView(agentContext.agent);
-
-    const payload = calendarBookSchema.parse(request.body ?? {});
-    const block = checkAction(identity, "calendar.create", payload.approved);
-    if (block) {
-      await recordAudit(collections, {
-        agentId: agentContext.agent._id,
-        ownerUserId: agentContext.agent.ownerUserId,
-        actor: "agent",
-        action: "calendar.create",
-        status: "blocked",
-        detail: block
-      });
-      throw new ApiError(403, block === "human approval is required for this action" ? "approval_required" : "forbidden", block);
-    }
-
-    await recordAudit(collections, {
-      agentId: agentContext.agent._id,
-      ownerUserId: agentContext.agent.ownerUserId,
-      actor: "agent",
-      action: "calendar.create",
-      status: "allowed",
-      detail: `Meeting booked with ${payload.attendee_email}: ${payload.title}`
-    });
-    return {
-      ok: true,
-      provider: "demo-calendar",
-      event_id: `evt_${randomId(12)}`,
-      title: payload.title,
-      attendee_email: payload.attendee_email,
-      start_time: payload.start_time
-    };
-  });
-
   app.get("/api/identity/:agentId/audit-log", async (request, reply) => {
     const agentContext = await authenticateAgentRequest(request, collections);
     if (!agentContext) {
@@ -535,22 +454,6 @@ export function registerIdentityRoutes(app: FastifyInstance, collections: Collec
   });
 }
 
-function checkAction(identity: AgentIdentity, permission: PermissionName, approved: boolean | undefined): string | null {
-  if (identity.status !== "active") {
-    return "identity is revoked";
-  }
-
-  if (!identity.permissions[permission]) {
-    return `permission denied: ${permission}`;
-  }
-
-  if (identity.permissions.requiresHumanApproval && approved !== true) {
-    return "human approval is required for this action";
-  }
-
-  return null;
-}
-
 function serializeApprovalPending(approval: ApprovalDocument, decision: "pending" | "timeout" | "expired") {
   return {
     ok: false,
@@ -598,11 +501,6 @@ function serializePermissions(identity: AgentIdentity) {
   return {
     "email.send": identity.permissions["email.send"],
     "phone.call": identity.permissions["phone.call"],
-    "calendar.create": identity.permissions["calendar.create"],
     requires_human_approval: identity.permissions.requiresHumanApproval
   };
-}
-
-function randomId(byteLength: number): string {
-  return crypto.randomBytes(byteLength).toString("base64url");
 }

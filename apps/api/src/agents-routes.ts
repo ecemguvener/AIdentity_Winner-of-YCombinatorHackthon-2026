@@ -20,11 +20,6 @@ import {
 } from "./provisioning.js";
 import { defaultEmailPolicy, defaultPhonePolicy } from "./policies.js";
 
-// ---------------------------------------------------------------------------
-// Owner-facing agents REST API (v1). Replaces the legacy sites/site-setups
-// flow; sites.ts remains as a thin deprecated adapter over the same data.
-// ---------------------------------------------------------------------------
-
 export const MAX_ACTIVE_TOKENS_PER_AGENT = 5;
 
 const createAgentSchema = z.object({
@@ -385,32 +380,6 @@ export async function findOwnedAgent(
   const agent = await collections.agents.findOne({ _id: new ObjectId(agentId), ownerUserId });
   if (!agent) {
     throw new ApiError(404, "not_found", "agent not found");
-  }
-  return agent;
-}
-
-/**
- * Legacy adapter lookup: accepts either the agent id or the pre-migration
- * legacy site id (stale ids from open dashboard tabs), and hides revoked
- * agents the way deleted sites used to 404.
- */
-export async function findOwnedLegacyAgent(
-  collections: Collections,
-  ownerUserId: ObjectId,
-  params: unknown
-): Promise<AgentDocument> {
-  const siteId = (params as { siteId?: string }).siteId ?? "";
-  if (!ObjectId.isValid(siteId)) {
-    throw new ApiError(404, "not_found", "site not found");
-  }
-  const id = new ObjectId(siteId);
-  const agent = await collections.agents.findOne({
-    ownerUserId,
-    status: { $ne: "revoked" },
-    $or: [{ _id: id }, { legacySiteId: id }]
-  });
-  if (!agent) {
-    throw new ApiError(404, "not_found", "site not found");
   }
   return agent;
 }
