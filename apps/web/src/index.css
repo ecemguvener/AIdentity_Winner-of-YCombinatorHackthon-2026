@@ -4539,6 +4539,10 @@ button:disabled {
 .site-onboarding-page {
   min-height: 100vh;
   background: var(--color-dashboard-canvas);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 74px 24px 56px;
 }
 
 .site-onboarding-page__canvas {
@@ -4683,7 +4687,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 100%;
+  width: min(640px, 100%);
   will-change: transform, opacity;
 }
 
@@ -4759,8 +4763,193 @@ button:disabled {
 }
 
 .site-onboarding-page__form {
-  width: 100%;
+  width: min(640px, 100%);
   margin-top: 41px;
+}
+
+.site-onboarding-page__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 14px;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.site-onboarding-page__field input,
+.site-onboarding-page__field textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.site-onboarding-page__field input {
+  min-height: 48px;
+  padding: 0 14px;
+}
+
+.site-onboarding-page__field textarea {
+  min-height: 92px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.site-onboarding-page__field input:focus,
+.site-onboarding-page__field textarea:focus {
+  border-color: var(--color-text);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+}
+
+.site-onboarding-page__field small {
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.site-onboarding-page__choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 22px;
+}
+
+.site-onboarding-page__choice {
+  position: relative;
+  min-height: 136px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 18px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.site-onboarding-page__choice:hover:not(.site-onboarding-page__choice--disabled),
+.site-onboarding-page__choice--selected {
+  border-color: var(--color-text);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.site-onboarding-page__choice--selected {
+  transform: translateY(-1px);
+}
+
+.site-onboarding-page__choice--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.site-onboarding-page__choice input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.site-onboarding-page__choice span {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.site-onboarding-page__choice small {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.site-onboarding-page__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.site-onboarding-page__actions > button:not(.site-onboarding-page__submit) {
+  min-height: 48px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.site-onboarding-page__receipt,
+.site-onboarding-page__token {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.site-onboarding-page__receipt code,
+.site-onboarding-page__token code {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.site-onboarding-page__token {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.site-onboarding-page__token button {
+  min-height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .site-onboarding-page {
+    padding: 56px 18px 40px;
+  }
+
+  .site-onboarding-page__header h1 {
+    font-size: 28px;
+    line-height: 32px;
+  }
+
+  .site-onboarding-page__header p {
+    width: 100%;
+  }
+
+  .site-onboarding-page__choice-grid,
+  .site-onboarding-page__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .site-onboarding-page__choice {
+    min-height: 116px;
+  }
+
+  .site-onboarding-page__token {
+    grid-template-columns: 1fr;
+  }
 }
 
 .site-onboarding-page__form--completion {
